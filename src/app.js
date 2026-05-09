@@ -1,6 +1,6 @@
 const DB_NAME = 'bilans-pwa-etap1';
 const DB_VERSION = 3;
-const APP_VERSION = 18;
+const APP_VERSION = 19;
 const STORE = 'entries';
 const TAG_RULE_STORE = 'tagRules';
 const DEVICE_ID_KEY = 'bilans-pwa-device-id';
@@ -9,6 +9,8 @@ const STORAGE_MODE_KEY = 'bilans-pwa-storage-mode';
 const DROPBOX_CONFIG_KEY = 'bilans-pwa-dropbox-config';
 const DROPBOX_TOKEN_KEY = 'bilans-pwa-dropbox-token';
 const DROPBOX_OAUTH_KEY = 'bilans-pwa-dropbox-oauth';
+const DELETED_ENTRIES_KEY = 'bilans-pwa-deleted-entries';
+const DELETE_TOMBSTONE_RETENTION_DAYS = 365;
 
 const THEMES = {
   classic: { name: 'Jasny klasyczny', color: '#f6f3ea' },
@@ -286,6 +288,118 @@ function getDeviceId() {
 
 function makeSyncId(prefix = 'entry') {
   return `${prefix}-${getDeviceId()}-${Date.now().toString(36)}-${randomToken()}`;
+}
+
+function parseDateTimeMs(value) {
+  const time = Date.parse(value || '');
+  return Number.isFinite(time) ? time : 0;
+}
+
+function normalizeDeletedEntry(item) {
+  const syncId = String(item?.syncId || item?.sync_id || item?.id || '').trim();
+  const deletedAt = String(item?.deletedAt || item?.deleted_at || item?.time || '').trim();
+  if (!syncId || !parseDateTimeMs(deletedAt)) return null;
+  return {
+    syncId,
+    deletedAt,
+    sourceDeviceId: item?.sourceDeviceId || item?.source_device_id || getDeviceId()
+  };
+}
+
+function getDeletedEntries() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(DELETED_ENTRIES_KEY) || '[]');
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map(normalizeDeletedEntry).filter(Boolean);
+  } catch (_) {
+    return [];
+  }
+}
+
+function saveDeletedEntries(items) {
+  const latestBySyncId = new Map();
+  const minTime = Date.now() - DELETE_TOMBSTONE_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+
+  for (const raw of items || []) {
+    const item = normalizeDeletedEntry(raw);
+    if (!item) continue;
+    const deletedTime = parseDateTimeMs(item.deletedAt);
+    if (deletedTime < minTime) continue;
+    const previous = latestBySyncId.get(item.syncId);
+    if (!previous || deletedTime > parseDateTimeMs(previous.deletedAt)) {
+      latestBySyncId.set(item.syncId, item);
+    }
+  }
+
+  const cleaned = Array.from(latestBySyncId.values())
+    .sort((a, b) => parseDateTimeMs(b.deletedAt) - parseDateTimeMs(a.deletedAt));
+
+  localStorage.setItem(DELETED_ENTRIES_KEY, JSON.stringify(cleaned));
+  return cleaned;
+}
+
+function rememberDeletedEntry(entry, deletedAt = new Date().toISOString()) {
+  if (!entry?.syncId) return;
+  saveDeletedEntries([
+    ...getDeletedEntries(),
+    {
+      syncId: entry.syncId,
+      deletedAt,
+      sourceDeviceId: getDeviceId()
+    }
+  ]);
+}
+
+function rememberDeletedEntries(entries, deletedAt = new Date().toISOString()) {
+  const tombstones = (entries || [])
+    .filter(entry => entry?.syncId)
+    .map(entry => ({ syncId: entry.syncId, deletedAt, sourceDeviceId: getDeviceId() }));
+  if (!tombstones.length) return;
+  saveDeletedEntries([...getDeletedEntries(), ...tombstones]);
+}
+
+function collectDeletedEntries(payload) {
+  if (!payload || typeof payload !== 'object') return [];
+  const candidates = [
+    payload.deletedEntries,
+    payload.deleted_entries,
+    payload.deletions,
+    payload.deleted,
+    payload.tombstones
+  ];
+  const firstArray = candidates.find(Array.isArray);
+  return (firstArray || []).map(normalizeDeletedEntry).filter(Boolean);
+}
+
+function deletedEntriesMap() {
+  return new Map(getDeletedEntries().map(item => [item.syncId, item]));
+}
+
+function isEntryBlockedByDeletion(entry, deletions = deletedEntriesMap()) {
+  if (!entry?.syncId) return false;
+  const tombstone = deletions.get(entry.syncId);
+  if (!tombstone) return false;
+  const deletedTime = parseDateTimeMs(tombstone.deletedAt);
+  const entryTime = parseDateTimeMs(entry.updatedAt || entry.createdAt);
+  return deletedTime >= entryTime;
+}
+
+async function applyImportedDeletions(payload) {
+  const incomingDeleted = collectDeletedEntries(payload);
+  if (!incomingDeleted.length) return { deleted: 0 };
+
+  const mergedDeleted = saveDeletedEntries([...getDeletedEntries(), ...incomingDeleted]);
+  const deletedBySyncId = new Map(mergedDeleted.map(item => [item.syncId, item]));
+  const entries = await getAllEntries();
+  let deleted = 0;
+
+  for (const entry of entries) {
+    if (!isEntryBlockedByDeletion(entry, deletedBySyncId)) continue;
+    await deleteEntry(entry.id);
+    deleted += 1;
+  }
+
+  return { deleted };
 }
 
 let localIdCounter = 0;
@@ -1946,6 +2060,7 @@ async function handleDelete(id) {
   const label = entry?.description || entry?.category || 'ten wpis';
   if (!window.confirm(`Usunąć wpis: ${label}?`)) return;
 
+  rememberDeletedEntry(entry);
   await deleteEntry(id);
   if (editingId === Number(id)) resetForm();
   await reloadEntries();
@@ -2331,8 +2446,9 @@ function makeExportPayload() {
     version: APP_VERSION,
     exportedAt: new Date().toISOString(),
     deviceId: getDeviceId(),
-    syncMode: 'dropbox-merge-safe',
+    syncMode: 'dropbox-merge-safe-v2',
     tagRules,
+    deletedEntries: getDeletedEntries(),
     entries: allEntries.map(entry => ({
       ...entry,
       syncId: entry.syncId || makeSyncId('entry'),
@@ -2374,9 +2490,15 @@ async function dropboxUploadPayload(payload) {
 
 async function importPayload(payload, options = {}) {
   const { replace = false, silent = false } = options;
+  const deletionResult = await applyImportedDeletions(payload);
   const imported = collectImportedEntries(payload);
 
-  if (!Array.isArray(imported)) {
+  if (!Array.isArray(imported) || !imported.length) {
+    await reloadEntries();
+    if (deletionResult.deleted) {
+      if (!silent) showMessage(`Import zakończony. Usunięto: ${deletionResult.deleted}.`);
+      return { added: 0, updated: 0, skipped: 0, deleted: deletionResult.deleted };
+    }
     throw new Error('Plik JSON nie zawiera listy wpisów. Obsługiwane pola: entries, items, data, records, rows, transactions, wpisy, lista.');
   }
 
@@ -2385,13 +2507,16 @@ async function importPayload(payload, options = {}) {
     .map(item => normalizeImportedEntry(item, now))
     .filter(item => item.amount > 0 && ['przychód', 'wydatek'].includes(item.entryType));
 
-  if (!cleaned.length) return { added: 0, updated: 0, skipped: 0 };
+  if (!cleaned.length) throw new Error('Nie znaleziono poprawnych wpisów do importu.');
 
   if (replace) {
     const confirmReplace = window.confirm('Zastąpić wszystkie lokalne wpisy danymi z importowanego pliku?');
-    if (!confirmReplace) return { added: 0, updated: 0, skipped: 0 };
+    if (!confirmReplace) return { added: 0, updated: 0, skipped: 0, deleted: deletionResult.deleted };
     await clearEntries();
+    saveDeletedEntries(collectDeletedEntries(payload));
   }
+
+  allEntries = await getAllEntries();
 
   if (Array.isArray(payload?.tagRules)) {
     for (const rule of payload.tagRules) await saveTagRule(normalizeRule(rule));
@@ -2400,11 +2525,17 @@ async function importPayload(payload, options = {}) {
 
   const existingBySyncId = new Map(allEntries.filter(entry => entry.syncId).map(entry => [entry.syncId, entry]));
   const existingSignatures = new Set(allEntries.map(entrySignature));
+  const localDeletedBySyncId = deletedEntriesMap();
   let added = 0;
   let updated = 0;
   let skipped = 0;
 
   for (const incoming of cleaned) {
+    if (!replace && isEntryBlockedByDeletion(incoming, localDeletedBySyncId)) {
+      skipped += 1;
+      continue;
+    }
+
     const current = incoming.syncId ? existingBySyncId.get(incoming.syncId) : null;
 
     if (current && !replace) {
@@ -2427,8 +2558,8 @@ async function importPayload(payload, options = {}) {
   }
 
   await reloadEntries();
-  if (!silent) showMessage(`Import zakończony. Dodano: ${added}, zaktualizowano: ${updated}, pominięto: ${skipped}.`);
-  return { added, updated, skipped };
+  if (!silent) showMessage(`Import zakończony. Dodano: ${added}, zaktualizowano: ${updated}, pominięto: ${skipped}, usunięto: ${deletionResult.deleted}.`);
+  return { added, updated, skipped, deleted: deletionResult.deleted };
 }
 
 let dropboxSyncBusy = false;
@@ -2508,6 +2639,7 @@ async function handleClearAll() {
   const second = window.confirm('To jest operacja nieodwracalna, jeśli nie masz eksportu JSON. Na pewno usunąć?');
   if (!second) return;
 
+  rememberDeletedEntries(allEntries);
   await clearEntries();
   resetForm();
   await reloadEntries();
