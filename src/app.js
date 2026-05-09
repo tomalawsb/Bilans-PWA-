@@ -2376,7 +2376,7 @@ async function importPayload(payload, options = {}) {
   const { replace = false, silent = false } = options;
   const imported = collectImportedEntries(payload);
 
-  if (!Array.isArray(imported) || !imported.length) {
+  if (!Array.isArray(imported)) {
     throw new Error('Plik JSON nie zawiera listy wpisów. Obsługiwane pola: entries, items, data, records, rows, transactions, wpisy, lista.');
   }
 
