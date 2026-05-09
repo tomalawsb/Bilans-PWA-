@@ -2385,7 +2385,7 @@ async function importPayload(payload, options = {}) {
     .map(item => normalizeImportedEntry(item, now))
     .filter(item => item.amount > 0 && ['przychód', 'wydatek'].includes(item.entryType));
 
-  if (!cleaned.length) throw new Error('Nie znaleziono poprawnych wpisów do importu.');
+  if (!cleaned.length) return { added: 0, updated: 0, skipped: 0 };
 
   if (replace) {
     const confirmReplace = window.confirm('Zastąpić wszystkie lokalne wpisy danymi z importowanego pliku?');
