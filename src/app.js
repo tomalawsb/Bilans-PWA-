@@ -1,10 +1,14 @@
 const DB_NAME = 'bilans-pwa-etap1';
 const DB_VERSION = 3;
-const APP_VERSION = 17;
+const APP_VERSION = 18;
 const STORE = 'entries';
 const TAG_RULE_STORE = 'tagRules';
 const DEVICE_ID_KEY = 'bilans-pwa-device-id';
 const THEME_KEY = 'bilans-pwa-theme';
+const STORAGE_MODE_KEY = 'bilans-pwa-storage-mode';
+const DROPBOX_CONFIG_KEY = 'bilans-pwa-dropbox-config';
+const DROPBOX_TOKEN_KEY = 'bilans-pwa-dropbox-token';
+const DROPBOX_OAUTH_KEY = 'bilans-pwa-dropbox-oauth';
 
 const THEMES = {
   classic: { name: 'Jasny klasyczny', color: '#f6f3ea' },
@@ -172,6 +176,16 @@ const el = {
   syncImportInput: document.querySelector('#syncImportInput'),
   replaceImportInput: document.querySelector('#replaceImportInput'),
   syncInfo: document.querySelector('#syncInfo'),
+  startupModePanel: document.querySelector('#startupModePanel'),
+  chooseLocalModeButton: document.querySelector('#chooseLocalModeButton'),
+  chooseDropboxModeButton: document.querySelector('#chooseDropboxModeButton'),
+  storageModeSelect: document.querySelector('#storageModeSelect'),
+  dropboxAppKeyInput: document.querySelector('#dropboxAppKeyInput'),
+  dropboxFilePathInput: document.querySelector('#dropboxFilePathInput'),
+  dropboxConnectButton: document.querySelector('#dropboxConnectButton'),
+  dropboxSyncNowButton: document.querySelector('#dropboxSyncNowButton'),
+  dropboxDisconnectButton: document.querySelector('#dropboxDisconnectButton'),
+  cloudStatus: document.querySelector('#cloudStatus'),
   tagRuleForm: document.querySelector('#tagRuleForm'),
   tagGroupName: document.querySelector('#tagGroupName'),
   tagAliases: document.querySelector('#tagAliases'),
@@ -934,6 +948,7 @@ async function handleAddParsedEntries() {
   await reloadEntries();
   el.quickText.focus();
   showMessage(`Dodano wpisy z parsera: ${entries.length}.`);
+  scheduleDropboxAutoSync();
 }
 
 function escapeHtml(value) {
@@ -1122,6 +1137,7 @@ async function moveEntryToDate(id, newDateISO) {
 
   await reloadEntries();
   showMessage(`Wpis przeniesiony na ${newDateISO}.`);
+  scheduleDropboxAutoSync();
 }
 
 function promptMoveEntry(id) {
@@ -1934,6 +1950,7 @@ async function handleDelete(id) {
   if (editingId === Number(id)) resetForm();
   await reloadEntries();
   showMessage('Wpis usunięty.');
+  scheduleDropboxAutoSync();
 }
 
 function handleEntriesClick(event) {
@@ -1955,6 +1972,7 @@ async function handleFormSubmit(event) {
     showMessage(editingId ? 'Zmiany zapisane.' : 'Wpis dodany.');
     resetForm();
     await reloadEntries();
+    scheduleDropboxAutoSync();
   } catch (error) {
     showMessage(error.message || 'Nie udało się zapisać wpisu.', 'error');
   }
@@ -2133,13 +2151,187 @@ async function ensureEntrySyncIds() {
   }
 }
 
-function exportJson() {
-  const payload = {
+
+function getStorageMode() {
+  try { return localStorage.getItem(STORAGE_MODE_KEY) || ''; } catch (_) { return ''; }
+}
+
+function setStorageMode(mode) {
+  const safeMode = mode === 'dropbox' ? 'dropbox' : 'local';
+  try { localStorage.setItem(STORAGE_MODE_KEY, safeMode); } catch (_) {}
+  updateCloudUi();
+}
+
+function getDropboxConfig() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(DROPBOX_CONFIG_KEY) || '{}');
+    return {
+      appKey: String(saved.appKey || '').trim(),
+      path: String(saved.path || '/Apps/Bilans/bilans_dane.json').trim() || '/Apps/Bilans/bilans_dane.json'
+    };
+  } catch (_) {
+    return { appKey: '', path: '/Apps/Bilans/bilans_dane.json' };
+  }
+}
+
+function saveDropboxConfig() {
+  const config = {
+    appKey: String(el.dropboxAppKeyInput?.value || '').trim(),
+    path: String(el.dropboxFilePathInput?.value || '/Apps/Bilans/bilans_dane.json').trim() || '/Apps/Bilans/bilans_dane.json'
+  };
+  if (!config.path.startsWith('/')) config.path = `/${config.path}`;
+  try { localStorage.setItem(DROPBOX_CONFIG_KEY, JSON.stringify(config)); } catch (_) {}
+  return config;
+}
+
+function getDropboxTokenData() {
+  try { return JSON.parse(localStorage.getItem(DROPBOX_TOKEN_KEY) || 'null'); } catch (_) { return null; }
+}
+
+function saveDropboxTokenData(data) {
+  const expiresIn = Number(data.expires_in || 14400);
+  const normalized = {
+    access_token: data.access_token,
+    refresh_token: data.refresh_token || getDropboxTokenData()?.refresh_token || '',
+    expires_at: Date.now() + Math.max(60, expiresIn - 60) * 1000
+  };
+  try { localStorage.setItem(DROPBOX_TOKEN_KEY, JSON.stringify(normalized)); } catch (_) {}
+  return normalized;
+}
+
+function hasDropboxConnection() {
+  const token = getDropboxTokenData();
+  return Boolean(token?.access_token || token?.refresh_token);
+}
+
+function updateCloudUi(statusText = '') {
+  const mode = getStorageMode() || 'local';
+  const config = getDropboxConfig();
+  if (el.storageModeSelect) el.storageModeSelect.value = mode;
+  if (el.dropboxAppKeyInput && !el.dropboxAppKeyInput.value) el.dropboxAppKeyInput.value = config.appKey;
+  if (el.dropboxFilePathInput && !el.dropboxFilePathInput.value) el.dropboxFilePathInput.value = config.path;
+  if (el.cloudStatus) {
+    if (statusText) el.cloudStatus.textContent = statusText;
+    else if (mode === 'dropbox') {
+      el.cloudStatus.textContent = hasDropboxConnection()
+        ? `Dropbox połączony. Plik danych: ${config.path}`
+        : 'Tryb Dropbox wybrany, ale konto nie jest jeszcze połączone.';
+    } else {
+      el.cloudStatus.textContent = 'Tryb lokalny. Dane są zapisane tylko w tej przeglądarce.';
+    }
+  }
+}
+
+function makeDropboxRedirectUri() {
+  return `${window.location.origin}${window.location.pathname}`;
+}
+
+function randomVerifier() {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+async function sha256Base64Url(value) {
+  const data = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return btoa(String.fromCharCode(...new Uint8Array(digest))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+async function startDropboxAuth() {
+  setStorageMode('dropbox');
+  const config = saveDropboxConfig();
+  if (!config.appKey) {
+    showMessage('Najpierw wklej Dropbox App key w zakładce Synchronizacja.', 'error');
+    return;
+  }
+  if (!window.isSecureContext && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    showMessage('Dropbox wymaga uruchomienia przez HTTPS albo localhost.', 'error');
+    return;
+  }
+  const codeVerifier = randomVerifier();
+  const codeChallenge = await sha256Base64Url(codeVerifier);
+  const state = randomVerifier();
+  const pending = { codeVerifier, state, appKey: config.appKey, redirectUri: makeDropboxRedirectUri() };
+  localStorage.setItem(DROPBOX_OAUTH_KEY, JSON.stringify(pending));
+  const url = new URL('https://www.dropbox.com/oauth2/authorize');
+  url.searchParams.set('client_id', config.appKey);
+  url.searchParams.set('response_type', 'code');
+  url.searchParams.set('token_access_type', 'offline');
+  url.searchParams.set('code_challenge', codeChallenge);
+  url.searchParams.set('code_challenge_method', 'S256');
+  url.searchParams.set('redirect_uri', pending.redirectUri);
+  url.searchParams.set('state', state);
+  window.location.href = url.toString();
+}
+
+async function handleDropboxOAuthReturn() {
+  const url = new URL(window.location.href);
+  const code = url.searchParams.get('code');
+  const state = url.searchParams.get('state');
+  if (!code) return;
+
+  let pending = null;
+  try { pending = JSON.parse(localStorage.getItem(DROPBOX_OAUTH_KEY) || 'null'); } catch (_) {}
+  if (!pending?.codeVerifier || pending.state !== state) {
+    showMessage('Nie udało się potwierdzić logowania Dropbox. Spróbuj ponownie.', 'error');
+    return;
+  }
+
+  const body = new URLSearchParams({
+    code,
+    grant_type: 'authorization_code',
+    client_id: pending.appKey,
+    redirect_uri: pending.redirectUri,
+    code_verifier: pending.codeVerifier
+  });
+
+  const response = await fetch('https://api.dropboxapi.com/oauth2/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body
+  });
+  if (!response.ok) throw new Error(`Dropbox nie zwrócił tokenu. Kod HTTP: ${response.status}.`);
+  const tokenData = await response.json();
+  saveDropboxTokenData(tokenData);
+  localStorage.removeItem(DROPBOX_OAUTH_KEY);
+  setStorageMode('dropbox');
+  url.searchParams.delete('code');
+  url.searchParams.delete('state');
+  window.history.replaceState({}, document.title, url.pathname + url.search + url.hash);
+  updateCloudUi('Dropbox połączony. Pobieram dane z chmury...');
+  await syncDropboxNow();
+}
+
+async function getDropboxAccessToken() {
+  const token = getDropboxTokenData();
+  if (!token) throw new Error('Dropbox nie jest połączony.');
+  if (token.access_token && Number(token.expires_at || 0) > Date.now() + 60000) return token.access_token;
+  if (!token.refresh_token) throw new Error('Brak refresh tokenu Dropbox. Połącz konto jeszcze raz.');
+
+  const config = getDropboxConfig();
+  const body = new URLSearchParams({
+    grant_type: 'refresh_token',
+    refresh_token: token.refresh_token,
+    client_id: config.appKey
+  });
+  const response = await fetch('https://api.dropboxapi.com/oauth2/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body
+  });
+  if (!response.ok) throw new Error(`Dropbox nie odświeżył tokenu. Kod HTTP: ${response.status}.`);
+  const tokenData = await response.json();
+  return saveDropboxTokenData({ ...tokenData, refresh_token: token.refresh_token }).access_token;
+}
+
+function makeExportPayload() {
+  return {
     app: 'Bilans PWA',
     version: APP_VERSION,
     exportedAt: new Date().toISOString(),
     deviceId: getDeviceId(),
-    syncMode: 'merge-safe',
+    syncMode: 'dropbox-merge-safe',
     tagRules,
     entries: allEntries.map(entry => ({
       ...entry,
@@ -2147,22 +2339,41 @@ function exportJson() {
       sourceDeviceId: entry.sourceDeviceId || getDeviceId()
     }))
   };
-
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `bilans-pwa-backup-${todayISO()}.json`;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
 }
 
-async function importJson(file, options = {}) {
-  const { replace = false } = options;
-  const text = await file.text();
-  const payload = JSON.parse(text);
+async function dropboxDownloadPayload() {
+  const accessToken = await getDropboxAccessToken();
+  const { path } = getDropboxConfig();
+  const response = await fetch('https://content.dropboxapi.com/2/files/download', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Dropbox-API-Arg': JSON.stringify({ path })
+    }
+  });
+  if (response.status === 409) return null;
+  if (!response.ok) throw new Error(`Nie udało się pobrać pliku z Dropbox. Kod HTTP: ${response.status}.`);
+  return response.json();
+}
+
+async function dropboxUploadPayload(payload) {
+  const accessToken = await getDropboxAccessToken();
+  const { path } = getDropboxConfig();
+  const response = await fetch('https://content.dropboxapi.com/2/files/upload', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/octet-stream',
+      'Dropbox-API-Arg': JSON.stringify({ path, mode: { '.tag': 'overwrite' }, autorename: false, mute: true, strict_conflict: false })
+    },
+    body: JSON.stringify(payload, null, 2)
+  });
+  if (!response.ok) throw new Error(`Nie udało się zapisać pliku w Dropbox. Kod HTTP: ${response.status}.`);
+  return response.json();
+}
+
+async function importPayload(payload, options = {}) {
+  const { replace = false, silent = false } = options;
   const imported = collectImportedEntries(payload);
 
   if (!Array.isArray(imported) || !imported.length) {
@@ -2174,21 +2385,16 @@ async function importJson(file, options = {}) {
     .map(item => normalizeImportedEntry(item, now))
     .filter(item => item.amount > 0 && ['przychód', 'wydatek'].includes(item.entryType));
 
-  if (!cleaned.length) {
-    throw new Error('Nie znaleziono poprawnych wpisów do importu.');
-  }
+  if (!cleaned.length) throw new Error('Nie znaleziono poprawnych wpisów do importu.');
 
   if (replace) {
     const confirmReplace = window.confirm('Zastąpić wszystkie lokalne wpisy danymi z importowanego pliku?');
-    if (!confirmReplace) return;
+    if (!confirmReplace) return { added: 0, updated: 0, skipped: 0 };
     await clearEntries();
   }
 
   if (Array.isArray(payload?.tagRules)) {
-    for (const rule of payload.tagRules) {
-      const normalizedRule = normalizeRule(rule);
-      await saveTagRule(normalizedRule);
-    }
+    for (const rule of payload.tagRules) await saveTagRule(normalizeRule(rule));
     await reloadTagRules();
   }
 
@@ -2207,9 +2413,7 @@ async function importJson(file, options = {}) {
       if (incomingTime > currentTime) {
         await saveEntry({ ...incoming, id: current.id });
         updated += 1;
-      } else {
-        skipped += 1;
-      }
+      } else skipped += 1;
       continue;
     }
 
@@ -2218,13 +2422,78 @@ async function importJson(file, options = {}) {
       continue;
     }
 
-    const entryToSave = replace ? sanitizeEntryKey(incoming) : stripLocalId(incoming);
-    await saveEntry(entryToSave);
+    await saveEntry(replace ? sanitizeEntryKey(incoming) : stripLocalId(incoming));
     added += 1;
   }
 
   await reloadEntries();
-  showMessage(`Import zakończony. Dodano: ${added}, zaktualizowano: ${updated}, pominięto: ${skipped}.`);
+  if (!silent) showMessage(`Import zakończony. Dodano: ${added}, zaktualizowano: ${updated}, pominięto: ${skipped}.`);
+  return { added, updated, skipped };
+}
+
+let dropboxSyncBusy = false;
+let dropboxSyncTimer = null;
+
+function scheduleDropboxAutoSync() {
+  if (getStorageMode() !== 'dropbox' || !hasDropboxConnection()) return;
+  window.clearTimeout(dropboxSyncTimer);
+  dropboxSyncTimer = window.setTimeout(() => syncDropboxNow().catch(error => updateCloudUi(`Błąd synchronizacji Dropbox: ${error.message}`)), 1200);
+}
+
+async function syncDropboxNow() {
+  if (getStorageMode() !== 'dropbox') {
+    updateCloudUi('Tryb lokalny. Dropbox nie jest używany.');
+    return;
+  }
+  if (!hasDropboxConnection()) {
+    updateCloudUi('Tryb Dropbox wybrany, ale konto nie jest jeszcze połączone.');
+    return;
+  }
+  if (dropboxSyncBusy) return;
+  dropboxSyncBusy = true;
+  try {
+    updateCloudUi('Synchronizuję z Dropbox...');
+    const remotePayload = await dropboxDownloadPayload();
+    if (remotePayload) await importPayload(remotePayload, { replace: false, silent: true });
+    await dropboxUploadPayload(makeExportPayload());
+    updateCloudUi(`Dropbox zsynchronizowany: ${new Date().toLocaleString('pl-PL')}.`);
+  } finally {
+    dropboxSyncBusy = false;
+  }
+}
+
+function disconnectDropbox() {
+  if (!window.confirm('Odłączyć Dropbox od tej przeglądarki? Dane lokalne zostaną w programie.')) return;
+  localStorage.removeItem(DROPBOX_TOKEN_KEY);
+  localStorage.removeItem(DROPBOX_OAUTH_KEY);
+  setStorageMode('local');
+  updateCloudUi('Dropbox odłączony. Program pracuje lokalnie.');
+}
+
+function setupFirstRunMode() {
+  const mode = getStorageMode();
+  if (!mode && el.startupModePanel) el.startupModePanel.classList.remove('hidden');
+}
+
+function exportJson() {
+  const payload = makeExportPayload();
+
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `bilans-pwa-backup-${todayISO()}.json`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function importJson(file, options = {}) {
+  const text = await file.text();
+  const payload = JSON.parse(text);
+  await importPayload(payload, options);
+  scheduleDropboxAutoSync();
 }
 
 async function handleClearAll() {
@@ -2243,6 +2512,7 @@ async function handleClearAll() {
   resetForm();
   await reloadEntries();
   showMessage('Wszystkie dane zostały usunięte.');
+  scheduleDropboxAutoSync();
 }
 
 function isFileProtocol() {
@@ -2883,6 +3153,31 @@ function bindEvents() {
   el.importInput.addEventListener('change', event => handleImportChange(event, { replace: false }));
   el.syncImportInput.addEventListener('change', event => handleImportChange(event, { replace: false }));
   el.replaceImportInput.addEventListener('change', event => handleImportChange(event, { replace: true }));
+
+  if (el.chooseLocalModeButton) el.chooseLocalModeButton.addEventListener('click', () => {
+    setStorageMode('local');
+    el.startupModePanel?.classList.add('hidden');
+    showMessage('Wybrano pracę lokalną. Dane będą zapisane w tej przeglądarce.');
+  });
+  if (el.chooseDropboxModeButton) el.chooseDropboxModeButton.addEventListener('click', () => {
+    setStorageMode('dropbox');
+    el.startupModePanel?.classList.add('hidden');
+    document.querySelector('[data-tab="sync"]')?.click();
+    updateCloudUi('Wklej Dropbox App key i kliknij „Połącz z Dropbox”.');
+  });
+  if (el.storageModeSelect) el.storageModeSelect.addEventListener('change', event => {
+    setStorageMode(event.target.value);
+    if (event.target.value === 'dropbox') updateCloudUi('Tryb Dropbox wybrany. Połącz konto albo synchronizuj, jeśli jest już połączone.');
+  });
+  if (el.dropboxAppKeyInput) el.dropboxAppKeyInput.addEventListener('change', saveDropboxConfig);
+  if (el.dropboxFilePathInput) el.dropboxFilePathInput.addEventListener('change', saveDropboxConfig);
+  if (el.dropboxConnectButton) el.dropboxConnectButton.addEventListener('click', () => startDropboxAuth().catch(error => showMessage(error.message, 'error')));
+  if (el.dropboxDisconnectButton) el.dropboxDisconnectButton.addEventListener('click', disconnectDropbox);
+  if (el.dropboxSyncNowButton) el.dropboxSyncNowButton.addEventListener('click', () => syncDropboxNow().catch(error => {
+    updateCloudUi(`Błąd synchronizacji Dropbox: ${error.message}`);
+    showMessage(error.message, 'error');
+  }));
+
 }
 
 async function init() {
@@ -2918,6 +3213,16 @@ async function init() {
   setupTabs();
   setupThemes();
   setupVoiceMode();
+  updateCloudUi();
+  setupFirstRunMode();
+  try {
+    await handleDropboxOAuthReturn();
+  } catch (error) {
+    showMessage(error.message || 'Nie udało się zakończyć logowania Dropbox.', 'error');
+  }
+  if (getStorageMode() === 'dropbox' && hasDropboxConnection() && !new URL(window.location.href).searchParams.get('code')) {
+    syncDropboxNow().catch(error => updateCloudUi(`Błąd synchronizacji Dropbox: ${error.message}`));
+  }
 }
 
 init().catch(error => {
