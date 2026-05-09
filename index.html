@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#f6f3ea">
   <meta name="description" content="Bilans PWA — prosty lokalny rejestr przychodów, wydatków, raportów i kalendarza.">
-  <title>Bilans PWA — Etap 17</title>
-  <link rel="manifest" href="./manifest.webmanifest?v=17">
+  <title>Bilans PWA — Etap 18</title>
+  <link rel="manifest" href="./manifest.webmanifest?v=18">
   <link rel="icon" href="./icons/icon-192.png">
   <link rel="apple-touch-icon" href="./icons/icon-192.png">
-  <link rel="stylesheet" href="./src/styles.css?v=17">
+  <link rel="stylesheet" href="./src/styles.css?v=18">
 </head>
 <body data-theme="classic">
   <script>
@@ -22,7 +22,7 @@
       <div class="brand-block">
         <div class="app-mark">B</div>
         <div>
-          <h1>Bilans PWA <span id="appVersionBadge" class="version-badge">Etap 17</span></h1>
+          <h1>Bilans PWA <span id="appVersionBadge" class="version-badge">Etap 18</span></h1>
           <p id="todayLabel">Lokalna aplikacja webowa</p>
         </div>
       </div>
@@ -48,6 +48,23 @@
     </nav>
 
     <section id="messageBox" class="message hidden" role="status"></section>
+
+    <section id="startupModePanel" class="startup-mode-panel hidden" aria-label="Pierwsze uruchomienie">
+      <div class="startup-mode-card">
+        <h2>Pierwsze uruchomienie</h2>
+        <p>Wybierz, gdzie program ma trzymać dane. Możesz to później zmienić w zakładce Synchronizacja.</p>
+        <div class="startup-mode-options">
+          <button id="chooseLocalModeButton" class="mode-choice-card" type="button">
+            <strong>Pracuj lokalnie</strong>
+            <span>Dane zostają tylko w tej przeglądarce. Działa bez logowania i bez internetu.</span>
+          </button>
+          <button id="chooseDropboxModeButton" class="mode-choice-card" type="button">
+            <strong>Pracuj z Dropbox</strong>
+            <span>Telefon i komputer korzystają z jednego pliku JSON w Dropboxie.</span>
+          </button>
+        </div>
+      </div>
+    </section>
 
     <section id="voiceQuickPanel" class="voice-quick-panel hidden" aria-label="Szybkie dodawanie głosem">
       <div class="voice-card">
@@ -362,6 +379,32 @@
           </div>
         </div>
         <div class="export-sync-grid">
+          <article class="mini-panel cloud-panel">
+            <h3>Tryb danych</h3>
+            <p>Wybierz, czy program ma pracować lokalnie, czy na jednym pliku JSON w Dropboxie.</p>
+            <label>
+              Tryb pracy
+              <select id="storageModeSelect">
+                <option value="local">Lokalnie</option>
+                <option value="dropbox">Dropbox</option>
+              </select>
+            </label>
+            <label>
+              Dropbox App key
+              <input id="dropboxAppKeyInput" type="text" placeholder="Wklej App key z Dropbox Developers">
+            </label>
+            <label>
+              Ścieżka pliku w Dropboxie
+              <input id="dropboxFilePathInput" type="text" value="/Apps/Bilans/bilans_dane.json">
+            </label>
+            <div class="button-row">
+              <button id="dropboxConnectButton" class="secondary" type="button">Połącz z Dropbox</button>
+              <button id="dropboxSyncNowButton" class="secondary" type="button">Synchronizuj teraz</button>
+              <button id="dropboxDisconnectButton" class="ghost" type="button">Odłącz Dropbox</button>
+            </div>
+            <small id="cloudStatus" class="sync-info">Tryb lokalny. Dane są zapisane tylko w tej przeglądarce.</small>
+          </article>
+
           <article class="mini-panel">
             <h3>Kopia danych</h3>
             <p>Zapisz dane do pliku JSON albo wczytaj dane z innego urządzenia.</p>
@@ -455,6 +498,6 @@
     </section>
   </main>
 
-  <script src="./src/app.js?v=17" type="module"></script>
+  <script src="./src/app.js?v=18" type="module"></script>
 </body>
 </html>

@@ -1,21 +1,24 @@
-# Bilans PWA — Etap 17
+# Bilans PWA — Etap 18
 
 Lokalna aplikacja PWA do zapisywania przychodów, wydatków, raportów i kalendarza.
 
-## Co dodano w Etapie 17
+## Co dodano w Etapie 18
 
-- szybkie dodawanie głosem,
-- przycisk **Dodaj głosem** w nagłówku,
-- tryb uruchamiany adresem:
+- ekran pierwszego uruchomienia: **Lokalnie** albo **Dropbox**,
+- zakładka Synchronizacja zawiera wybór trybu danych,
+- możliwość podania Dropbox App key i ścieżki pliku JSON,
+- logowanie Dropbox przez OAuth/PKCE, bez wpisywania hasła Dropbox w aplikacji,
+- pobieranie i wysyłanie jednego pliku `bilans_dane.json`,
+- przycisk **Synchronizuj teraz**,
+- automatyczne dosyłanie zmian do Dropboxa po dodaniu, edycji, usunięciu, imporcie albo przeniesieniu wpisu,
+- poprawka mapy cieplnej w kalendarzu rocznym — kolory dni nie są już nadpisywane przez ogólne tło komórek,
+- podbita wersja aplikacji, manifestu i cache do Etapu 18.
 
-```text
-index.html?action=voice
-```
+## Ważne
 
-- skrót PWA w `manifest.webmanifest`: **Dodaj głosem**,
-- rozpoznany tekst trafia do dotychczasowego parsera,
-- po rozpoznaniu można sprawdzić wpisy i zapisać je do historii,
-- podbita wersja aplikacji, manifestu i cache do Etapu 17.
+Dropbox nie prosi o hasło wewnątrz aplikacji. Aplikacja przekierowuje do oficjalnego logowania Dropbox i zapisuje token dostępu w pamięci tej przeglądarki.
+
+Do działania Dropboxa potrzebny jest hosting HTTPS, np. GitHub Pages, oraz App key z aplikacji utworzonej w Dropbox Developers.
 
 ## Jak uruchomić lokalnie
 
@@ -27,12 +30,10 @@ run_local_windows.bat
 
 Potem otwórz adres pokazany w konsoli.
 
-## Jak używać na telefonie
-
-Najlepiej wrzucić katalog na GitHub Pages albo inny hosting HTTPS. Mikrofon w przeglądarce wymaga zwykle HTTPS albo lokalnego środowiska.
-
-Po zainstalowaniu PWA na Androidzie przytrzymaj ikonę aplikacji. Powinien pojawić się skrót **Dodaj głosem**. Dostępność skrótów zależy od przeglądarki i launchera Androida.
-
 ## Dane
 
-Dane są zapisywane lokalnie w IndexedDB przeglądarki. Import i eksport danych nadal działa przez pliki JSON.
+Tryb lokalny zapisuje dane w IndexedDB przeglądarki. Tryb Dropbox używa jednego pliku JSON, domyślnie:
+
+```text
+/Apps/Bilans/bilans_dane.json
+```
