@@ -1,8 +1,8 @@
-# Bilans PWA — Etap 18
+# Bilans PWA — Etap 19
 
 Lokalna aplikacja PWA do zapisywania przychodów, wydatków, raportów i kalendarza.
 
-## Co dodano w Etapie 18
+## Co dodano w Etapie 19
 
 - ekran pierwszego uruchomienia: **Lokalnie** albo **Dropbox**,
 - zakładka Synchronizacja zawiera wybór trybu danych,
@@ -12,7 +12,7 @@ Lokalna aplikacja PWA do zapisywania przychodów, wydatków, raportów i kalenda
 - przycisk **Synchronizuj teraz**,
 - automatyczne dosyłanie zmian do Dropboxa po dodaniu, edycji, usunięciu, imporcie albo przeniesieniu wpisu,
 - poprawka mapy cieplnej w kalendarzu rocznym — kolory dni nie są już nadpisywane przez ogólne tło komórek,
-- podbita wersja aplikacji, manifestu i cache do Etapu 18.
+- podbita wersja aplikacji, manifestu i cache do Etapu 19.
 
 ## Ważne
 

@@ -1,12 +1,12 @@
-const CACHE_NAME = 'bilans-pwa-etap18-v1';
-const APP_VERSION = '18';
+const CACHE_NAME = 'bilans-pwa-etap19-v1';
+const APP_VERSION = '19';
 const APP_SHELL = [
   './',
   './index.html',
-  './index.html?v=18',
-  './manifest.webmanifest?v=18',
-  './src/styles.css?v=18',
-  './src/app.js?v=18',
+  './index.html?v=19',
+  './manifest.webmanifest?v=19',
+  './src/styles.css?v=19',
+  './src/app.js?v=19',
   './icons/icon-192.png',
   './icons/icon-512.png'
 ];
@@ -47,7 +47,7 @@ self.addEventListener('fetch', event => {
         if (cached) return cached;
 
         if (event.request.mode === 'navigate') {
-          return await caches.match('./index.html?v=18') || await caches.match('./index.html');
+          return await caches.match('./index.html?v=19') || await caches.match('./index.html');
         }
 
         return new Response('Brak połączenia i brak pliku w cache.', {
