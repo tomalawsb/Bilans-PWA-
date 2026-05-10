@@ -1,4 +1,4 @@
-# Portfel PRO v. 1.0 — Etap 37
+# Portfel PRO v. 1.0 — Etap 38
 
 ## Zmiany
 - przygotowano prosty wariant Dropboxa z kluczem wpisanym przez autora w `src/config.js`;
@@ -28,6 +28,6 @@ dropboxAppKey: "abcd1234twojklucz"
 App Key jest publicznym identyfikatorem aplikacji. Nie daje dostępu do Twojego Dropboxa. Dane użytkownika zapisują się w Dropboxie użytkownika, po jego logowaniu i zgodzie.
 
 
-## Etap 37
+## Etap 38
 
 W tym wydaniu wpisano publiczny Dropbox App Key do `src/config.js`, dzięki czemu zwykły użytkownik klika tylko **Połącz z Dropbox** i loguje się na swoje konto Dropbox.

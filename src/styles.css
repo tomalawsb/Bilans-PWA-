@@ -1503,3 +1503,107 @@ body[data-theme="dark"] input[type="checkbox"],
 body[data-theme="dark"] input[type="radio"] {
   accent-color: #7dd3fc;
 }
+
+
+/* Etap 38: twarda poprawka kontrastu dark theme na podstawie screenów */
+body[data-theme="dark"] .report-settings-block,
+body[data-theme="dark"] .report-settings-block *,
+body[data-theme="dark"] .theme-preview-grid,
+body[data-theme="dark"] .theme-preview-grid *,
+body[data-theme="dark"] .theme-card,
+body[data-theme="dark"] .theme-card *,
+body[data-theme="dark"] .report-option,
+body[data-theme="dark"] .report-option *,
+body[data-theme="dark"] .calendar-title-row,
+body[data-theme="dark"] .calendar-title-row *,
+body[data-theme="dark"] .calendar-meta-row,
+body[data-theme="dark"] .calendar-meta-row *,
+body[data-theme="dark"] .calendar-weekdays,
+body[data-theme="dark"] .calendar-weekdays *,
+body[data-theme="dark"] .calendar-grid,
+body[data-theme="dark"] .calendar-grid *,
+body[data-theme="dark"] .year-calendar-grid,
+body[data-theme="dark"] .year-calendar-grid *,
+body[data-theme="dark"] .year-month-card,
+body[data-theme="dark"] .year-month-card * {
+  color: #f3f8ff !important;
+}
+
+body[data-theme="dark"] .report-settings-block p,
+body[data-theme="dark"] .report-settings-block small,
+body[data-theme="dark"] .report-settings-block .muted-small,
+body[data-theme="dark"] .report-settings-block .report-option small,
+body[data-theme="dark"] .theme-card small,
+body[data-theme="dark"] .calendar-day-empty,
+body[data-theme="dark"] .year-top-days,
+body[data-theme="dark"] .heatmap-legend,
+body[data-theme="dark"] .heatmap-legend *,
+body[data-theme="dark"] .calendar-day-details,
+body[data-theme="dark"] .calendar-meta-row p,
+body[data-theme="dark"] .calendar-meta-row small {
+  color: #c6d5e8 !important;
+}
+
+body[data-theme="dark"] .report-settings-block,
+body[data-theme="dark"] .theme-card,
+body[data-theme="dark"] .report-option,
+body[data-theme="dark"] .calendar-meta-row,
+body[data-theme="dark"] .calendar-day,
+body[data-theme="dark"] .year-day,
+body[data-theme="dark"] .year-month,
+body[data-theme="dark"] .year-month-card,
+body[data-theme="dark"] .calendar-day-entry,
+body[data-theme="dark"] .year-top-row {
+  background: #132238 !important;
+  border-color: #3c5270 !important;
+}
+
+body[data-theme="dark"] .calendar-day:hover,
+body[data-theme="dark"] .year-day:hover,
+body[data-theme="dark"] .calendar-day-entry:hover,
+body[data-theme="dark"] .report-option:hover,
+body[data-theme="dark"] .theme-card:hover {
+  background: #1a2d47 !important;
+  border-color: #8ad7ff !important;
+}
+
+body[data-theme="dark"] .theme-card.active,
+body[data-theme="dark"] .report-option:has(input:checked),
+body[data-theme="dark"] .calendar-day.is-selected,
+body[data-theme="dark"] .year-day.is-selected {
+  background: #203654 !important;
+  border-color: #8ad7ff !important;
+  box-shadow: 0 0 0 3px rgba(138,215,255,.18) !important;
+}
+
+body[data-theme="dark"] select,
+body[data-theme="dark"] option,
+body[data-theme="dark"] optgroup {
+  background: #132238 !important;
+  color: #f3f8ff !important;
+  border-color: #3c5270 !important;
+}
+
+body[data-theme="dark"] .calendar-weekdays span,
+body[data-theme="dark"] .mini-weekdays span,
+body[data-theme="dark"] .calendar-month-head,
+body[data-theme="dark"] .year-month-head,
+body[data-theme="dark"] .calendar-day-number {
+  color: #ffffff !important;
+}
+
+body[data-theme="dark"] .heat-level-0,
+body[data-theme="dark"] .year-day.heat-level-0 { background: #132238 !important; color: #f3f8ff !important; }
+body[data-theme="dark"] .heat-level-1,
+body[data-theme="dark"] .year-day.heat-level-1 { background: #1f4a34 !important; color: #ffffff !important; }
+body[data-theme="dark"] .heat-level-2,
+body[data-theme="dark"] .year-day.heat-level-2 { background: #2d6645 !important; color: #ffffff !important; }
+body[data-theme="dark"] .heat-level-3,
+body[data-theme="dark"] .year-day.heat-level-3 { background: #3c8557 !important; color: #ffffff !important; }
+body[data-theme="dark"] .heat-level-4,
+body[data-theme="dark"] .year-day.heat-level-4 { background: #53aa6f !important; color: #ffffff !important; }
+body[data-theme="dark"] .heat-level-5,
+body[data-theme="dark"] .year-day.heat-level-5 { background: #7ee5b6 !important; color: #082014 !important; }
+
+body[data-theme="dark"] .amount-income { color: #7dffb0 !important; }
+body[data-theme="dark"] .amount-expense { color: #ff9e9e !important; }
