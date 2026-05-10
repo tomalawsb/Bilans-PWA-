@@ -37,3 +37,14 @@ Dodano:
 - inteligentne wnioski w zakładce Raporty,
 - wykrywanie wydatków cyklicznych na podstawie podobnych opisów/grup,
 - podbicie cache PWA do v111.
+
+
+## Etap 49 — Portfel gotówkowy
+
+Dodano w zakładce **Raporty** sekcję **Portfel gotówkowy**:
+- ręczny stan początkowy gotówki dla wybranego miesiąca,
+- automatyczne doliczanie tylko wpisów z płatnością **Gotówka**,
+- ignorowanie płatności: karta, BLIK, bank/przelew i inne,
+- ręczne korekty portfela, np. po fizycznym przeliczeniu gotówki,
+- eksport/import `walletMonths` w JSON razem z wpisami, regułami tagów i samouczeniem,
+- podbicie cache PWA do `v112`.

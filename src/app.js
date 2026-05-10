@@ -1,5 +1,5 @@
 const DB_NAME = 'bilans-pwa-etap1';
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 const APP_VERSION = '1.1';
 const RAW_DROPBOX_DEFAULT_APP_KEY = String(window.PORTFEL_PRO_CONFIG?.dropboxAppKey || '').trim();
 const DROPBOX_DEFAULT_APP_KEY = /^WSTAW_TUTAJ/i.test(RAW_DROPBOX_DEFAULT_APP_KEY) ? '' : RAW_DROPBOX_DEFAULT_APP_KEY; // Ustaw w src/config.js, wtedy użytkownik klika tylko Połącz z Dropbox.
@@ -10,6 +10,7 @@ let activeInstallTarget = null;
 const STORE = 'entries';
 const TAG_RULE_STORE = 'tagRules';
 const LEARNING_RULE_STORE = 'learningRules';
+const WALLET_MONTH_STORE = 'walletMonths';
 const DEVICE_ID_KEY = 'bilans-pwa-device-id';
 const THEME_KEY = 'bilans-pwa-theme';
 const STORAGE_MODE_KEY = 'bilans-pwa-storage-mode';
@@ -64,6 +65,50 @@ function normalizeScope(value) {
   if (['domowe', 'domowy', 'domowa', 'dom', 'prywatne', 'prywatny', 'prywatna'].includes(raw)) return 'domowe';
   if (['firmowe', 'firmowy', 'firmowa', 'firma', 'sluzbowe', 'sluzbowy', 'sluzbowa'].includes(raw)) return 'firmowe';
   return 'nieokreślone';
+}
+
+
+function normalizePaymentMethod(value) {
+  const raw = normalizeText(value);
+  if (['gotowka', 'gotowkowo', 'cash', 'do reki', 'w gotowce'].includes(raw)) return 'gotówka';
+  if (['karta', 'karta platnicza', 'karta debetowa', 'karta kredytowa', 'terminal'].includes(raw)) return 'karta';
+  if (['bank', 'przelew', 'przelewem', 'konto', 'na konto', 'z konta'].includes(raw)) return 'bank';
+  if (['blik', 'blikiem'].includes(raw)) return 'blik';
+  return ['gotówka', 'karta', 'bank', 'blik', 'inne'].includes(String(value || '').trim()) ? String(value).trim() : 'gotówka';
+}
+
+function isCashPayment(value) {
+  return normalizePaymentMethod(value) === 'gotówka';
+}
+
+function normalizeMonthKey(value) {
+  const raw = String(value || '').slice(0, 7);
+  return /^\d{4}-\d{2}$/.test(raw) ? raw : monthKey(todayISO());
+}
+
+function parseSignedWalletAmount(raw, allowZero = false) {
+  const source = String(raw ?? '').trim();
+  if (!source) return allowZero ? 0 : null;
+  const negative = /^\s*-/.test(source) || /^\s*minus\b/i.test(source);
+  let value = source
+    .replace(/^\s*minus\b/i, '')
+    .replace(/zł|zl|pln/gi, '')
+    .replace(/\s+/g, '')
+    .replace(/^[+\-]/, '');
+  if (!value) return allowZero ? 0 : null;
+  const lastComma = value.lastIndexOf(',');
+  const lastDot = value.lastIndexOf('.');
+  const decimalSeparator = Math.max(lastComma, lastDot);
+  if (decimalSeparator >= 0) {
+    const fraction = value.slice(decimalSeparator + 1);
+    const integer = value.slice(0, decimalSeparator);
+    if (fraction.length > 0 && fraction.length <= 2) value = integer.replace(/[,.]/g, '') + '.' + fraction;
+    else value = value.replace(/[,.]/g, '');
+  }
+  value = value.replace(/[^0-9.]/g, '');
+  const number = Number(value);
+  if (!Number.isFinite(number) || (!allowZero && number <= 0)) return null;
+  return Math.round((negative ? -number : number) * 100) / 100;
 }
 
 
@@ -246,6 +291,7 @@ let deferredInstallPrompt = null;
 let parsedDrafts = [];
 let tagRules = [];
 let learningRules = [];
+let walletMonths = [];
 let calendarMonth = todayISO().slice(0, 7);
 let selectedCalendarDate = todayISO();
 let calendarYear = Number(todayISO().slice(0, 4));
@@ -351,6 +397,13 @@ const el = {
   mainReport: document.querySelector('#mainReport'),
   smartReport: document.querySelector('#smartReport'),
   recurringReport: document.querySelector('#recurringReport'),
+  walletMonth: document.querySelector('#walletMonth'),
+  walletOpeningBalance: document.querySelector('#walletOpeningBalance'),
+  walletSaveOpeningButton: document.querySelector('#walletSaveOpeningButton'),
+  walletCorrectionAmount: document.querySelector('#walletCorrectionAmount'),
+  walletCorrectionNote: document.querySelector('#walletCorrectionNote'),
+  walletAddCorrectionButton: document.querySelector('#walletAddCorrectionButton'),
+  walletReport: document.querySelector('#walletReport'),
   mainReportSettings: document.querySelector('#mainReportSettings'),
   mainReportResetButton: document.querySelector('#mainReportResetButton'),
   categoryReport: document.querySelector('#categoryReport'),
@@ -568,6 +621,7 @@ function prepareEntryForStorage(entry, options = {}) {
     cleaned.id = numericId;
   }
 
+  cleaned.paymentMethod = normalizePaymentMethod(cleaned.paymentMethod);
   cleaned.syncId = cleaned.syncId || makeSyncId('entry');
   cleaned.sourceDeviceId = cleaned.sourceDeviceId || getDeviceId();
   return cleaned;
@@ -1512,7 +1566,7 @@ function collectParsedDraftsFromPreview() {
       amount,
       unitAmount: current.unitAmount || amount,
       quantity,
-      paymentMethod: read('paymentMethod') || 'gotówka',
+      paymentMethod: normalizePaymentMethod(read('paymentMethod')),
       description,
       originalText: read('originalText'),
       tags: normalizeTags(read('tags')),
@@ -1871,6 +1925,11 @@ function openDatabase() {
         learningStore.createIndex('category', 'category', { unique: false });
         learningStore.createIndex('updatedAt', 'updatedAt', { unique: false });
       }
+
+      if (!database.objectStoreNames.contains(WALLET_MONTH_STORE)) {
+        const walletStore = database.createObjectStore(WALLET_MONTH_STORE, { keyPath: 'month' });
+        walletStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+      }
     };
 
     request.onsuccess = event => resolve(event.target.result);
@@ -1948,6 +2007,130 @@ async function reloadTagRules() {
   tagRules = await getAllTagRules();
   tagRules = tagRules.map(normalizeRule).sort((a, b) => a.name.localeCompare(b.name, 'pl'));
   renderTagRules();
+}
+
+
+function normalizeWalletMonth(record) {
+  const month = normalizeMonthKey(record?.month);
+  const now = new Date().toISOString();
+  const corrections = Array.isArray(record?.corrections)
+    ? record.corrections.map(item => ({
+        id: item?.id || makeSyncId('wallet-correction'),
+        date: isValidDateISO(item?.date) ? item.date : `${month}-01`,
+        amount: Number(item?.amount) || 0,
+        note: String(item?.note || '').trim(),
+        createdAt: item?.createdAt || now,
+        updatedAt: item?.updatedAt || item?.createdAt || now,
+        sourceDeviceId: item?.sourceDeviceId || getDeviceId()
+      })).filter(item => item.amount !== 0)
+    : [];
+
+  return {
+    month,
+    openingBalance: Number(record?.openingBalance) || 0,
+    corrections,
+    sourceDeviceId: record?.sourceDeviceId || getDeviceId(),
+    createdAt: record?.createdAt || now,
+    updatedAt: record?.updatedAt || now
+  };
+}
+
+function getAllWalletMonths() {
+  return new Promise((resolve, reject) => {
+    const request = txNamedStore(WALLET_MONTH_STORE).getAll();
+    request.onsuccess = () => resolve(request.result ?? []);
+    request.onerror = event => reject(event.target.error);
+  });
+}
+
+function saveWalletMonth(record) {
+  return new Promise((resolve, reject) => {
+    const normalized = normalizeWalletMonth(record);
+    const request = txNamedStore(WALLET_MONTH_STORE, 'readwrite').put(normalized);
+    request.onsuccess = () => resolve(normalized);
+    request.onerror = event => reject(event.target.error);
+  });
+}
+
+function clearWalletMonths() {
+  return new Promise((resolve, reject) => {
+    const request = txNamedStore(WALLET_MONTH_STORE, 'readwrite').clear();
+    request.onsuccess = () => resolve();
+    request.onerror = event => reject(event.target.error);
+  });
+}
+
+async function reloadWalletMonths() {
+  walletMonths = (await getAllWalletMonths()).map(normalizeWalletMonth).sort((a, b) => b.month.localeCompare(a.month));
+  renderWalletReport();
+}
+
+function findWalletMonth(month) {
+  const normalized = normalizeMonthKey(month);
+  return walletMonths.find(item => item.month === normalized) || null;
+}
+
+function emptyWalletMonth(month) {
+  const normalized = normalizeMonthKey(month);
+  const now = new Date().toISOString();
+  return {
+    month: normalized,
+    openingBalance: 0,
+    corrections: [],
+    sourceDeviceId: getDeviceId(),
+    createdAt: now,
+    updatedAt: now
+  };
+}
+
+function mergeWalletMonthRecords(localRecord, incomingRecord) {
+  const local = normalizeWalletMonth(localRecord || incomingRecord);
+  const incoming = normalizeWalletMonth(incomingRecord || localRecord);
+  const localTime = Date.parse(local.updatedAt || local.createdAt || '') || 0;
+  const incomingTime = Date.parse(incoming.updatedAt || incoming.createdAt || '') || 0;
+  const corrections = new Map();
+
+  for (const item of [...(local.corrections || []), ...(incoming.corrections || [])]) {
+    const current = corrections.get(item.id);
+    const currentTime = Date.parse(current?.updatedAt || current?.createdAt || '') || 0;
+    const itemTime = Date.parse(item.updatedAt || item.createdAt || '') || 0;
+    if (!current || itemTime >= currentTime) corrections.set(item.id, item);
+  }
+
+  return normalizeWalletMonth({
+    ...(incomingTime >= localTime ? incoming : local),
+    corrections: Array.from(corrections.values()).sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(b.createdAt).localeCompare(String(a.createdAt)))
+  });
+}
+
+async function importWalletMonthsFromPayload(payload, replace = false) {
+  const incoming = Array.isArray(payload?.walletMonths)
+    ? payload.walletMonths
+    : Array.isArray(payload?.wallet?.months)
+      ? payload.wallet.months
+      : Array.isArray(payload?.portfelGotowkowy)
+        ? payload.portfelGotowkowy
+        : [];
+
+  if (replace) await clearWalletMonths();
+  if (!incoming.length) {
+    if (replace) await reloadWalletMonths();
+    return 0;
+  }
+
+  const existing = new Map((await getAllWalletMonths()).map(item => [item.month, normalizeWalletMonth(item)]));
+  let changed = 0;
+
+  for (const item of incoming) {
+    const normalized = normalizeWalletMonth(item);
+    const merged = replace ? normalized : mergeWalletMonthRecords(existing.get(normalized.month), normalized);
+    await saveWalletMonth(merged);
+    existing.set(merged.month, merged);
+    changed += 1;
+  }
+
+  await reloadWalletMonths();
+  return changed;
 }
 
 function getAllEntries() {
@@ -2130,7 +2313,7 @@ function makeEntryFromForm() {
     scope: el.entryScope.value,
     category: el.category.value,
     amount: parseAmount(el.amount.value),
-    paymentMethod: el.paymentMethod.value,
+    paymentMethod: normalizePaymentMethod(el.paymentMethod.value),
     description: el.description.value.trim(),
     originalText: el.originalText.value.trim(),
     tags: normalizeTags(el.tags.value),
@@ -2467,6 +2650,171 @@ function formatEntryShort(entry) {
   return `${description} · ${entry.entryDate || ''} · ${formatMoney(entry.amount)}`;
 }
 
+
+function entriesForMonth(month) {
+  const normalized = normalizeMonthKey(month);
+  return allEntries.filter(entry => monthKey(entry.entryDate || '') === normalized);
+}
+
+function buildWalletSummary(month) {
+  const normalized = normalizeMonthKey(month);
+  const record = findWalletMonth(normalized) || emptyWalletMonth(normalized);
+  const monthEntries = entriesForMonth(normalized);
+  const cashEntries = monthEntries.filter(entry => isCashPayment(entry.paymentMethod));
+  const nonCashEntries = monthEntries.filter(entry => !isCashPayment(entry.paymentMethod));
+  const cashIncome = cashEntries
+    .filter(entry => entry.entryType === 'przychód')
+    .reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0);
+  const cashExpense = cashEntries
+    .filter(entry => entry.entryType === 'wydatek')
+    .reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0);
+  const correctionTotal = (record.corrections || []).reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+  const currentBalance = (Number(record.openingBalance) || 0) + cashIncome - cashExpense + correctionTotal;
+
+  return {
+    month: normalized,
+    record,
+    openingBalance: Number(record.openingBalance) || 0,
+    cashIncome,
+    cashExpense,
+    correctionTotal,
+    currentBalance,
+    cashEntriesCount: cashEntries.length,
+    nonCashEntriesCount: nonCashEntries.length,
+    corrections: record.corrections || []
+  };
+}
+
+function walletSummaryRow(title, note, value, valueClass = '') {
+  const amountClass = valueClass || (value >= 0 ? 'amount-income' : 'amount-expense');
+  return `
+    <div class="category-row compact-row wallet-row">
+      <div>
+        <b>${escapeHtml(title)}</b><br>
+        <span>${escapeHtml(note)}</span>
+      </div>
+      <strong class="${amountClass}">${formatMoney(value)}</strong>
+    </div>
+  `;
+}
+
+function renderWalletReport() {
+  if (!el.walletReport) return;
+  const month = normalizeMonthKey(el.walletMonth?.value || monthKey(todayISO()));
+  if (el.walletMonth && !el.walletMonth.value) el.walletMonth.value = month;
+
+  const summary = buildWalletSummary(month);
+  const openingFocused = document.activeElement === el.walletOpeningBalance;
+  if (el.walletOpeningBalance && !openingFocused) {
+    el.walletOpeningBalance.value = String(summary.openingBalance).replace('.', ',');
+  }
+
+  const balanceClass = summary.currentBalance >= 0 ? 'amount-income' : 'amount-expense';
+  const correctionRows = summary.corrections.length
+    ? `
+      <div class="wallet-corrections-block">
+        <h3>Korekty portfela</h3>
+        ${summary.corrections.map(item => `
+          <div class="category-row compact-row wallet-correction-row">
+            <div>
+              <b>${escapeHtml(item.amount >= 0 ? 'Korekta dodatnia' : 'Korekta ujemna')}</b><br>
+              <span>${escapeHtml(item.date || summary.month)}${item.note ? ` · ${escapeHtml(item.note)}` : ''}</span>
+            </div>
+            <div class="wallet-correction-actions">
+              <strong class="${item.amount >= 0 ? 'amount-income' : 'amount-expense'}">${formatMoney(item.amount)}</strong>
+              <button class="ghost small-button" type="button" data-wallet-action="delete-correction" data-id="${escapeHtml(item.id)}">Usuń</button>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `
+    : '<div class="empty-state small-empty">Brak korekt portfela w tym miesiącu.</div>';
+
+  el.walletReport.innerHTML = `
+    <div class="wallet-total-card">
+      <span>Stan portfela na koniec wybranego miesiąca</span>
+      <strong class="${balanceClass}">${formatMoney(summary.currentBalance)}</strong>
+      <small>Liczone tylko z wpisów oznaczonych jako gotówka. Karta, BLIK, bank i przelew nie zmieniają portfela.</small>
+    </div>
+    ${walletSummaryRow('Stan początkowy', `Ręcznie wpisany stan na początek miesiąca ${summary.month}.`, summary.openingBalance, 'amount-neutral')}
+    ${walletSummaryRow('Przychody gotówkowe', `Gotówkowe wpływy w tym miesiącu · wpisy: ${summary.cashEntriesCount}.`, summary.cashIncome, 'amount-income')}
+    ${walletSummaryRow('Wydatki gotówkowe', `Tylko płatność: gotówka.`, -summary.cashExpense, 'amount-expense')}
+    ${walletSummaryRow('Korekty ręczne', `Różnice po przeliczeniu fizycznego portfela.`, summary.correctionTotal)}
+    ${walletSummaryRow('Płatności bez wpływu na portfel', `Karta / BLIK / bank / przelew · wpisy: ${summary.nonCashEntriesCount}.`, 0, 'amount-neutral')}
+    ${correctionRows}
+  `;
+}
+
+async function saveWalletOpeningBalance() {
+  const month = normalizeMonthKey(el.walletMonth?.value || monthKey(todayISO()));
+  const amount = parseSignedWalletAmount(el.walletOpeningBalance?.value, true);
+  if (!Number.isFinite(amount)) throw new Error('Podaj poprawny stan początkowy portfela.');
+  const current = findWalletMonth(month) || emptyWalletMonth(month);
+  await saveWalletMonth({
+    ...current,
+    openingBalance: amount,
+    updatedAt: new Date().toISOString(),
+    sourceDeviceId: getDeviceId()
+  });
+  await reloadWalletMonths();
+  showMessage(`Zapisano stan początkowy portfela dla ${month}: ${formatMoney(amount)}.`);
+  scheduleDropboxAutoSync();
+}
+
+async function addWalletCorrection() {
+  const month = normalizeMonthKey(el.walletMonth?.value || monthKey(todayISO()));
+  const amount = parseSignedWalletAmount(el.walletCorrectionAmount?.value, false);
+  if (!Number.isFinite(amount) || amount === 0) throw new Error('Podaj dodatnią albo ujemną kwotę korekty, np. 20 albo -15.');
+  const current = findWalletMonth(month) || emptyWalletMonth(month);
+  const now = new Date().toISOString();
+  const correction = {
+    id: makeSyncId('wallet-correction'),
+    date: todayISO().startsWith(month) ? todayISO() : `${month}-01`,
+    amount,
+    note: String(el.walletCorrectionNote?.value || '').trim(),
+    sourceDeviceId: getDeviceId(),
+    createdAt: now,
+    updatedAt: now
+  };
+  await saveWalletMonth({
+    ...current,
+    corrections: [...(current.corrections || []), correction],
+    updatedAt: now,
+    sourceDeviceId: getDeviceId()
+  });
+  if (el.walletCorrectionAmount) el.walletCorrectionAmount.value = '';
+  if (el.walletCorrectionNote) el.walletCorrectionNote.value = '';
+  await reloadWalletMonths();
+  showMessage(`Dodano korektę portfela: ${formatMoney(amount)}.`);
+  scheduleDropboxAutoSync();
+}
+
+async function deleteWalletCorrection(id) {
+  const month = normalizeMonthKey(el.walletMonth?.value || monthKey(todayISO()));
+  const current = findWalletMonth(month);
+  if (!current) return;
+  const correction = (current.corrections || []).find(item => item.id === id);
+  if (!correction) return;
+  if (!window.confirm(`Usunąć korektę portfela ${formatMoney(correction.amount)}?`)) return;
+  await saveWalletMonth({
+    ...current,
+    corrections: (current.corrections || []).filter(item => item.id !== id),
+    updatedAt: new Date().toISOString(),
+    sourceDeviceId: getDeviceId()
+  });
+  await reloadWalletMonths();
+  showMessage('Korekta portfela usunięta.');
+  scheduleDropboxAutoSync();
+}
+
+function handleWalletReportClick(event) {
+  const button = event.target.closest('[data-wallet-action]');
+  if (!button) return;
+  if (button.dataset.walletAction === 'delete-correction') {
+    deleteWalletCorrection(button.dataset.id).catch(error => showMessage(error.message, 'error'));
+  }
+}
+
 function buildSmartReportInsights(entries) {
   if (!entries.length) return [];
 
@@ -2552,6 +2900,14 @@ function buildSmartReportInsights(entries) {
       type: companyCostRatio > 0.55 ? 'warning' : 'positive'
     });
   }
+
+  const wallet = buildWalletSummary(monthKey(todayISO()));
+  insights.push({
+    title: 'Portfel gotówkowy',
+    value: formatMoney(wallet.currentBalance),
+    note: `Bieżący miesiąc: start ${formatMoney(wallet.openingBalance)} + gotówka ${formatMoney(wallet.cashIncome)} - ${formatMoney(wallet.cashExpense)} + korekty ${formatMoney(wallet.correctionTotal)}`,
+    type: wallet.currentBalance >= 0 ? 'positive' : 'warning'
+  });
 
   return insights;
 }
@@ -3006,6 +3362,7 @@ function applyFilters() {
   renderMainReport();
   renderSmartReport();
   renderRecurringReport();
+  renderWalletReport();
   renderCategoryReport();
   renderItemReport();
   renderEntries();
@@ -3242,7 +3599,7 @@ function startEdit(id) {
   el.entryScope.value = normalizeScope(entry.scope);
   el.category.value = entry.category;
   el.amount.value = String(entry.amount).replace('.', ',');
-  el.paymentMethod.value = entry.paymentMethod;
+  el.paymentMethod.value = normalizePaymentMethod(entry.paymentMethod);
   el.description.value = entry.description ?? '';
   el.originalText.value = entry.originalText ?? '';
   el.tags.value = (entry.tags ?? []).join(', ');
@@ -3445,7 +3802,7 @@ function normalizeImportedEntry(item, now = new Date().toISOString()) {
     scope,
     category,
     amount,
-    paymentMethod: item.paymentMethod || item.payment_method || item.platnosc || item.płatność || 'gotówka',
+    paymentMethod: normalizePaymentMethod(item.paymentMethod || item.payment_method || item.platnosc || item.płatność || 'gotówka'),
     description,
     originalText,
     tags: Array.isArray(item.tags) ? item.tags : normalizeTags(item.tags || item.tagi || ''),
@@ -3659,6 +4016,7 @@ function makeExportPayload() {
     syncMode: 'dropbox-merge-safe-v2',
     tagRules,
     learningRules,
+    walletMonths,
     deletedEntries: getDeletedEntries(),
     entries: allEntries.map(entry => ({
       ...entry,
@@ -3703,13 +4061,14 @@ async function importPayload(payload, options = {}) {
   const { replace = false, silent = false } = options;
   const deletionResult = await applyImportedDeletions(payload);
   await importLearningRulesFromPayload(payload, replace);
+  const walletImported = await importWalletMonthsFromPayload(payload, replace);
   const imported = collectImportedEntries(payload);
 
   if (!Array.isArray(imported) || !imported.length) {
     await reloadEntries();
-    if (deletionResult.deleted) {
-      if (!silent) showMessage(`Import zakończony. Usunięto: ${deletionResult.deleted}.`);
-      return { added: 0, updated: 0, skipped: 0, deleted: deletionResult.deleted };
+    if (deletionResult.deleted || walletImported) {
+      if (!silent) showMessage(`Import zakończony. Wpisy: 0, portfel: ${walletImported}, usunięto: ${deletionResult.deleted}.`);
+      return { added: 0, updated: 0, skipped: 0, deleted: deletionResult.deleted, wallet: walletImported };
     }
     throw new Error('Plik JSON nie zawiera listy wpisów. Obsługiwane pola: entries, items, data, records, rows, transactions, wpisy, lista.');
   }
@@ -3770,8 +4129,8 @@ async function importPayload(payload, options = {}) {
   }
 
   await reloadEntries();
-  if (!silent) showMessage(`Import zakończony. Dodano: ${added}, zaktualizowano: ${updated}, pominięto: ${skipped}, usunięto: ${deletionResult.deleted}.`);
-  return { added, updated, skipped, deleted: deletionResult.deleted };
+  if (!silent) showMessage(`Import zakończony. Dodano: ${added}, zaktualizowano: ${updated}, pominięto: ${skipped}, portfel: ${walletImported}, usunięto: ${deletionResult.deleted}.`);
+  return { added, updated, skipped, wallet: walletImported, deleted: deletionResult.deleted };
 }
 
 let dropboxSyncBusy = false;
@@ -4580,6 +4939,10 @@ function bindEvents() {
   if (el.tagRulesList) el.tagRulesList.addEventListener('click', handleTagRulesClick);
   if (el.learningRulesList) el.learningRulesList.addEventListener('click', handleLearningRulesClick);
   if (el.learningClearButton) el.learningClearButton.addEventListener('click', () => clearAllLearningRules().catch(error => showMessage(error.message, 'error')));
+  if (el.walletMonth) el.walletMonth.addEventListener('change', renderWalletReport);
+  if (el.walletSaveOpeningButton) el.walletSaveOpeningButton.addEventListener('click', () => saveWalletOpeningBalance().catch(error => showMessage(error.message, 'error')));
+  if (el.walletAddCorrectionButton) el.walletAddCorrectionButton.addEventListener('click', () => addWalletCorrection().catch(error => showMessage(error.message, 'error')));
+  if (el.walletReport) el.walletReport.addEventListener('click', handleWalletReportClick);
   if (el.mainReportSettings) el.mainReportSettings.addEventListener('change', handleMainReportSettingsChange);
   if (el.mainReportResetButton) el.mainReportResetButton.addEventListener('click', resetMainReportSettings);
   el.parseButton.addEventListener('click', handleParseText);
@@ -4800,6 +5163,7 @@ async function init() {
   db = await openDatabase();
   await seedDefaultTagRules();
   await reloadLearningRules();
+  await reloadWalletMonths();
   await ensureEntrySyncIds();
   renderTagRules();
   renderMainReportSettings();

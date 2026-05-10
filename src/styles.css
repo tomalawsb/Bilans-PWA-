@@ -330,6 +330,58 @@ input:focus, select:focus, textarea:focus {
 .smart-negative { border-left: 4px solid var(--danger); }
 .smart-neutral { border-left: 4px solid var(--accent); }
 .recurring-row { align-items: center; }
+
+
+/* Etap 49: portfel gotówkowy */
+.wallet-report-panel { grid-column: span 2; }
+.wallet-controls {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(130px, 1fr));
+  gap: 8px;
+  align-items: end;
+  margin: 10px 0 12px;
+}
+.wallet-total-card {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid #c5d9cf;
+  border-radius: 12px;
+  background: #f7fff9;
+}
+.wallet-total-card span,
+.wallet-total-card small,
+.wallet-row span,
+.wallet-correction-row span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.wallet-total-card strong { font-size: 24px; line-height: 1.1; }
+.wallet-corrections-block { display: grid; gap: 8px; margin-top: 2px; }
+.wallet-corrections-block h3 { margin: 2px 0 0; }
+.wallet-correction-actions { display: flex; gap: 8px; align-items: center; }
+.amount-neutral { color: var(--text); }
+.small-empty { padding: 8px 10px; }
+@media (max-width: 760px) {
+  .wallet-report-panel { grid-column: auto; }
+  .wallet-controls { grid-template-columns: 1fr; }
+}
+body[data-theme="dark"] .wallet-total-card,
+body[data-theme="dark"] .wallet-corrections-block,
+body[data-theme="dark"] .wallet-report-panel {
+  color: #eef4ff !important;
+}
+body[data-theme="dark"] .wallet-total-card {
+  background: #132238 !important;
+  border-color: #3c5270 !important;
+}
+body[data-theme="dark"] .wallet-total-card span,
+body[data-theme="dark"] .wallet-total-card small,
+body[data-theme="dark"] .wallet-row span,
+body[data-theme="dark"] .wallet-correction-row span {
+  color: #c6d5e8 !important;
+}
+
 .confidence-pill {
   display: inline-flex;
   align-items: center;
