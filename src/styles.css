@@ -979,3 +979,87 @@ body[data-theme="dark"] .year-day.heat-level-5 { background:#6ee7b7; color:#0615
   .app-logo { width: 42px; height: 42px; }
   .header-actions { width: 100%; }
 }
+
+
+/* Globalny system podpowiedzi: komputer = hover/focus, telefon = długie przytrzymanie */
+.smart-tooltip {
+  position: fixed;
+  z-index: 9999;
+  max-width: min(340px, calc(100vw - 24px));
+  padding: 8px 10px;
+  border: 1px solid rgba(120, 90, 20, .24);
+  border-radius: 10px;
+  background: #fff7d6;
+  color: #332600;
+  box-shadow: 0 10px 28px rgba(31, 41, 51, .18);
+  font-size: 12px;
+  line-height: 1.35;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity .12s ease, transform .12s ease;
+}
+.smart-tooltip.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+.has-help { position: relative; }
+.has-help::after {
+  content: "";
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-left: 5px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: .42;
+  vertical-align: middle;
+}
+input.has-help::after,
+textarea.has-help::after,
+select.has-help::after { content: none; }
+@media (hover: none) and (pointer: coarse) {
+  .smart-tooltip { font-size: 13px; padding: 10px 12px; }
+}
+
+
+/* Etap 25: zakładka Pomoc i instrukcja obsługi */
+.help-panel { display: grid; gap: 14px; }
+.help-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.help-card {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--row-bg);
+  padding: 14px;
+  box-shadow: 0 8px 24px rgba(31, 41, 51, .05);
+}
+.help-card h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+  color: var(--accent);
+}
+.help-card p { margin: 0 0 8px; color: var(--muted); line-height: 1.45; }
+.help-card ul, .help-card ol { margin: 8px 0 0 20px; padding: 0; color: var(--text); }
+.help-card li { margin: 5px 0; line-height: 1.42; }
+.help-card code {
+  background: rgba(31, 41, 51, .08);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 1px 5px;
+  font-size: 12px;
+}
+.important-help {
+  grid-column: 1 / -1;
+  background: linear-gradient(180deg, rgba(255, 248, 220, .88), var(--row-bg));
+}
+body[data-theme="dark"] .important-help {
+  background: linear-gradient(180deg, rgba(120, 90, 20, .22), var(--row-bg));
+}
+@media (max-width: 760px) {
+  .help-grid { grid-template-columns: 1fr; }
+  .help-card { padding: 12px; }
+}

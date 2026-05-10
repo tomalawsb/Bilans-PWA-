@@ -1,6 +1,6 @@
 const DB_NAME = 'bilans-pwa-etap1';
 const DB_VERSION = 3;
-const APP_VERSION = 23;
+const APP_VERSION = 25;
 const MAIN_INSTALL_KEY = 'portfel-pro-main-installed';
 const VOICE_INSTALL_KEY = 'portfel-pro-voice-installed';
 
@@ -1203,6 +1203,176 @@ function showMessage(text, type = 'success') {
   showMessage.timer = window.setTimeout(() => el.messageBox.classList.add('hidden'), 4200);
 }
 
+
+function getHelpText(target) {
+  const node = target?.closest?.('[data-help], [title], button, input, select, textarea, summary, .summary-card, .theme-card');
+  if (!node) return { node: null, text: '' };
+
+  const explicit = node.dataset?.help || node.getAttribute('title') || '';
+  if (explicit.trim()) return { node, text: explicit.trim() };
+
+  const label = node.closest?.('label')?.firstChild?.textContent?.trim();
+  if (label) return { node, text: `Pole „${label}”. Dotknij i wpisz albo wybierz wartość.` };
+
+  const text = node.textContent?.replace(/\s+/g, ' ').trim();
+  if (!text) return { node: null, text: '' };
+
+  const lower = text.toLowerCase();
+  if (lower.includes('edytuj')) return { node, text: 'Otwiera element do edycji.' };
+  if (lower.includes('usuń')) return { node, text: 'Usuwa wybrany element po potwierdzeniu.' };
+  if (lower.includes('zapisz')) return { node, text: 'Zapisuje dane albo tworzy kopię, zależnie od miejsca użycia.' };
+  if (lower.includes('wyczyść')) return { node, text: 'Czyści pole, filtr albo wybrany zakres danych.' };
+  return { node: null, text: '' };
+}
+
+function setupSmartTooltips() {
+  const tooltip = document.createElement('div');
+  tooltip.className = 'smart-tooltip';
+  tooltip.setAttribute('role', 'tooltip');
+  document.body.appendChild(tooltip);
+
+  let activeNode = null;
+  let hideTimer = null;
+  let longPressTimer = null;
+  let longPressFired = false;
+  let suppressClickNode = null;
+
+  const staticHelp = [
+    ['#entryDate', 'Data wpisu. W raportach i kalendarzu wpis trafi właśnie na ten dzień.'],
+    ['#entryType', 'Przychód zwiększa wynik, wydatek go pomniejsza.'],
+    ['#entryScope', 'Firmowe wpływa na wynik firmy. Domowe jest pokazywane osobno i nie obniża wypłaty firmy.'],
+    ['#category', 'Kategoria używana w raportach.'],
+    ['#amount', 'Kwota wpisu. Możesz używać przecinka, np. 120,50.'],
+    ['#paymentMethod', 'Sposób płatności, pomocny przy późniejszym filtrowaniu.'],
+    ['#tags', 'Tagi pomagają grupować podobne wydatki, np. paliwo, klient, antena.'],
+    ['#description', 'Krótki opis pozycji, widoczny w historii i raportach.'],
+    ['#originalText', 'Oryginalna notatka albo dyktowany tekst, z którego powstał wpis.'],
+    ['#filterFrom', 'Początek zakresu dat w historii.'],
+    ['#filterTo', 'Koniec zakresu dat w historii.'],
+    ['#filterType', 'Filtruje przychody albo wydatki.'],
+    ['#filterScope', 'Filtruje wpisy domowe, firmowe albo nieokreślone.'],
+    ['#filterCategory', 'Filtruje historię po kategorii.'],
+    ['#filterPayment', 'Filtruje historię po sposobie płatności.'],
+    ['#clearFiltersButton', 'Usuwa wszystkie aktywne filtry historii.'],
+    ['#calendarPrevButton', 'Pokazuje poprzedni miesiąc.'],
+    ['#calendarTodayButton', 'Wraca do bieżącego miesiąca i dzisiejszej daty.'],
+    ['#calendarNextButton', 'Pokazuje następny miesiąc.'],
+    ['#calendarClearDayButton', 'Usuwa filtr wybranego dnia.'],
+    ['#yearPrevButton', 'Pokazuje poprzedni rok.'],
+    ['#yearTodayButton', 'Wraca do bieżącego roku.'],
+    ['#yearNextButton', 'Pokazuje następny rok.'],
+    ['#exportMonthPngButton', 'Zapisuje miesięczny kalendarz jako obraz PNG.'],
+    ['#printMonthPdfButton', 'Otwiera miesięczny kalendarz do wydruku lub zapisu jako PDF.'],
+    ['#exportYearPngButton', 'Zapisuje roczny kalendarz jako obraz PNG.'],
+    ['#printYearPdfButton', 'Otwiera roczny kalendarz do wydruku lub zapisu jako PDF.'],
+    ['#tagGroupName', 'Nazwa grupy raportowej, np. Hotdog.'],
+    ['#tagAliases', 'Różne wersje nazwy po przecinku, np. hotdog, hot-dog, hot doga.'],
+    ['#tagRuleCategory', 'Kategoria, którą program ma przypisywać tej grupie.'],
+    ['#tagRuleType', 'Opcjonalny domyślny typ wpisu dla tej reguły.'],
+    ['#voiceRecordButton', 'Uruchamia rozpoznawanie mowy w szybkim panelu.'],
+    ['#voiceStopButton', 'Zatrzymuje nagrywanie głosu.'],
+    ['#voiceParseButton', 'Zamienia rozpoznany tekst na propozycje wpisów.'],
+    ['#voiceSaveButton', 'Zapisuje rozpoznane wpisy z panelu głosowego.'],
+    ['#voiceText', 'Tu możesz poprawić rozpoznany tekst przed analizą.'],
+    ['#voiceCloseButton', 'Zamyka szybki panel głosowy i wraca do programu.']
+  ];
+
+  for (const [selector, text] of staticHelp) {
+    const node = document.querySelector(selector);
+    if (node && !node.dataset.help) node.dataset.help = text;
+  }
+
+  document.querySelectorAll('[data-help], button[title], input[title], select[title], textarea[title]').forEach(node => {
+    node.classList.add('has-help');
+    if (node.hasAttribute('title')) {
+      node.dataset.help = node.dataset.help || node.getAttribute('title');
+      node.removeAttribute('title');
+    }
+  });
+
+  function positionTooltip(node) {
+    const rect = node.getBoundingClientRect();
+    const margin = 10;
+    const topPreferred = rect.bottom + 8;
+    let left = rect.left + rect.width / 2 - tooltip.offsetWidth / 2;
+    left = Math.max(margin, Math.min(left, window.innerWidth - tooltip.offsetWidth - margin));
+    let top = topPreferred;
+    if (top + tooltip.offsetHeight + margin > window.innerHeight) {
+      top = Math.max(margin, rect.top - tooltip.offsetHeight - 8);
+    }
+    tooltip.style.left = `${Math.round(left)}px`;
+    tooltip.style.top = `${Math.round(top)}px`;
+  }
+
+  function showTooltipFor(node, text, autoHide = false) {
+    if (!node || !text) return;
+    window.clearTimeout(hideTimer);
+    activeNode = node;
+    tooltip.textContent = text;
+    tooltip.classList.add('visible');
+    positionTooltip(node);
+    if (autoHide) hideTimer = window.setTimeout(hideTooltip, 4200);
+  }
+
+  function hideTooltip() {
+    window.clearTimeout(hideTimer);
+    tooltip.classList.remove('visible');
+    activeNode = null;
+  }
+
+  document.addEventListener('mouseover', event => {
+    if (window.matchMedia?.('(hover: none)').matches) return;
+    const { node, text } = getHelpText(event.target);
+    if (node && text) showTooltipFor(node, text);
+  });
+
+  document.addEventListener('mouseout', event => {
+    if (!activeNode) return;
+    if (!activeNode.contains(event.relatedTarget)) hideTooltip();
+  });
+
+  document.addEventListener('focusin', event => {
+    const { node, text } = getHelpText(event.target);
+    if (node && text) showTooltipFor(node, text);
+  });
+
+  document.addEventListener('focusout', hideTooltip);
+
+  document.addEventListener('pointerdown', event => {
+    if (event.pointerType !== 'touch') return;
+    const { node, text } = getHelpText(event.target);
+    if (!node || !text) return;
+    longPressFired = false;
+    window.clearTimeout(longPressTimer);
+    longPressTimer = window.setTimeout(() => {
+      longPressFired = true;
+      suppressClickNode = node;
+      showTooltipFor(node, text, true);
+    }, 560);
+  }, { passive: true });
+
+  document.addEventListener('pointerup', () => {
+    window.clearTimeout(longPressTimer);
+    if (longPressFired) window.setTimeout(() => { longPressFired = false; }, 80);
+  });
+
+  document.addEventListener('pointercancel', () => {
+    window.clearTimeout(longPressTimer);
+    longPressFired = false;
+  });
+
+  document.addEventListener('click', event => {
+    if (suppressClickNode && suppressClickNode.contains(event.target)) {
+      event.preventDefault();
+      event.stopPropagation();
+      suppressClickNode = null;
+    }
+  }, true);
+
+  window.addEventListener('scroll', hideTooltip, true);
+  window.addEventListener('resize', () => activeNode ? positionTooltip(activeNode) : undefined);
+}
+
 function openDatabase() {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
@@ -1704,7 +1874,7 @@ function renderCalendarDayDetails(dayEntries) {
             <span>${escapeHtml(entry.description || entry.category || 'Wpis')}<br><small>${escapeHtml(formatScope(entry.scope))} · ${escapeHtml(entry.category)}</small></span>
             <strong class="${amountClass}">${sign}${formatMoney(entry.amount)}</strong>
             <div class="calendar-entry-actions">
-              <button class="secondary" type="button" data-action="edit" data-id="${entry.id}">Edytuj</button>
+              <button class="secondary" type="button" data-action="edit" data-id="${entry.id}" data-help="Otwiera ten wpis w formularzu edycji.">Edytuj</button>
               <button class="ghost" type="button" data-action="move" data-id="${entry.id}">Przenieś</button>
             </div>
           </div>
@@ -2022,8 +2192,8 @@ function renderTagRules() {
         <div class="tag-list">${rule.aliases.map(alias => `<span class="tag">${escapeHtml(alias)}</span>`).join('')}</div>
       </div>
       <div class="row-actions">
-        <button class="secondary" type="button" data-rule-action="edit" data-id="${escapeHtml(rule.id)}">Edytuj</button>
-        <button class="danger" type="button" data-rule-action="delete" data-id="${escapeHtml(rule.id)}">Usuń</button>
+        <button class="secondary" type="button" data-rule-action="edit" data-id="${escapeHtml(rule.id)}" data-help="Edytuje regułę tagów i wariantów nazw.">Edytuj</button>
+        <button class="danger" type="button" data-rule-action="delete" data-id="${escapeHtml(rule.id)}" data-help="Usuwa tę regułę tagów. Nie usuwa wpisów finansowych.">Usuń</button>
       </div>
     </article>
   `).join('');
@@ -2115,9 +2285,9 @@ function renderEntries() {
         <td>${escapeHtml(entry.paymentMethod)}</td>
         <td>
           <div class="row-actions">
-            <button class="secondary" type="button" data-action="edit" data-id="${entry.id}">Edytuj</button>
+            <button class="secondary" type="button" data-action="edit" data-id="${entry.id}" data-help="Otwiera ten wpis w formularzu edycji.">Edytuj</button>
             <button class="ghost" type="button" data-action="move" data-id="${entry.id}">Przenieś</button>
-            <button class="danger" type="button" data-action="delete" data-id="${entry.id}">Usuń</button>
+            <button class="danger" type="button" data-action="delete" data-id="${entry.id}" data-help="Usuwa tylko ten jeden wpis po potwierdzeniu.">Usuń</button>
           </div>
         </td>
       </tr>
@@ -2141,9 +2311,9 @@ function renderEntries() {
         <small>Grupa: ${escapeHtml(resolveReportGroup(entry))}</small>
         <div>${tagsHtml(entry.tags)}</div>
         <div class="row-actions">
-          <button class="secondary" type="button" data-action="edit" data-id="${entry.id}">Edytuj</button>
+          <button class="secondary" type="button" data-action="edit" data-id="${entry.id}" data-help="Otwiera ten wpis w formularzu edycji.">Edytuj</button>
           <button class="ghost" type="button" data-action="move" data-id="${entry.id}">Przenieś</button>
-          <button class="danger" type="button" data-action="delete" data-id="${entry.id}">Usuń</button>
+          <button class="danger" type="button" data-action="delete" data-id="${entry.id}" data-help="Usuwa tylko ten jeden wpis po potwierdzeniu.">Usuń</button>
         </div>
       </article>
     `;
@@ -3442,6 +3612,10 @@ function setupTabs() {
     button.addEventListener('click', () => activate(button.dataset.tab));
   });
 
+  document.querySelectorAll('[data-jump-tab]').forEach(button => {
+    button.addEventListener('click', () => activate(button.dataset.jumpTab));
+  });
+
   let saved = 'start';
   try { saved = localStorage.getItem('bilans-pwa-active-tab') || 'start'; } catch (_) {}
   if (!pages.some(page => page.dataset.tabPage === saved)) saved = 'start';
@@ -3650,7 +3824,7 @@ function bindEvents() {
 async function init() {
   const today = todayISO();
   document.title = 'Portfel PRO';
-  if (el.appVersionBadge) el.appVersionBadge.textContent = '';
+  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.0';
   setTodayHeader('wczytywanie...');
   if (isFileProtocol()) {
     showMessage('Program został otwarty bezpośrednio z index.html. Do importu JSON, PWA i cache użyj serwera lokalnego albo GitHub Pages.', 'error');
@@ -3679,6 +3853,7 @@ async function init() {
   bindEvents();
   setupTabs();
   setupThemes();
+  setupSmartTooltips();
   setupVoiceMode();
   updateTodayNamedays();
   updateCloudUi();
