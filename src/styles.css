@@ -1100,3 +1100,185 @@ body[data-theme="dark"] .version-badge {
   background: #19364d;
   color: #7dd3fc;
 }
+
+
+/* Etap 36: pełna korekta kontrastu motywu ciemnego */
+body[data-theme="dark"] {
+  color-scheme: dark;
+}
+body[data-theme="dark"] .panel,
+body[data-theme="dark"] .summary-card,
+body[data-theme="dark"] .mini-panel,
+body[data-theme="dark"] .compact-manual-panel,
+body[data-theme="dark"] .compact-manual-panel details,
+body[data-theme="dark"] .startup-mode-card,
+body[data-theme="dark"] .voice-card,
+body[data-theme="dark"] .dropbox-simple-card,
+body[data-theme="dark"] .dropbox-advanced-panel,
+body[data-theme="dark"] .report-settings-block,
+body[data-theme="dark"] .table-wrap,
+body[data-theme="dark"] .entry-card,
+body[data-theme="dark"] .tag-rule-card,
+body[data-theme="dark"] .help-card,
+body[data-theme="dark"] .year-month,
+body[data-theme="dark"] .year-month-card {
+  background: var(--panel);
+  color: var(--text);
+  border-color: var(--line);
+}
+body[data-theme="dark"] .main-task-panel {
+  background: linear-gradient(180deg, #1b2a41, #152033);
+  color: var(--text);
+  border-color: var(--line);
+}
+body[data-theme="dark"] h1,
+body[data-theme="dark"] h2,
+body[data-theme="dark"] h3,
+body[data-theme="dark"] h4,
+body[data-theme="dark"] strong,
+body[data-theme="dark"] b,
+body[data-theme="dark"] label,
+body[data-theme="dark"] summary,
+body[data-theme="dark"] .calendar-month-head,
+body[data-theme="dark"] .year-month-head,
+body[data-theme="dark"] .calendar-day-number,
+body[data-theme="dark"] .year-top-title,
+body[data-theme="dark"] .report-row strong,
+body[data-theme="dark"] .category-row strong,
+body[data-theme="dark"] .item-row strong,
+body[data-theme="dark"] .summary-card strong {
+  color: var(--text);
+}
+body[data-theme="dark"] p,
+body[data-theme="dark"] small,
+body[data-theme="dark"] .muted-small,
+body[data-theme="dark"] .mirror-info,
+body[data-theme="dark"] .sync-info,
+body[data-theme="dark"] .calendar-day-details,
+body[data-theme="dark"] .year-top-days,
+body[data-theme="dark"] .calendar-day-empty,
+body[data-theme="dark"] .calendar-weekdays span,
+body[data-theme="dark"] .mini-weekdays span,
+body[data-theme="dark"] #todayLabel,
+body[data-theme="dark"] .dropbox-simple-card p,
+body[data-theme="dark"] .report-option small,
+body[data-theme="dark"] .summary-card span,
+body[data-theme="dark"] .summary-card small {
+  color: var(--muted);
+}
+body[data-theme="dark"] .calendar-meta-row,
+body[data-theme="dark"] .calendar-day,
+body[data-theme="dark"] .year-day,
+body[data-theme="dark"] .year-month,
+body[data-theme="dark"] .year-month-card,
+body[data-theme="dark"] .calendar-day-summary,
+body[data-theme="dark"] .calendar-day-entry,
+body[data-theme="dark"] .year-top-row,
+body[data-theme="dark"] .parse-card,
+body[data-theme="dark"] .parsed-card,
+body[data-theme="dark"] .report-row,
+body[data-theme="dark"] .category-row,
+body[data-theme="dark"] .item-row,
+body[data-theme="dark"] .report-option,
+body[data-theme="dark"] .empty-state,
+body[data-theme="dark"] .tag,
+body[data-theme="dark"] .message {
+  background: var(--row-bg);
+  color: var(--text);
+  border-color: var(--line);
+}
+body[data-theme="dark"] .calendar-day:hover,
+body[data-theme="dark"] .year-day:hover,
+body[data-theme="dark"] .year-top-row:hover,
+body[data-theme="dark"] .calendar-day-entry:hover,
+body[data-theme="dark"] .report-option:hover {
+  background: var(--row-hover);
+  color: var(--text);
+  border-color: var(--accent);
+}
+body[data-theme="dark"] .calendar-day.is-selected,
+body[data-theme="dark"] .year-day.is-selected,
+body[data-theme="dark"] .is-drop-target {
+  outline-color: rgba(125, 211, 252, .24);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(125, 211, 252, .12) inset;
+}
+body[data-theme="dark"] .is-today,
+body[data-theme="dark"] .calendar-day.is-today,
+body[data-theme="dark"] .year-day.is-today {
+  border-color: #facc15;
+  box-shadow: 0 0 0 2px rgba(250, 204, 21, .18) inset;
+}
+body[data-theme="dark"] .entries-table th {
+  background: var(--table-head-bg);
+  color: var(--text);
+  border-bottom-color: var(--line);
+}
+body[data-theme="dark"] .entries-table td {
+  color: var(--text);
+  border-bottom-color: var(--line);
+}
+body[data-theme="dark"] .entries-table tr:hover td {
+  background: var(--row-hover);
+}
+body[data-theme="dark"] input,
+body[data-theme="dark"] select,
+body[data-theme="dark"] textarea,
+body[data-theme="dark"] option {
+  background: var(--control-bg);
+  color: var(--text);
+  border-color: var(--control-border);
+}
+body[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1) brightness(1.6);
+}
+body[data-theme="dark"] .secondary,
+body[data-theme="dark"] .ghost,
+body[data-theme="dark"] .small-button,
+body[data-theme="dark"] .theme-card,
+body[data-theme="dark"] .mode-choice-card,
+body[data-theme="dark"] .year-top-row {
+  background: var(--control-bg);
+  color: var(--text);
+  border-color: var(--line);
+}
+body[data-theme="dark"] button.secondary,
+body[data-theme="dark"] button.ghost,
+body[data-theme="dark"] .file-button.secondary {
+  color: var(--text);
+}
+body[data-theme="dark"] button:not(.secondary):not(.ghost):not(.danger-outline):not(.danger-file):not(.tab-button),
+body[data-theme="dark"] .file-button:not(.secondary):not(.ghost):not(.danger-outline):not(.danger-file) {
+  color: #07111f;
+}
+body[data-theme="dark"] .primary-summary,
+body[data-theme="dark"] .company-result-row {
+  background: #102f28;
+  color: var(--text);
+  border-color: #1f6b55;
+}
+body[data-theme="dark"] .home-report-row,
+body[data-theme="dark"] .parse-summary {
+  background: var(--accent-2);
+  color: var(--text);
+  border-color: var(--line);
+}
+body[data-theme="dark"] .amount-income { color: var(--income); }
+body[data-theme="dark"] .amount-expense { color: var(--expense); }
+body[data-theme="dark"] a { color: #93c5fd; }
+body[data-theme="dark"] code {
+  background: #0f172a;
+  color: #bfdbfe;
+  border-color: var(--line);
+}
+body[data-theme="dark"] .danger-outline,
+body[data-theme="dark"] .danger-file {
+  background: #3a1720;
+  color: #fecaca;
+  border-color: #7f1d1d;
+}
+body[data-theme="dark"] .message.error {
+  background: #3a1720;
+  color: #fecaca;
+  border-color: #7f1d1d;
+}

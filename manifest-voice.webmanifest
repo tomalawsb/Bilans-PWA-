@@ -4,7 +4,7 @@
   "description": "Szybkie dodawanie wpisów głosem do Portfel PRO.",
   "lang": "pl",
   "id": "./voice/",
-  "start_url": "./voice/index.html?v=34",
+  "start_url": "./voice/index.html?v=36",
   "scope": "./voice/",
   "display": "standalone",
   "background_color": "#f5fbff",
