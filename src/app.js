@@ -1,6 +1,6 @@
 const DB_NAME = 'bilans-pwa-etap1';
 const DB_VERSION = 3;
-const APP_VERSION = 25;
+const APP_VERSION = 27;
 const MAIN_INSTALL_KEY = 'portfel-pro-main-installed';
 const VOICE_INSTALL_KEY = 'portfel-pro-voice-installed';
 
@@ -584,14 +584,7 @@ function formatMoney(value) {
 }
 
 function parseAmount(raw) {
-  const cleaned = String(raw ?? '')
-    .trim()
-    .replace(/\s+/g, '')
-    .replace('zł', '')
-    .replace('zl', '')
-    .replace(',', '.');
-
-  const value = Number(cleaned);
+  const value = parseLooseAmount(raw);
 
   if (!Number.isFinite(value) || value <= 0) {
     throw new Error('Podaj poprawną kwotę większą od zera.');
@@ -708,21 +701,76 @@ function normalizeText(value) {
     .replace(/[\u0300-\u036f]/g, '');
 }
 
-function parseLooseAmount(raw) {
-  const cleaned = String(raw ?? '')
+const ZLOTY_WORDS = 'złotych|zlotych|złoty|zloty|złote|zlote|zł|zl|pln';
+const GROSZ_WORDS = 'groszy|grosze|grosz|gr';
+const MONEY_NUMBER_PATTERN = "\\d+(?:[\\s.']\\d{3})*(?:[,.]\\d{1,2})?|\\d+(?:[,.]\\d{1,2})?";
+
+function normalizeMoneyNumber(raw) {
+  let value = String(raw ?? '')
     .trim()
     .replace(/\s+/g, '')
-    .replace(',', '.')
-    .replace(/[^0-9.]/g, '');
+    .replace(/'/g, '');
 
-  const firstDot = cleaned.indexOf('.');
-  const normalized = firstDot === -1
-    ? cleaned
-    : cleaned.slice(0, firstDot + 1) + cleaned.slice(firstDot + 1).replace(/\./g, '');
+  if (!value) return null;
 
-  const value = Number(normalized);
-  if (!Number.isFinite(value) || value <= 0) return null;
-  return Math.round(value * 100) / 100;
+  const lastComma = value.lastIndexOf(',');
+  const lastDot = value.lastIndexOf('.');
+  const decimalSeparator = Math.max(lastComma, lastDot);
+
+  if (decimalSeparator >= 0) {
+    const fraction = value.slice(decimalSeparator + 1);
+    const integer = value.slice(0, decimalSeparator);
+    const isDecimal = fraction.length > 0 && fraction.length <= 2;
+
+    if (isDecimal) {
+      value = integer.replace(/[,.]/g, '') + '.' + fraction;
+    } else {
+      value = value.replace(/[,.]/g, '');
+    }
+  }
+
+  value = value.replace(/[^0-9.]/g, '');
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) return null;
+  return Math.round(number * 100) / 100;
+}
+
+function parseMoneyByUnit(numberRaw, unitRaw = '') {
+  const number = normalizeMoneyNumber(numberRaw);
+  if (!number) return null;
+
+  const normalizedUnit = normalizeText(unitRaw);
+  const rawText = String(numberRaw ?? '');
+  const hasDecimalPart = /[,.]\d{1,2}\b/.test(rawText);
+
+  if (new RegExp(`^(?:${GROSZ_WORDS})$`, 'i').test(normalizedUnit)) {
+    if (hasDecimalPart) return number;
+    if (number > 0 && number < 100) return Math.round(number) / 100;
+  }
+
+  return number;
+}
+
+function parseLooseAmount(raw) {
+  const source = String(raw ?? '').trim();
+  if (!source) return null;
+
+  const compoundPattern = new RegExp(`\\b(${MONEY_NUMBER_PATTERN})\\s*(?:${ZLOTY_WORDS})\\s*(\\d{1,2})\\s*(?:${GROSZ_WORDS})\\b`, 'iu');
+  const compound = source.match(compoundPattern);
+  if (compound) {
+    const zloty = normalizeMoneyNumber(compound[1]);
+    const grosze = Number(compound[2]);
+    if (zloty && Number.isFinite(grosze)) return Math.round((zloty + grosze / 100) * 100) / 100;
+  }
+
+  const unitPattern = new RegExp(`\\b(${MONEY_NUMBER_PATTERN})\\s*(?:(${ZLOTY_WORDS})|(${GROSZ_WORDS}))(?=$|\\s|[.,;:!?])`, 'iu');
+  const unitMatch = source.match(unitPattern);
+  if (unitMatch) {
+    const unit = unitMatch[2] || unitMatch[3] || '';
+    return parseMoneyByUnit(unitMatch[1], unit);
+  }
+
+  return normalizeMoneyNumber(source);
 }
 
 function addDaysISO(baseISO, offset) {
@@ -912,14 +960,45 @@ function makeTagsFromDescription(description, category) {
   return normalizeTags([...base, ...words].join(','));
 }
 
+function rangesOverlap(a, b) {
+  return a.index < b.end && b.index < a.end;
+}
+
 function findAmountMatches(text) {
-  const regex = /(?:\b(\d+(?:[\s.]\d{3})*(?:[,.]\d{1,2})?|\d+(?:[,.]\d{1,2})?)\s*(?:złotych|zlotych|zł|zl|pln)(?=$|\s|[.,;:!?]))|(?:(?:zł|zl|pln)\s*(\d+(?:[\s.]\d{3})*(?:[,.]\d{1,2})?|\d+(?:[,.]\d{1,2})?))/giu;
-  return Array.from(text.matchAll(regex)).map(match => ({
-    index: match.index,
-    end: match.index + match[0].length,
-    raw: match[0],
-    value: parseLooseAmount(match[1] || match[2])
-  })).filter(item => item.value && item.value > 0);
+  const source = String(text ?? '');
+  const matches = [];
+
+  const addMatch = (match, value) => {
+    const item = {
+      index: match.index,
+      end: match.index + match[0].length,
+      raw: match[0],
+      value
+    };
+    if (item.value && item.value > 0 && !matches.some(existing => rangesOverlap(existing, item))) {
+      matches.push(item);
+    }
+  };
+
+  const compoundRegex = new RegExp(`\\b(${MONEY_NUMBER_PATTERN})\\s*(?:${ZLOTY_WORDS})\\s*(\\d{1,2})\\s*(?:${GROSZ_WORDS})\\b`, 'giu');
+  for (const match of source.matchAll(compoundRegex)) {
+    const zloty = normalizeMoneyNumber(match[1]);
+    const grosze = Number(match[2]);
+    if (zloty && Number.isFinite(grosze)) addMatch(match, Math.round((zloty + grosze / 100) * 100) / 100);
+  }
+
+  const numberUnitRegex = new RegExp(`\\b(${MONEY_NUMBER_PATTERN})\\s*(?:(${ZLOTY_WORDS})|(${GROSZ_WORDS}))(?=$|\\s|[.,;:!?])`, 'giu');
+  for (const match of source.matchAll(numberUnitRegex)) {
+    const unit = match[2] || match[3] || '';
+    addMatch(match, parseMoneyByUnit(match[1], unit));
+  }
+
+  const unitNumberRegex = new RegExp(`(?:${ZLOTY_WORDS})\\s*(${MONEY_NUMBER_PATTERN})`, 'giu');
+  for (const match of source.matchAll(unitNumberRegex)) {
+    addMatch(match, parseMoneyByUnit(match[1], 'zł'));
+  }
+
+  return matches.sort((a, b) => a.index - b.index);
 }
 
 function takeBeforeDescription(text, from, to) {
@@ -1236,13 +1315,18 @@ function setupSmartTooltips() {
   let longPressTimer = null;
   let longPressFired = false;
   let suppressClickNode = null;
+  let lastPointerType = '';
+
+  function isTouchTooltipMode() {
+    return window.matchMedia?.('(pointer: coarse)')?.matches || window.matchMedia?.('(hover: none)')?.matches;
+  }
 
   const staticHelp = [
     ['#entryDate', 'Data wpisu. W raportach i kalendarzu wpis trafi właśnie na ten dzień.'],
     ['#entryType', 'Przychód zwiększa wynik, wydatek go pomniejsza.'],
     ['#entryScope', 'Firmowe wpływa na wynik firmy. Domowe jest pokazywane osobno i nie obniża wypłaty firmy.'],
     ['#category', 'Kategoria używana w raportach.'],
-    ['#amount', 'Kwota wpisu. Możesz używać przecinka, np. 120,50.'],
+    ['#amount', 'Kwota wpisu. Rozpoznaje zapis 3 zł 46 gr, 3,46 zł, 3.46 zł oraz kwoty z groszami.'],
     ['#paymentMethod', 'Sposób płatności, pomocny przy późniejszym filtrowaniu.'],
     ['#tags', 'Tagi pomagają grupować podobne wydatki, np. paliwo, klient, antena.'],
     ['#description', 'Krótki opis pozycji, widoczny w historii i raportach.'],
@@ -1320,8 +1404,12 @@ function setupSmartTooltips() {
     activeNode = null;
   }
 
+  document.addEventListener('pointerdown', event => {
+    lastPointerType = event.pointerType || '';
+  }, { passive: true });
+
   document.addEventListener('mouseover', event => {
-    if (window.matchMedia?.('(hover: none)').matches) return;
+    if (isTouchTooltipMode() || lastPointerType === 'touch') return;
     const { node, text } = getHelpText(event.target);
     if (node && text) showTooltipFor(node, text);
   });
@@ -1332,6 +1420,7 @@ function setupSmartTooltips() {
   });
 
   document.addEventListener('focusin', event => {
+    if (isTouchTooltipMode() || lastPointerType === 'touch') return;
     const { node, text } = getHelpText(event.target);
     if (node && text) showTooltipFor(node, text);
   });

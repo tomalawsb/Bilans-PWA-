@@ -1,13 +1,13 @@
-const CACHE_NAME = 'portfel-pro-etap25-v1';
-const APP_VERSION = '25';
+const CACHE_NAME = 'portfel-pro-etap27-v1';
+const APP_VERSION = '27';
 const APP_SHELL = [
   './',
   './index.html',
-  './index.html?v=25',
-  './manifest.webmanifest?v=25',
-  './manifest-voice.webmanifest?v=25',
-  './src/styles.css?v=25',
-  './src/app.js?v=25',
+  './index.html?v=27',
+  './manifest.webmanifest?v=27',
+  './manifest-voice.webmanifest?v=27',
+  './src/styles.css?v=27',
+  './src/app.js?v=27',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/logo-portfel-pro.png',
@@ -51,7 +51,7 @@ self.addEventListener('fetch', event => {
         if (cached) return cached;
 
         if (event.request.mode === 'navigate') {
-          return await caches.match('./index.html?v=25') || await caches.match('./index.html');
+          return await caches.match('./index.html?v=27') || await caches.match('./index.html');
         }
 
         return new Response('Brak połączenia i brak pliku w cache.', {

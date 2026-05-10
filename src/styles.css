@@ -1004,20 +1004,7 @@ body[data-theme="dark"] .year-day.heat-level-5 { background:#6ee7b7; color:#0615
   transform: translateY(0);
 }
 .has-help { position: relative; }
-.has-help::after {
-  content: "";
-  display: inline-block;
-  width: 5px;
-  height: 5px;
-  margin-left: 5px;
-  border-radius: 999px;
-  background: currentColor;
-  opacity: .42;
-  vertical-align: middle;
-}
-input.has-help::after,
-textarea.has-help::after,
-select.has-help::after { content: none; }
+/* Tooltipy nie mają żadnego widocznego znacznika/kropki w interfejsie. */
 @media (hover: none) and (pointer: coarse) {
   .smart-tooltip { font-size: 13px; padding: 10px 12px; }
 }
