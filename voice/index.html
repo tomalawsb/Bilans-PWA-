@@ -7,10 +7,10 @@
   <meta name="description" content="Portfel PRO — lokalny rejestr przychodów, wydatków, raportów i kalendarza.">
   <title>Dodaj głosem — Portfel PRO</title>
   <base href="../">
-  <link id="appManifest" rel="manifest" href="./manifest-voice.webmanifest?v=110">
-  <link rel="icon" href="./icons/icon-192.png?v=110">
-  <link rel="apple-touch-icon" href="./icons/icon-192.png?v=110">
-  <link rel="stylesheet" href="./src/styles.css?v=110">
+  <link id="appManifest" rel="manifest" href="./manifest-voice.webmanifest?v=115">
+  <link rel="icon" href="./icons/icon-192.png?v=115">
+  <link rel="apple-touch-icon" href="./icons/icon-192.png?v=115">
+  <link rel="stylesheet" href="./src/styles.css?v=115">
 </head>
 <body data-theme="classic">
   <script>
@@ -21,9 +21,9 @@
   <main class="app-shell">
     <header class="app-header">
       <div class="brand-block">
-        <img class="app-logo" src="./icons/logo-portfel-pro.png?v=110" alt="Portfel PRO">
+        <img class="app-logo" src="./icons/logo-portfel-pro.png?v=115" alt="Portfel PRO">
         <div>
-          <h1>Portfel PRO <span id="appVersionBadge" class="version-badge">v. 1.1</span></h1>
+          <h1>Portfel PRO <span id="appVersionBadge" class="version-badge">v. 1.1 / 115</span></h1>
           <p id="todayLabel">Lokalna aplikacja webowa</p>
         </div>
       </div>
@@ -323,6 +323,36 @@
           <p>Łączy podobne nazwy według bazy tagów, np. hotdog, hot-dog i hot doga.</p>
           <div id="itemReport" class="category-report"></div>
         </article>
+        <article class="panel report-panel">
+          <h2>Inteligentne wnioski</h2>
+          <p>Automatyczne podsumowanie aktualnie widocznych wpisów i ustawionych filtrów.</p>
+          <div id="smartReport" class="category-report"></div>
+        </article>
+        <article class="panel report-panel">
+          <h2>Wydatki cykliczne</h2>
+          <p>Program szuka podobnych wydatków, które wracają co tydzień, co 2 tygodnie albo co miesiąc.</p>
+          <div id="recurringReport" class="category-report"></div>
+        </article>
+        <article class="panel report-panel wallet-panel">
+          <h2>Portfel gotówkowy</h2>
+          <p>Liczy tylko gotówkę: przychody gotówką dodają środki, wydatki gotówką je odejmują. Karta, BLIK i przelew nie zmieniają portfela.</p>
+          <div class="wallet-controls">
+            <label>
+              Miesiąc
+              <select id="walletMonth"></select>
+            </label>
+            <label>
+              Stan na początek miesiąca
+              <input id="walletInitialBalance" type="text" inputmode="decimal" placeholder="np. 500">
+            </label>
+            <label>
+              Korekta ręczna
+              <input id="walletAdjustment" type="text" inputmode="decimal" placeholder="np. -20 albo 50">
+            </label>
+            <button id="walletSaveButton" class="secondary" type="button">Zapisz portfel</button>
+          </div>
+          <div id="walletReport" class="category-report"></div>
+        </article>
       </section>
     </section>
 
@@ -451,7 +481,7 @@
         <div class="panel-title-row">
           <div>
             <h2>Pomoc i instrukcja obsługi</h2>
-            <p>Krótka instrukcja dla pierwszej wersji testowej Portfel PRO v. 1.1.</p>
+            <p>Krótka instrukcja dla pierwszej wersji testowej Portfel PRO v. 1.1 / 115.</p>
           </div>
         </div>
 
@@ -553,7 +583,7 @@
             <ol>
               <li>Kliknij <strong>Odśwież program</strong>.</li>
               <li>Odśwież stronę w przeglądarce.</li>
-              <li>Jeżeli dalej widzisz starą wersję, otwórz adres z dopiskiem <code>?v=110</code>.</li>
+              <li>Jeżeli dalej widzisz starą wersję, otwórz adres z dopiskiem <code>?v=115</code>.</li>
             </ol>
           </article>
         </div>
@@ -658,7 +688,7 @@
     </section>
   </main>
 
-  <script src="./src/config.js?v=110"></script>
-  <script src="./src/app.js?v=110" type="module"></script>
+  <script src="./src/config.js?v=115"></script>
+  <script src="./src/app.js?v=115" type="module"></script>
 </body>
 </html>

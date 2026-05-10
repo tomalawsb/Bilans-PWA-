@@ -1,6 +1,6 @@
 const DB_NAME = 'bilans-pwa-etap1';
 const DB_VERSION = 4;
-const APP_VERSION = '1.1';
+const APP_VERSION = '1.1-115';
 const RAW_DROPBOX_DEFAULT_APP_KEY = String(window.PORTFEL_PRO_CONFIG?.dropboxAppKey || '').trim();
 const DROPBOX_DEFAULT_APP_KEY = /^WSTAW_TUTAJ/i.test(RAW_DROPBOX_DEFAULT_APP_KEY) ? '' : RAW_DROPBOX_DEFAULT_APP_KEY; // Ustaw w src/config.js, wtedy użytkownik klika tylko Połącz z Dropbox.
 const MAIN_INSTALL_KEY = 'portfel-pro-main-installed';
@@ -19,6 +19,7 @@ const DROPBOX_OAUTH_KEY = 'bilans-pwa-dropbox-oauth';
 const DELETED_ENTRIES_KEY = 'bilans-pwa-deleted-entries';
 const DELETE_TOMBSTONE_RETENTION_DAYS = 365;
 const MAIN_REPORT_SETTINGS_KEY = 'portfel-pro-main-report-settings-v1';
+const WALLET_MONTHS_KEY = 'portfel-pro-wallet-months-v1';
 const LEARNING_AUTO_CONFIRMATIONS = 2;
 const LEARNING_MAX_EXAMPLES = 8;
 
@@ -349,12 +350,17 @@ const el = {
   allBalance: document.querySelector('#allBalance'),
   allDetails: document.querySelector('#allDetails'),
   mainReport: document.querySelector('#mainReport'),
-  smartReport: document.querySelector('#smartReport'),
-  recurringReport: document.querySelector('#recurringReport'),
   mainReportSettings: document.querySelector('#mainReportSettings'),
   mainReportResetButton: document.querySelector('#mainReportResetButton'),
   categoryReport: document.querySelector('#categoryReport'),
   itemReport: document.querySelector('#itemReport'),
+  smartReport: document.querySelector('#smartReport'),
+  recurringReport: document.querySelector('#recurringReport'),
+  walletReport: document.querySelector('#walletReport'),
+  walletMonth: document.querySelector('#walletMonth'),
+  walletInitialBalance: document.querySelector('#walletInitialBalance'),
+  walletAdjustment: document.querySelector('#walletAdjustment'),
+  walletSaveButton: document.querySelector('#walletSaveButton'),
   entriesCounter: document.querySelector('#entriesCounter'),
   filterForm: document.querySelector('#filterForm'),
   searchQuery: document.querySelector('#searchQuery'),
@@ -2329,6 +2335,309 @@ function summarizeMainReport(entries) {
   return { computers, installations, company, homeExpense };
 }
 
+
+function parseMoneyInputValue(raw) {
+  const source = String(raw ?? '').trim();
+  const sign = /^\s*-/.test(source) ? -1 : 1;
+  const value = parseLooseAmount(source);
+  return Number.isFinite(value) ? Math.round(value * sign * 100) / 100 : 0;
+}
+
+function normalizeWalletMonthRecord(record = {}) {
+  return {
+    initialBalance: Number(record.initialBalance ?? record.initial_balance ?? 0) || 0,
+    adjustment: Number(record.adjustment ?? record.korekta ?? 0) || 0,
+    updatedAt: record.updatedAt || record.updated_at || new Date().toISOString()
+  };
+}
+
+function getWalletMonths() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(WALLET_MONTHS_KEY) || '{}');
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    const result = {};
+    for (const [key, value] of Object.entries(parsed)) {
+      if (/^20\d{2}-\d{2}$/.test(key)) result[key] = normalizeWalletMonthRecord(value);
+    }
+    return result;
+  } catch (_) {
+    return {};
+  }
+}
+
+function saveWalletMonths(months) {
+  try { localStorage.setItem(WALLET_MONTHS_KEY, JSON.stringify(months || {})); } catch (_) {}
+}
+
+function getWalletMonthRecord(month) {
+  const months = getWalletMonths();
+  return normalizeWalletMonthRecord(months[month] || {});
+}
+
+function saveWalletMonthRecord(month, changes = {}) {
+  if (!/^20\d{2}-\d{2}$/.test(month || '')) return;
+  const months = getWalletMonths();
+  months[month] = normalizeWalletMonthRecord({
+    ...(months[month] || {}),
+    ...changes,
+    updatedAt: new Date().toISOString()
+  });
+  saveWalletMonths(months);
+}
+
+function importWalletMonthsFromPayload(payload, replace = false) {
+  const incoming = payload?.walletMonths || payload?.wallet_months || null;
+  if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming)) return;
+  const current = replace ? {} : getWalletMonths();
+
+  for (const [month, rawRecord] of Object.entries(incoming)) {
+    if (!/^20\d{2}-\d{2}$/.test(month)) continue;
+    const normalized = normalizeWalletMonthRecord(rawRecord);
+    const oldRecord = current[month];
+    const incomingTime = Date.parse(normalized.updatedAt || '') || 0;
+    const oldTime = Date.parse(oldRecord?.updatedAt || '') || 0;
+    if (replace || !oldRecord || incomingTime >= oldTime) current[month] = normalized;
+  }
+
+  saveWalletMonths(current);
+}
+
+function isCashPayment(entry) {
+  return normalizeText(entry?.paymentMethod || '') === 'gotowka';
+}
+
+function walletMonthsFromEntries() {
+  const months = new Set([monthKey(todayISO())]);
+  for (const entry of allEntries || []) {
+    if (entry.entryDate && /^20\d{2}-\d{2}/.test(entry.entryDate)) months.add(monthKey(entry.entryDate));
+  }
+  for (const month of Object.keys(getWalletMonths())) months.add(month);
+  return Array.from(months).sort((a, b) => b.localeCompare(a));
+}
+
+function summarizeWalletMonth(month) {
+  const record = getWalletMonthRecord(month);
+  const monthEntries = (allEntries || []).filter(entry => entry.entryDate?.startsWith(month) && isCashPayment(entry));
+  let cashIncome = 0;
+  let cashExpense = 0;
+
+  for (const entry of monthEntries) {
+    const amount = Number(entry.amount) || 0;
+    if (entry.entryType === 'przychód') cashIncome += amount;
+    else cashExpense += amount;
+  }
+
+  const balance = record.initialBalance + cashIncome - cashExpense + record.adjustment;
+  return { ...record, cashIncome, cashExpense, balance, entries: monthEntries };
+}
+
+function renderWalletReport() {
+  if (!el.walletReport) return;
+  const months = walletMonthsFromEntries();
+  const currentMonth = monthKey(todayISO());
+  const selectedMonth = el.walletMonth?.value || currentMonth;
+  const safeMonth = months.includes(selectedMonth) ? selectedMonth : currentMonth;
+
+  if (el.walletMonth) {
+    const previous = el.walletMonth.value || safeMonth;
+    el.walletMonth.innerHTML = months.map(month => `<option value="${escapeHtml(month)}">${escapeHtml(month)}</option>`).join('');
+    el.walletMonth.value = months.includes(previous) ? previous : safeMonth;
+  }
+
+  const month = el.walletMonth?.value || safeMonth;
+  const summary = summarizeWalletMonth(month);
+  if (el.walletInitialBalance && document.activeElement !== el.walletInitialBalance) el.walletInitialBalance.value = String(summary.initialBalance).replace('.', ',');
+  if (el.walletAdjustment && document.activeElement !== el.walletAdjustment) el.walletAdjustment.value = String(summary.adjustment).replace('.', ',');
+
+  const lastCashEntries = summary.entries
+    .slice()
+    .sort((a, b) => String(b.entryDate).localeCompare(String(a.entryDate)) || String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
+    .slice(0, 6);
+
+  const entriesHtml = lastCashEntries.length ? `
+    <div class="wallet-entry-list">
+      ${lastCashEntries.map(entry => `
+        <div class="wallet-entry">
+          <span>${escapeHtml(entry.entryDate)} · ${escapeHtml(entry.description || entry.category || 'Wpis')}</span>
+          <strong class="${entry.entryType === 'przychód' ? 'amount-income' : 'amount-expense'}">${entry.entryType === 'przychód' ? '+' : '-'}${formatMoney(entry.amount)}</strong>
+        </div>
+      `).join('')}
+    </div>
+  ` : '<div class="empty-state small-empty">Brak gotówkowych wpisów w tym miesiącu.</div>';
+
+  el.walletReport.innerHTML = `
+    <div class="category-row wallet-result-row">
+      <div><strong>Stan portfela</strong><br><small>${escapeHtml(month)} · tylko wpisy z płatnością „Gotówka”</small></div>
+      <b class="${summary.balance >= 0 ? 'amount-income' : 'amount-expense'}">${formatMoney(summary.balance)}</b>
+    </div>
+    <div class="wallet-mini-grid">
+      <div><span>Stan początkowy</span><strong>${formatMoney(summary.initialBalance)}</strong></div>
+      <div><span>Przychody gotówką</span><strong class="amount-income">+${formatMoney(summary.cashIncome)}</strong></div>
+      <div><span>Wydatki gotówką</span><strong class="amount-expense">-${formatMoney(summary.cashExpense)}</strong></div>
+      <div><span>Korekta ręczna</span><strong>${summary.adjustment >= 0 ? '+' : ''}${formatMoney(summary.adjustment)}</strong></div>
+    </div>
+    ${entriesHtml}
+  `;
+}
+
+function saveWalletFormValues() {
+  const month = el.walletMonth?.value || monthKey(todayISO());
+  saveWalletMonthRecord(month, {
+    initialBalance: parseMoneyInputValue(el.walletInitialBalance?.value || '0'),
+    adjustment: parseMoneyInputValue(el.walletAdjustment?.value || '0')
+  });
+  renderWalletReport();
+  scheduleDropboxAutoSync();
+  showMessage('Zapisano ustawienia portfela gotówkowego.');
+}
+
+function topGroupBy(entries, keyGetter) {
+  const map = new Map();
+  for (const entry of entries || []) {
+    const key = keyGetter(entry) || 'Inne';
+    const row = map.get(key) || { name: key, count: 0, total: 0 };
+    row.count += 1;
+    row.total += Number(entry.amount) || 0;
+    map.set(key, row);
+  }
+  return Array.from(map.values()).sort((a, b) => b.total - a.total)[0] || null;
+}
+
+function renderSmartReports() {
+  if (!el.smartReport) return;
+  const entries = filteredEntries || [];
+  if (!entries.length) {
+    el.smartReport.innerHTML = '<div class="empty-state">Brak danych do inteligentnych wniosków.</div>';
+    return;
+  }
+
+  const summary = summarize(entries);
+  const company = summarizeMainReport(entries).company;
+  const expenses = entries.filter(entry => entry.entryType === 'wydatek');
+  const incomes = entries.filter(entry => entry.entryType === 'przychód');
+  const topExpenseGroup = topGroupBy(expenses, entry => resolveReportGroup(entry) || entry.category);
+  const topIncomeGroup = topGroupBy(incomes, entry => resolveReportGroup(entry) || entry.category);
+  const biggestExpense = expenses.slice().sort((a, b) => (Number(b.amount) || 0) - (Number(a.amount) || 0))[0];
+  const biggestIncome = incomes.slice().sort((a, b) => (Number(b.amount) || 0) - (Number(a.amount) || 0))[0];
+  const uniqueExpenseDays = new Set(expenses.map(entry => entry.entryDate).filter(Boolean)).size || 1;
+  const avgDailyExpense = expenses.reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0) / uniqueExpenseDays;
+  const companyExpenseShare = company.income > 0 ? Math.round((company.expense / company.income) * 100) : 0;
+
+  const rows = [
+    ['Wynik z widocznych wpisów', `Przychody ${formatMoney(summary.income)} · wydatki ${formatMoney(summary.expense)}`, summary.balance],
+    ['Wynik firmy / wypłata', `Bez wydatków domowych · udział kosztów firmowych: ${companyExpenseShare}%`, company.balance],
+    ['Średni wydatek dzienny', `Liczony z dni, w których były wydatki: ${uniqueExpenseDays}`, -avgDailyExpense]
+  ];
+
+  if (topExpenseGroup) rows.push(['Największa grupa wydatków', `${topExpenseGroup.name} · wpisy: ${topExpenseGroup.count}`, -topExpenseGroup.total]);
+  if (topIncomeGroup) rows.push(['Największa grupa przychodów', `${topIncomeGroup.name} · wpisy: ${topIncomeGroup.count}`, topIncomeGroup.total]);
+  if (biggestExpense) rows.push(['Największy pojedynczy wydatek', `${biggestExpense.entryDate} · ${biggestExpense.description || biggestExpense.category}`, -Number(biggestExpense.amount || 0)]);
+  if (biggestIncome) rows.push(['Największy pojedynczy przychód', `${biggestIncome.entryDate} · ${biggestIncome.description || biggestIncome.category}`, Number(biggestIncome.amount || 0)]);
+
+  el.smartReport.innerHTML = rows.map(([title, note, value]) => mainReportRow(title, note, value, 'smart-report-row')).join('');
+}
+
+function recurringTextKey(entry) {
+  const source = [entry.reportGroup, entry.description, entry.originalText, entry.category]
+    .filter(Boolean)
+    .join(' ');
+  const normalized = normalizeText(source)
+    .replace(/\b\d+[,.]?\d*\b/g, ' ')
+    .replace(/\b(zl|pln|za|dla|u|w|na|do|od|i|oraz|kupilem|kupilam|zaplacilem|zaplacilam|wydatek|platnosc|gotowka|karta|blik|bank)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const tokens = normalized.split(' ').filter(token => token.length > 2).slice(0, 5);
+  return tokens.join(' ') || normalizeText(entry.category || 'inne');
+}
+
+function daysBetweenISO(a, b) {
+  const first = Date.parse(`${a}T12:00:00`);
+  const second = Date.parse(`${b}T12:00:00`);
+  if (!Number.isFinite(first) || !Number.isFinite(second)) return 0;
+  return Math.round((second - first) / 86400000);
+}
+
+function detectRecurringExpenses(entries) {
+  const groups = new Map();
+  for (const entry of entries || []) {
+    if (entry.entryType !== 'wydatek' || !entry.entryDate) continue;
+    const key = recurringTextKey(entry);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(entry);
+  }
+
+  const result = [];
+  for (const [key, items] of groups.entries()) {
+    if (items.length < 2) continue;
+    const sorted = items.slice().sort((a, b) => String(a.entryDate).localeCompare(String(b.entryDate)));
+    const diffs = [];
+    for (let i = 1; i < sorted.length; i += 1) {
+      const diff = daysBetweenISO(sorted[i - 1].entryDate, sorted[i].entryDate);
+      if (diff > 0) diffs.push(diff);
+    }
+    if (!diffs.length) continue;
+
+    const avgDiff = diffs.reduce((sum, diff) => sum + diff, 0) / diffs.length;
+    const candidates = [
+      { label: 'co tydzień', days: 7 },
+      { label: 'co 2 tygodnie', days: 14 },
+      { label: 'co miesiąc', days: 30 }
+    ];
+    const best = candidates
+      .map(candidate => ({ ...candidate, error: Math.abs(avgDiff - candidate.days) }))
+      .sort((a, b) => a.error - b.error)[0];
+
+    let label = '';
+    let cycleDays = Math.round(avgDiff);
+    if (best && best.error <= 7) {
+      label = best.label;
+      cycleDays = best.days;
+    } else if (items.length >= 3) {
+      label = 'często wraca';
+    } else {
+      continue;
+    }
+
+    const avgAmount = sorted.reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0) / sorted.length;
+    const last = sorted[sorted.length - 1];
+    const nextDate = label === 'często wraca' ? '—' : addDaysISO(last.entryDate, cycleDays);
+    const variance = diffs.reduce((sum, diff) => sum + Math.abs(diff - avgDiff), 0) / diffs.length;
+    const confidence = Math.max(45, Math.min(98, Math.round(100 - best.error * 4 - variance + Math.min(sorted.length, 8) * 3)));
+
+    result.push({
+      key,
+      label,
+      count: sorted.length,
+      avgAmount,
+      lastDate: last.entryDate,
+      nextDate,
+      confidence,
+      category: last.category || 'Inne'
+    });
+  }
+
+  return result.sort((a, b) => b.confidence - a.confidence || b.count - a.count).slice(0, 12);
+}
+
+function renderRecurringReport() {
+  if (!el.recurringReport) return;
+  const rows = detectRecurringExpenses(filteredEntries || []);
+  if (!rows.length) {
+    el.recurringReport.innerHTML = '<div class="empty-state">Brak wykrytych wydatków cyklicznych w aktualnym filtrze.</div>';
+    return;
+  }
+
+  el.recurringReport.innerHTML = rows.map(row => `
+    <div class="category-row recurring-row">
+      <div>
+        <strong>${escapeHtml(row.key)}</strong><br>
+        <small>${escapeHtml(row.category)} · ${escapeHtml(row.label)} · wpisy: ${row.count} · ostatnio: ${escapeHtml(row.lastDate)} · następny: ${escapeHtml(row.nextDate)}</small>
+      </div>
+      <b>${formatMoney(row.avgAmount)}<br><small>${row.confidence}%</small></b>
+    </div>
+  `).join('');
+}
+
 function mainReportRow(title, note, value, extraClass = '') {
   const amountClass = value >= 0 ? 'amount-income' : 'amount-expense';
   return `
@@ -2402,279 +2711,6 @@ function renderMainReport() {
   el.mainReport.innerHTML = rows.length
     ? rows.join('')
     : '<div class="empty-state">Wszystkie kafelki raportu głównego są ukryte. Zmień to w Ustawieniach.</div>';
-}
-
-
-function parseEntryLocalDate(dateISO) {
-  const raw = String(dateISO || '').slice(0, 10);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
-  const date = new Date(`${raw}T12:00:00`);
-  return Number.isNaN(date.getTime()) ? null : date;
-}
-
-function daysBetween(dateA, dateB) {
-  const a = parseEntryLocalDate(dateA);
-  const b = parseEntryLocalDate(dateB);
-  if (!a || !b) return 0;
-  return Math.round((b.getTime() - a.getTime()) / 86400000);
-}
-
-function addDaysISO(dateISO, days) {
-  const date = parseEntryLocalDate(dateISO);
-  if (!date || !Number.isFinite(days)) return '';
-  date.setDate(date.getDate() + Math.round(days));
-  return date.toISOString().slice(0, 10);
-}
-
-function addMonthsISO(dateISO, months = 1) {
-  const date = parseEntryLocalDate(dateISO);
-  if (!date) return '';
-  const originalDay = date.getDate();
-  date.setMonth(date.getMonth() + months);
-  if (date.getDate() !== originalDay) date.setDate(0);
-  return date.toISOString().slice(0, 10);
-}
-
-function median(numbers) {
-  const sorted = numbers.filter(Number.isFinite).sort((a, b) => a - b);
-  if (!sorted.length) return 0;
-  const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
-}
-
-function summarizeByCategory(entries, type = 'wydatek') {
-  const rows = new Map();
-  for (const entry of entries) {
-    if (entry.entryType !== type) continue;
-    const key = entry.category || 'Inne';
-    const current = rows.get(key) || { name: key, count: 0, total: 0 };
-    current.count += 1;
-    current.total += Number(entry.amount) || 0;
-    rows.set(key, current);
-  }
-  return Array.from(rows.values()).sort((a, b) => b.total - a.total || b.count - a.count);
-}
-
-function biggestEntry(entries, type = 'wydatek') {
-  return entries
-    .filter(entry => entry.entryType === type)
-    .sort((a, b) => (Number(b.amount) || 0) - (Number(a.amount) || 0))[0] || null;
-}
-
-function formatEntryShort(entry) {
-  if (!entry) return '';
-  const description = cleanDescription(entry.description || entry.originalText || entry.category || 'Wpis');
-  return `${description} · ${entry.entryDate || ''} · ${formatMoney(entry.amount)}`;
-}
-
-function buildSmartReportInsights(entries) {
-  if (!entries.length) return [];
-
-  const report = summarizeMainReport(entries);
-  const summary = summarize(entries);
-  const expenseCategories = summarizeByCategory(entries, 'wydatek');
-  const incomeCategories = summarizeByCategory(entries, 'przychód');
-  const topExpense = biggestEntry(entries, 'wydatek');
-  const topIncome = biggestEntry(entries, 'przychód');
-  const days = new Set(entries.map(entry => entry.entryDate).filter(Boolean)).size || 1;
-  const averageDailyExpense = summary.expense / days;
-  const companyIncome = report.company.income;
-  const companyExpense = report.company.expense;
-  const companyCostRatio = companyIncome > 0 ? companyExpense / companyIncome : 0;
-  const insights = [];
-
-  insights.push({
-    title: 'Wynik z aktualnych filtrów',
-    value: formatMoney(summary.balance),
-    note: `Przychody ${formatMoney(summary.income)} · wydatki ${formatMoney(summary.expense)} · wpisy: ${entries.length}`,
-    type: summary.balance >= 0 ? 'positive' : 'negative'
-  });
-
-  insights.push({
-    title: 'Wynik firmy / wypłata',
-    value: formatMoney(report.company.balance),
-    note: `Firmowe przychody ${formatMoney(companyIncome)} · firmowe koszty ${formatMoney(companyExpense)} · domowe pominięte`,
-    type: report.company.balance >= 0 ? 'positive' : 'negative'
-  });
-
-  if (expenseCategories[0]) {
-    insights.push({
-      title: 'Największa grupa wydatków',
-      value: expenseCategories[0].name,
-      note: `${formatMoney(expenseCategories[0].total)} · wpisy: ${expenseCategories[0].count}`,
-      type: 'neutral'
-    });
-  }
-
-  if (incomeCategories[0]) {
-    insights.push({
-      title: 'Największa grupa przychodów',
-      value: incomeCategories[0].name,
-      note: `${formatMoney(incomeCategories[0].total)} · wpisy: ${incomeCategories[0].count}`,
-      type: 'positive'
-    });
-  }
-
-  if (topExpense) {
-    insights.push({
-      title: 'Największy pojedynczy wydatek',
-      value: formatMoney(topExpense.amount),
-      note: formatEntryShort(topExpense),
-      type: 'warning'
-    });
-  }
-
-  if (topIncome) {
-    insights.push({
-      title: 'Największy pojedynczy przychód',
-      value: formatMoney(topIncome.amount),
-      note: formatEntryShort(topIncome),
-      type: 'positive'
-    });
-  }
-
-  if (summary.expense > 0) {
-    insights.push({
-      title: 'Średni wydatek dzienny',
-      value: formatMoney(averageDailyExpense),
-      note: `Liczone z ${days} dni widocznych w aktualnych filtrach.`,
-      type: 'neutral'
-    });
-  }
-
-  if (companyIncome > 0) {
-    insights.push({
-      title: 'Udział kosztów firmowych',
-      value: `${Math.round(companyCostRatio * 100)}%`,
-      note: companyCostRatio > 0.55
-        ? 'Koszty firmowe są wysokie względem przychodów.'
-        : 'Koszty firmowe są pod kontrolą względem przychodów.',
-      type: companyCostRatio > 0.55 ? 'warning' : 'positive'
-    });
-  }
-
-  return insights;
-}
-
-function renderSmartReport() {
-  if (!el.smartReport) return;
-  if (!filteredEntries.length) {
-    el.smartReport.innerHTML = '<div class="empty-state">Brak danych do inteligentnych wniosków.</div>';
-    return;
-  }
-
-  const insights = buildSmartReportInsights(filteredEntries);
-  el.smartReport.innerHTML = insights.map(item => `
-    <div class="smart-insight-card smart-${escapeHtml(item.type)}">
-      <span>${escapeHtml(item.title)}</span>
-      <strong>${escapeHtml(item.value)}</strong>
-      <small>${escapeHtml(item.note)}</small>
-    </div>
-  `).join('');
-}
-
-function recurringGroupKey(entry) {
-  const group = cleanDescription(resolveReportGroup(entry) || entry.description || entry.originalText || entry.category || 'Inne');
-  const normalized = learningTokens(group).slice(0, 4).join(' ');
-  if (normalized.length >= 3) return `${entry.category || 'Inne'}|${normalized}`;
-  return `${entry.category || 'Inne'}|${normalizeText(group).slice(0, 24)}`;
-}
-
-function recurringGroupLabel(entries) {
-  const labels = new Map();
-  for (const entry of entries) {
-    const label = cleanDescription(resolveReportGroup(entry) || entry.description || entry.originalText || entry.category || 'Inne');
-    if (!label) continue;
-    labels.set(label, (labels.get(label) || 0) + 1);
-  }
-  return Array.from(labels.entries()).sort((a, b) => b[1] - a[1] || b[0].length - a[0].length)[0]?.[0] || 'Wydatek cykliczny';
-}
-
-function classifyRecurringInterval(gaps, monthCount, count) {
-  const med = median(gaps);
-  if (med >= 25 && med <= 38) return { label: 'co miesiąc', days: med, confidenceBase: 84 };
-  if (med >= 6 && med <= 8) return { label: 'co tydzień', days: med, confidenceBase: 82 };
-  if (med >= 12 && med <= 17) return { label: 'co 2 tygodnie', days: med, confidenceBase: 78 };
-  if (med >= 55 && med <= 70) return { label: 'co 2 miesiące', days: med, confidenceBase: 72 };
-  if (monthCount >= 2) return { label: 'powtarza się w różnych miesiącach', days: med || 30, confidenceBase: 62 };
-  if (count >= 3) return { label: 'częsty wydatek', days: med || 7, confidenceBase: 58 };
-  return { label: '', days: med, confidenceBase: 0 };
-}
-
-function detectRecurringExpenses(entries) {
-  const groups = new Map();
-
-  for (const entry of entries) {
-    if (entry.entryType !== 'wydatek') continue;
-    const date = parseEntryLocalDate(entry.entryDate);
-    if (!date) continue;
-    const key = recurringGroupKey(entry);
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(entry);
-  }
-
-  const candidates = [];
-  for (const groupEntries of groups.values()) {
-    const sorted = groupEntries.slice().sort((a, b) => String(a.entryDate).localeCompare(String(b.entryDate)));
-    const months = new Set(sorted.map(entry => monthKey(entry.entryDate)));
-    if (sorted.length < 2 || (months.size < 2 && sorted.length < 3)) continue;
-
-    const gaps = [];
-    for (let i = 1; i < sorted.length; i += 1) {
-      const gap = daysBetween(sorted[i - 1].entryDate, sorted[i].entryDate);
-      if (gap > 0) gaps.push(gap);
-    }
-
-    const interval = classifyRecurringInterval(gaps, months.size, sorted.length);
-    if (!interval.label) continue;
-
-    const total = sorted.reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0);
-    const average = total / sorted.length;
-    const lastEntry = sorted[sorted.length - 1];
-    const nextDate = interval.label === 'co miesiąc'
-      ? addMonthsISO(lastEntry.entryDate, 1)
-      : addDaysISO(lastEntry.entryDate, interval.days || 30);
-    const stableGaps = gaps.filter(gap => Math.abs(gap - (interval.days || gap)) <= 5).length;
-    const consistency = gaps.length ? stableGaps / gaps.length : 0.5;
-    const confidence = Math.min(97, Math.round(interval.confidenceBase + Math.min(12, sorted.length * 3) + consistency * 8));
-
-    candidates.push({
-      label: recurringGroupLabel(sorted),
-      category: sorted[0]?.category || 'Inne',
-      count: sorted.length,
-      months: months.size,
-      total,
-      average,
-      lastDate: lastEntry.entryDate,
-      nextDate,
-      interval: interval.label,
-      confidence
-    });
-  }
-
-  return candidates
-    .sort((a, b) => b.confidence - a.confidence || b.total - a.total)
-    .slice(0, 8);
-}
-
-function renderRecurringReport() {
-  if (!el.recurringReport) return;
-  const recurring = detectRecurringExpenses(filteredEntries);
-  if (!recurring.length) {
-    el.recurringReport.innerHTML = '<div class="empty-state">Brak wykrytych wydatków cyklicznych w aktualnych filtrach. Potrzebne są co najmniej 2 podobne wydatki w różnych miesiącach albo 3 podobne wpisy.</div>';
-    return;
-  }
-
-  el.recurringReport.innerHTML = recurring.map(item => `
-    <div class="category-row compact-row recurring-row">
-      <div>
-        <b>${escapeHtml(item.label)}</b><br>
-        <span>${escapeHtml(item.category)} · ${escapeHtml(item.interval)} · wpisy: ${item.count} · średnio ${formatMoney(item.average)}</span><br>
-        <small>Ostatnio: ${escapeHtml(item.lastDate)}${item.nextDate ? ` · następny około: ${escapeHtml(item.nextDate)}` : ''}</small>
-      </div>
-      <strong class="confidence-pill">${item.confidence}%</strong>
-    </div>
-  `).join('');
 }
 
 function renderSummary() {
@@ -3004,10 +3040,11 @@ function applyFilters() {
   renderCalendar();
   renderYearCalendar();
   renderMainReport();
-  renderSmartReport();
-  renderRecurringReport();
   renderCategoryReport();
   renderItemReport();
+  renderSmartReports();
+  renderRecurringReport();
+  renderWalletReport();
   renderEntries();
 }
 
@@ -3660,6 +3697,7 @@ function makeExportPayload() {
     tagRules,
     learningRules,
     deletedEntries: getDeletedEntries(),
+    walletMonths: getWalletMonths(),
     entries: allEntries.map(entry => ({
       ...entry,
       syncId: entry.syncId || makeSyncId('entry'),
@@ -3703,6 +3741,7 @@ async function importPayload(payload, options = {}) {
   const { replace = false, silent = false } = options;
   const deletionResult = await applyImportedDeletions(payload);
   await importLearningRulesFromPayload(payload, replace);
+  importWalletMonthsFromPayload(payload, replace);
   const imported = collectImportedEntries(payload);
 
   if (!Array.isArray(imported) || !imported.length) {
@@ -4582,6 +4621,8 @@ function bindEvents() {
   if (el.learningClearButton) el.learningClearButton.addEventListener('click', () => clearAllLearningRules().catch(error => showMessage(error.message, 'error')));
   if (el.mainReportSettings) el.mainReportSettings.addEventListener('change', handleMainReportSettingsChange);
   if (el.mainReportResetButton) el.mainReportResetButton.addEventListener('click', resetMainReportSettings);
+  if (el.walletMonth) el.walletMonth.addEventListener('change', renderWalletReport);
+  if (el.walletSaveButton) el.walletSaveButton.addEventListener('click', saveWalletFormValues);
   el.parseButton.addEventListener('click', handleParseText);
   el.addParsedButton.addEventListener('click', () => handleAddParsedEntries().catch(error => showMessage(error.message, 'error')));
   el.parsePreview.addEventListener('input', event => updateParsedDraftFromElement(event.target));
@@ -4777,7 +4818,7 @@ function bindEvents() {
 async function init() {
   const today = todayISO();
   document.title = 'Portfel PRO';
-  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.1';
+  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.1 / 115';
   setTodayHeader('wczytywanie...');
   if (isFileProtocol()) {
     showMessage('Program został otwarty bezpośrednio z index.html. Do importu JSON, PWA i cache użyj serwera lokalnego albo GitHub Pages.', 'error');
