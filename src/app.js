@@ -1,6 +1,9 @@
 const DB_NAME = 'bilans-pwa-etap1';
 const DB_VERSION = 3;
-const APP_VERSION = 22;
+const APP_VERSION = 23;
+const MAIN_INSTALL_KEY = 'portfel-pro-main-installed';
+const VOICE_INSTALL_KEY = 'portfel-pro-voice-installed';
+
 const STORE = 'entries';
 const TAG_RULE_STORE = 'tagRules';
 const DEVICE_ID_KEY = 'bilans-pwa-device-id';
@@ -187,17 +190,31 @@ function extractPolishNamedays(payload) {
   return results.join(', ');
 }
 
+const LOCAL_NAME_DAYS = {
+  '05-10': 'Antonina, Beatrycze, Izydor, Jan, Job, Sylwester',
+  '05-11': 'Iga, Ignacy, Mamert, Mirand, Franciszek',
+  '05-12': 'Dominik, Imelda, Pankracy, German',
+  '05-13': 'Robert, Serwacy, Maria, Andrzej',
+  '05-14': 'Bonifacy, Maciej, Dobiesław',
+  '05-15': 'Zofia, Izydor, Nadzieja, Dionizy'
+};
+
+function getLocalNamedays(date = new Date()) {
+  const key = `${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  return LOCAL_NAME_DAYS[key] || '';
+}
+
 function setTodayHeader(namedays = '') {
   if (!el.todayLabel) return;
   const dateText = formatPolishDate();
-  const names = cleanNamedayText(namedays);
+  const names = cleanNamedayText(namedays) || getLocalNamedays();
   el.todayLabel.textContent = names
     ? `${dateText} · imieniny: ${names}`
-    : `${dateText} · imieniny: brak danych`;
+    : `${dateText} · imieniny: niedostępne`;
 }
 
 async function updateTodayNamedays() {
-  setTodayHeader('wczytywanie...');
+  setTodayHeader(getLocalNamedays() || 'wczytywanie...');
   for (const url of NAME_DAY_API_URLS) {
     try {
       const response = await fetch(url, { cache: 'no-store' });
@@ -210,7 +227,7 @@ async function updateTodayNamedays() {
       }
     } catch (_) {}
   }
-  setTodayHeader('brak danych');
+  setTodayHeader(getLocalNamedays());
 }
 
 
@@ -2767,18 +2784,75 @@ function registerServiceWorker() {
     });
 }
 
+function isStandaloneDisplay() {
+  return window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+
+function isMainInstallRemembered() {
+  try { return localStorage.getItem(MAIN_INSTALL_KEY) === '1'; } catch (_) { return false; }
+}
+
+function isVoiceInstallRemembered() {
+  try { return localStorage.getItem(VOICE_INSTALL_KEY) === '1'; } catch (_) { return false; }
+}
+
+function rememberInstallState() {
+  try {
+    if (isVoiceActionRequested()) localStorage.setItem(VOICE_INSTALL_KEY, '1');
+    else localStorage.setItem(MAIN_INSTALL_KEY, '1');
+  } catch (_) {}
+}
+
+function hideInstallButtons() {
+  el.installButton?.classList.add('hidden');
+  el.installVoiceButton?.classList.add('hidden');
+  el.voiceInstallNowButton?.classList.add('hidden');
+}
+
+function refreshInstallButtons() {
+  hideInstallButtons();
+  if (isFileProtocol() || isStandaloneDisplay()) return;
+
+  if (isVoiceActionRequested()) {
+    if (deferredInstallPrompt && !isVoiceInstallRemembered()) {
+      el.voiceInstallNowButton?.classList.remove('hidden');
+    }
+    return;
+  }
+
+  if (deferredInstallPrompt && !isMainInstallRemembered()) {
+    el.installButton?.classList.remove('hidden');
+  }
+
+  // Osobny skrót mikrofonu wymaga wejścia w tryb ?action=voice, bo wtedy ładowany jest osobny manifest PWA.
+  if (!isVoiceInstallRemembered()) {
+    el.installVoiceButton?.classList.remove('hidden');
+  }
+}
+
 function showInstallUnavailableMessage() {
-  showMessage('Instalacja PWA jest dostępna tylko z HTTPS/GitHub Pages i tylko wtedy, gdy przeglądarka pozwala dodać aplikację. Jeśli nie pojawi się okno instalacji, użyj menu Chrome: Dodaj do ekranu głównego.', 'error');
+  showMessage('Ta aplikacja jest już zainstalowana albo Chrome nie udostępnił teraz okna instalacji. Jeżeli widzisz w pasku „Otwórz aplikację”, program jest już zainstalowany.', 'error');
 }
 
 async function runInstallPrompt() {
   if (!deferredInstallPrompt) {
     showInstallUnavailableMessage();
+    refreshInstallButtons();
     return;
   }
-  deferredInstallPrompt.prompt();
-  await deferredInstallPrompt.userChoice;
+
+  const promptEvent = deferredInstallPrompt;
   deferredInstallPrompt = null;
+  promptEvent.prompt();
+  const choice = await promptEvent.userChoice;
+
+  if (choice?.outcome === 'accepted') {
+    rememberInstallState();
+    hideInstallButtons();
+    showMessage(isVoiceActionRequested() ? 'Skrót mikrofonu został zainstalowany.' : 'Program został zainstalowany.');
+  } else {
+    refreshInstallButtons();
+  }
 }
 
 function openVoiceInstallPage() {
@@ -2790,13 +2864,23 @@ function openVoiceInstallPage() {
 }
 
 function setupInstallPrompt() {
+  hideInstallButtons();
+
   window.addEventListener('beforeinstallprompt', event => {
     event.preventDefault();
     deferredInstallPrompt = event;
-    el.installButton?.classList.remove('hidden');
-    el.installVoiceButton?.classList.remove('hidden');
-    el.voiceInstallNowButton?.classList.remove('hidden');
+    refreshInstallButtons();
   });
+
+  window.addEventListener('appinstalled', () => {
+    rememberInstallState();
+    deferredInstallPrompt = null;
+    hideInstallButtons();
+    showMessage(isVoiceActionRequested() ? 'Skrót mikrofonu został zainstalowany.' : 'Program został zainstalowany.');
+  });
+
+  window.matchMedia?.('(display-mode: standalone)')?.addEventListener?.('change', refreshInstallButtons);
+  refreshInstallButtons();
 
   el.installButton?.addEventListener('click', event => {
     event.preventDefault();

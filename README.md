@@ -1,4 +1,4 @@
-# Portfel PRO — Etap 22
+# Portfel PRO — Etap 23
 
 Lokalna aplikacja PWA do zapisywania przychodów, wydatków, raportów i kalendarza.
 
@@ -39,22 +39,29 @@ Tryb lokalny zapisuje dane w IndexedDB przeglądarki. Tryb Dropbox używa jedneg
 ```
 
 
-## Etap 22 - poprawka usuwania danych
+## Etap 23 - poprawka usuwania danych
 - Import JSON nie jest już realizowany przez label z ukrytym inputem, tylko przez osobne przyciski.
 - Przycisk „Usuń wszystkie dane” ma własny handler z preventDefault/stopPropagation.
 - Ujednolicono wersje cache, service workera, manifestu i plików JS/CSS do v20.
 
 
-## Etap 22
+## Etap 23
 - Zmieniono nazwę widoczną aplikacji na Portfel PRO.
 - Usunięto przycisk „Dodaj głosem” z głównego nagłówka; tryb głosowy działa jako skrót PWA `?action=voice`.
 - Pod nazwą aplikacji wyświetla się data oraz imieniny pobierane z API Abalin.
 - Dodano motywy: złoty, rubinowy, bursztynowy i diamentowy.
 
 
-## Etap 22
+## Etap 23
 - dodano reset fabryczny programu,
 - dodano osobny manifest i ikonę mikrofonu dla trybu `?action=voice`,
 - podmieniono logo programu na przezroczyste PNG,
 - dodano lokalny awaryjny wpis imienin dla 10 maja, gdy API nie odpowiada,
-- podbito cache/service worker do v22.
+- podbito cache/service worker do v23.
+
+
+## Etap 23
+- Przyciski instalacji są ukryte, jeśli Chrome nie udostępnia instalatora albo aplikacja jest już zainstalowana.
+- Po instalacji przyciski „Zainstaluj program” i „Zainstaluj mikrofon” znikają.
+- Poprawiono komunikat przy próbie instalacji na komputerze, gdy Chrome pokazuje już „Otwórz aplikację”.
+- Dodano lokalny awaryjny słownik imienin dla bieżącego widoku, żeby nie pokazywać „brak danych”, gdy API nie odpowiada.
