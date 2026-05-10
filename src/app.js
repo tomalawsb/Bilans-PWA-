@@ -1,6 +1,6 @@
 const DB_NAME = 'bilans-pwa-etap1';
 const DB_VERSION = 3;
-const APP_VERSION = 28;
+const APP_VERSION = 29;
 const MAIN_INSTALL_KEY = 'portfel-pro-main-installed';
 const VOICE_INSTALL_KEY = 'portfel-pro-voice-installed';
 
@@ -14,6 +14,7 @@ const DROPBOX_TOKEN_KEY = 'bilans-pwa-dropbox-token';
 const DROPBOX_OAUTH_KEY = 'bilans-pwa-dropbox-oauth';
 const DELETED_ENTRIES_KEY = 'bilans-pwa-deleted-entries';
 const DELETE_TOMBSTONE_RETENTION_DAYS = 365;
+const MAIN_REPORT_SETTINGS_KEY = 'portfel-pro-main-report-settings-v1';
 
 const THEMES = {
   classic: { name: 'Jasny klasyczny', color: '#f6f3ea' },
@@ -335,6 +336,8 @@ const el = {
   allBalance: document.querySelector('#allBalance'),
   allDetails: document.querySelector('#allDetails'),
   mainReport: document.querySelector('#mainReport'),
+  mainReportSettings: document.querySelector('#mainReportSettings'),
+  mainReportResetButton: document.querySelector('#mainReportResetButton'),
   categoryReport: document.querySelector('#categoryReport'),
   itemReport: document.querySelector('#itemReport'),
   entriesCounter: document.querySelector('#entriesCounter'),
@@ -1797,6 +1800,133 @@ const MAIN_REPORT_FIRM_EXPENSE_CATEGORIES = [
   'Podatki/ZUS'
 ];
 
+const DEFAULT_MAIN_REPORT_SETTINGS = {
+  rows: {
+    computers: true,
+    installations: true,
+    homeExpense: true,
+    companyResult: true
+  },
+  customGroups: []
+};
+
+function getMainReportSettings() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(MAIN_REPORT_SETTINGS_KEY) || '{}');
+    return {
+      rows: {
+        ...DEFAULT_MAIN_REPORT_SETTINGS.rows,
+        ...(parsed.rows && typeof parsed.rows === 'object' ? parsed.rows : {})
+      },
+      customGroups: Array.isArray(parsed.customGroups)
+        ? parsed.customGroups.map(item => String(item)).filter(Boolean)
+        : []
+    };
+  } catch (_) {
+    return structuredClone(DEFAULT_MAIN_REPORT_SETTINGS);
+  }
+}
+
+function saveMainReportSettings(settings) {
+  try {
+    localStorage.setItem(MAIN_REPORT_SETTINGS_KEY, JSON.stringify(settings));
+  } catch (_) {}
+}
+
+function resetMainReportSettings() {
+  saveMainReportSettings(DEFAULT_MAIN_REPORT_SETTINGS);
+  renderMainReportSettings();
+  renderMainReport();
+  showMessage('Przywrócono domyślny raport główny.');
+}
+
+function availableCustomReportGroups() {
+  const ignored = new Set(['Komputerowe', 'Montaże', 'Antenowe', 'Monitoring', 'Usługi', 'Dom', 'Jedzenie']);
+  const groups = new Map();
+
+  for (const rule of tagRules || []) {
+    const name = String(rule.name || '').trim();
+    if (name && !ignored.has(name)) groups.set(name, rule.category || 'Reguła tagu');
+  }
+
+  for (const entry of allEntries || []) {
+    const group = String(resolveReportGroup(entry) || '').trim();
+    if (group && !ignored.has(group) && group !== (entry.category || '')) {
+      groups.set(group, entry.category || 'Wpis');
+    }
+  }
+
+  return Array.from(groups.entries())
+    .map(([name, source]) => ({ name, source }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'pl'));
+}
+
+function summarizeGroup(entries, groupName) {
+  return summarize(entries.filter(entry => resolveReportGroup(entry) === groupName));
+}
+
+function renderMainReportSettings() {
+  if (!el.mainReportSettings) return;
+  const settings = getMainReportSettings();
+  const groups = availableCustomReportGroups();
+  const selected = new Set(settings.customGroups);
+
+  const fixedRows = [
+    ['computers', 'Komputerowe', 'Pokazuje bilans kategorii Komputerowe.'],
+    ['installations', 'Montaże', 'Pokazuje bilans montażowy: Montaże, Antenowe, Monitoring i Usługi.'],
+    ['homeExpense', 'Wydatki domowe', 'Pokazuje wydatki domowe oddzielnie od wyniku firmy.'],
+    ['companyResult', 'Wynik firmy / wypłata', 'Pokazuje przychody firmowe minus koszty firmowe, bez wydatków domowych.']
+  ];
+
+  const fixedHtml = fixedRows.map(([key, label, help]) => `
+    <label class="report-option">
+      <input type="checkbox" data-report-row="${escapeHtml(key)}" ${settings.rows[key] ? 'checked' : ''}>
+      <span><b>${escapeHtml(label)}</b><small>${escapeHtml(help)}</small></span>
+    </label>
+  `).join('');
+
+  const groupsHtml = groups.length ? groups.map(group => `
+    <label class="report-option compact-report-option">
+      <input type="checkbox" data-report-group="${escapeHtml(group.name)}" ${selected.has(group.name) ? 'checked' : ''}>
+      <span><b>${escapeHtml(group.name)}</b><small>${escapeHtml(group.source)}</small></span>
+    </label>
+  `).join('') : '<div class="empty-state small-empty">Brak własnych grup. Dodaj regułę w bazie tagów albo dodaj wpis pasujący do reguły.</div>';
+
+  el.mainReportSettings.innerHTML = `
+    <div class="report-settings-block">
+      <h3>Widoczne kafelki</h3>
+      <div class="report-option-grid">${fixedHtml}</div>
+    </div>
+    <div class="report-settings-block">
+      <h3>Własne grupy/tagi w raporcie głównym</h3>
+      <p class="muted-small">Zaznaczone grupy pojawią się dodatkowo w raporcie głównym na stronie startowej.</p>
+      <div class="report-option-grid">${groupsHtml}</div>
+    </div>
+  `;
+}
+
+function handleMainReportSettingsChange(event) {
+  const input = event.target.closest('input[type="checkbox"]');
+  if (!input) return;
+  const settings = getMainReportSettings();
+
+  if (input.dataset.reportRow) {
+    settings.rows[input.dataset.reportRow] = input.checked;
+  }
+
+  if (input.dataset.reportGroup) {
+    const group = input.dataset.reportGroup;
+    const selected = new Set(settings.customGroups);
+    if (input.checked) selected.add(group);
+    else selected.delete(group);
+    settings.customGroups = Array.from(selected).sort((a, b) => a.localeCompare(b, 'pl'));
+  }
+
+  saveMainReportSettings(settings);
+  renderMainReport();
+}
+
+
 function isHomeExpense(entry) {
   const scope = normalizeScope(entry.scope);
   if (entry.entryType !== 'wydatek') return false;
@@ -1853,32 +1983,58 @@ function renderMainReport() {
     return;
   }
 
+  const settings = getMainReportSettings();
   const report = summarizeMainReport(filteredEntries);
+  const rows = [];
 
-  el.mainReport.innerHTML = [
-    mainReportRow(
+  if (settings.rows.computers) {
+    rows.push(mainReportRow(
       'Komputerowe',
       `Przychody ${formatMoney(report.computers.income)} · koszty ${formatMoney(report.computers.expense)}`,
       report.computers.balance
-    ),
-    mainReportRow(
+    ));
+  }
+
+  if (settings.rows.installations) {
+    rows.push(mainReportRow(
       'Montaże',
       `Przychody ${formatMoney(report.installations.income)} · koszty ${formatMoney(report.installations.expense)} · obejmuje: Montaże, Antenowe, Monitoring, Usługi`,
       report.installations.balance
-    ),
-    mainReportRow(
+    ));
+  }
+
+  if (settings.rows.homeExpense) {
+    rows.push(mainReportRow(
       'Wydatki domowe',
       'Nie są odejmowane od wyniku firmy.',
       -report.homeExpense,
       'home-report-row'
-    ),
-    mainReportRow(
+    ));
+  }
+
+  if (settings.rows.companyResult) {
+    rows.push(mainReportRow(
       'Wynik firmy / wypłata',
       `Przychody firmowe ${formatMoney(report.company.income)} - koszty firmowe ${formatMoney(report.company.expense)}. Wydatki domowe pominięte.`,
       report.company.balance,
       'company-result-row'
-    )
-  ].join('');
+    ));
+  }
+
+  for (const groupName of settings.customGroups || []) {
+    const groupSummary = summarizeGroup(filteredEntries, groupName);
+    if (!groupSummary.income && !groupSummary.expense) continue;
+    rows.push(mainReportRow(
+      groupName,
+      `Własna grupa/tag · przychody ${formatMoney(groupSummary.income)} · koszty ${formatMoney(groupSummary.expense)}`,
+      groupSummary.balance,
+      'custom-report-row'
+    ));
+  }
+
+  el.mainReport.innerHTML = rows.length
+    ? rows.join('')
+    : '<div class="empty-state">Wszystkie kafelki raportu głównego są ukryte. Zmień to w Ustawieniach.</div>';
 }
 
 function renderSummary() {
@@ -2338,6 +2494,7 @@ async function handleTagRuleSubmit(event) {
   el.tagRuleCategory.value = 'Inne';
   el.tagRuleType.value = '';
   await reloadTagRules();
+  renderMainReportSettings();
   applyFilters();
   showMessage('Reguła tagów zapisana.');
 }
@@ -2348,6 +2505,7 @@ async function handleTagRuleDelete(id) {
   if (!window.confirm(`Usunąć regułę: ${rule.name}? Wpisy nie zostaną usunięte.`)) return;
   await deleteTagRule(id);
   await reloadTagRules();
+  renderMainReportSettings();
   applyFilters();
   showMessage('Reguła tagów usunięta.');
 }
@@ -3740,6 +3898,8 @@ function bindEvents() {
   el.entryForm.addEventListener('submit', handleFormSubmit);
   el.tagRuleForm.addEventListener('submit', event => handleTagRuleSubmit(event).catch(error => showMessage(error.message, 'error')));
   el.tagRulesList.addEventListener('click', handleTagRulesClick);
+  if (el.mainReportSettings) el.mainReportSettings.addEventListener('change', handleMainReportSettingsChange);
+  if (el.mainReportResetButton) el.mainReportResetButton.addEventListener('click', resetMainReportSettings);
   el.parseButton.addEventListener('click', handleParseText);
   el.addParsedButton.addEventListener('click', () => handleAddParsedEntries().catch(error => showMessage(error.message, 'error')));
   el.parsePreview.addEventListener('input', event => updateParsedDraftFromElement(event.target));
@@ -3956,8 +4116,10 @@ async function init() {
   await seedDefaultTagRules();
   await ensureEntrySyncIds();
   renderTagRules();
+  renderMainReportSettings();
   el.tagRuleCategory.value = 'Inne';
   await reloadEntries();
+  renderMainReportSettings();
   bindEvents();
   setupTabs();
   setupThemes();

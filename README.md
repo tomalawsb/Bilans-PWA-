@@ -1,20 +1,11 @@
-# Portfel PRO v. 1.0 — Etap 28
+# Portfel PRO v. 1.0 — Etap 29
 
 Poprawki tego etapu:
-- Poprawiono rozpoznawanie kwot w szybkim dodawaniu.
-- Obsługiwane przykłady: `3 zł 46 gr`, `3,46 zł`, `3.46 zł`, `3,46 gr`.
-- Ręczne pole kwoty korzysta z tego samego parsera cen.
-- Zachowano poprawkę tooltipów z etapu 26: na telefonie tooltip pojawia się dopiero po dłuższym przytrzymaniu.
-- Podbito wersję cache do v28.
+- Dodano konfigurację raportu głównego w zakładce **Ustawienia**.
+- Można ukrywać/pokazywać domyślne kafelki: Komputerowe, Montaże, Wydatki domowe, Wynik firmy / wypłata.
+- Można dodać do raportu głównego własne grupy/tagi z bazy tagów.
+- Ustawienia raportu zapisują się lokalnie w przeglądarce.
+- Dodano przycisk **Przywróć domyślne** dla raportu głównego.
+- Podbito wersję cache do v29.
 
-Po wgraniu na GitHub Pages kliknij w programie **Odśwież program** albo otwórz adres z dopiskiem `?v=28`.
-
-
-## Etap 28 — poprawka tooltipów na komputerze
-
-- Tooltipy na komputerze nie pojawiają się już natychmiast po najechaniu myszą.
-- Dodano opóźnienie około 700 ms dla hover/focus.
-- Tooltip na telefonie nadal działa po dłuższym przytrzymaniu.
-- Podbito wersję cache do v28.
-
-Po wgraniu na GitHub Pages kliknij w programie **Odśwież program** albo otwórz adres z dopiskiem `?v=28`.
+Po wgraniu na GitHub Pages kliknij w programie **Odśwież program** albo otwórz adres z dopiskiem `?v=29`.
