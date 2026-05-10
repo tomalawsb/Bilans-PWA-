@@ -10,11 +10,11 @@
     const __manifestFile = new URLSearchParams(location.search).get('action') === 'voice'
       ? 'manifest-voice.webmanifest'
       : 'manifest.webmanifest';
-    document.write(`<link id="appManifest" rel="manifest" href="./${__manifestFile}?v=113">`);
+    document.write(`<link id="appManifest" rel="manifest" href="./${__manifestFile}?v=111">`);
   </script>
-  <link rel="icon" href="./icons/icon-192.png?v=113">
-  <link rel="apple-touch-icon" href="./icons/icon-192.png?v=113">
-  <link rel="stylesheet" href="./src/styles.css?v=113">
+  <link rel="icon" href="./icons/icon-192.png?v=111">
+  <link rel="apple-touch-icon" href="./icons/icon-192.png?v=111">
+  <link rel="stylesheet" href="./src/styles.css?v=111">
 </head>
 <body data-theme="classic">
   <script>
@@ -25,7 +25,7 @@
   <main class="app-shell">
     <header class="app-header">
       <div class="brand-block">
-        <img class="app-logo" src="./icons/logo-portfel-pro.png?v=113" alt="Portfel PRO">
+        <img class="app-logo" src="./icons/logo-portfel-pro.png?v=111" alt="Portfel PRO">
         <div>
           <h1>Portfel PRO <span id="appVersionBadge" class="version-badge">v. 1.1</span></h1>
           <p id="todayLabel">Lokalna aplikacja webowa</p>
@@ -327,31 +327,6 @@
           <p>Program wykrywa podobne wydatki, które wracają co tydzień, co miesiąc albo często się powtarzają.</p>
           <div id="recurringReport" class="category-report recurring-report"></div>
         </article>
-        <article class="panel report-panel wallet-report-panel">
-          <h2>Portfel gotówkowy</h2>
-          <p>Wpisz ręcznie stan gotówki na początek miesiąca. Program doliczy tylko przychody i wydatki oznaczone jako gotówka.</p>
-          <div class="wallet-controls">
-            <label>
-              Miesiąc
-              <input id="walletMonth" type="month">
-            </label>
-            <label>
-              Stan początkowy
-              <input id="walletOpeningBalance" type="text" inputmode="decimal" placeholder="np. 500">
-            </label>
-            <button id="walletSaveOpeningButton" class="secondary" type="button">Zapisz stan</button>
-            <label>
-              Korekta +/-
-              <input id="walletCorrectionAmount" type="text" inputmode="decimal" placeholder="np. -20 albo 50">
-            </label>
-            <label class="wide">
-              Opis korekty
-              <input id="walletCorrectionNote" type="text" placeholder="np. przeliczenie portfela">
-            </label>
-            <button id="walletAddCorrectionButton" class="secondary" type="button">Dodaj korektę</button>
-          </div>
-          <div id="walletReport" class="category-report wallet-report"></div>
-        </article>
         <article class="panel report-panel">
           <h2>Raport kategorii</h2>
           <p>Raport szczegółowy według aktualnie widocznych wpisów i ustawionych filtrów.</p>
@@ -592,7 +567,7 @@
             <ol>
               <li>Kliknij <strong>Odśwież program</strong>.</li>
               <li>Odśwież stronę w przeglądarce.</li>
-              <li>Jeżeli dalej widzisz starą wersję, otwórz adres z dopiskiem <code>?v=113</code>.</li>
+              <li>Jeżeli dalej widzisz starą wersję, otwórz adres z dopiskiem <code>?v=111</code>.</li>
             </ol>
           </article>
         </div>
@@ -697,7 +672,7 @@
     </section>
   </main>
 
-  <script src="./src/config.js?v=113"></script>
-  <script src="./src/app.js?v=113" type="module"></script>
+  <script src="./src/config.js?v=111"></script>
+  <script src="./src/app.js?v=111" type="module"></script>
 </body>
 </html>
