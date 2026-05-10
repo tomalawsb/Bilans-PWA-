@@ -1,16 +1,16 @@
 {
-  "name": "Bilans PWA Etap 19",
-  "short_name": "Bilans 18",
+  "name": "Portfel PRO",
+  "short_name": "Portfel PRO",
   "description": "Lokalny rejestr przychodów i wydatków z parserem, kalendarzem, motywami, szybkim dodawaniem głosem i trybem Dropbox.",
   "lang": "pl",
-  "id": "./?app=bilans-pwa",
-  "start_url": "./index.html?v=18",
+  "id": "./?app=portfel-pro",
+  "start_url": "./index.html?v=21",
   "scope": "./",
   "display": "standalone",
   "background_color": "#f7f3e8",
   "theme_color": "#f7f3e8",
   "orientation": "portrait-primary",
-  "version": "18.0.0",
+  "version": "21.0.0",
   "icons": [
     {
       "src": "./icons/icon-192.png",
@@ -30,7 +30,7 @@
       "name": "Dodaj głosem",
       "short_name": "Głos",
       "description": "Otwórz szybkie dodawanie wpisu głosem.",
-      "url": "./index.html?action=voice&v=18",
+      "url": "./index.html?action=voice&v=21",
       "icons": [
         {
           "src": "./icons/icon-192.png",
@@ -43,7 +43,7 @@
       "name": "Dodaj wpis",
       "short_name": "Dodaj",
       "description": "Otwórz ekran szybkiego dodawania wpisu.",
-      "url": "./index.html?v=18",
+      "url": "./index.html?v=21",
       "icons": [
         {
           "src": "./icons/icon-192.png",

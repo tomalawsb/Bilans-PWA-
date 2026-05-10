@@ -1,6 +1,6 @@
 const DB_NAME = 'bilans-pwa-etap1';
 const DB_VERSION = 3;
-const APP_VERSION = 19;
+const APP_VERSION = 21;
 const STORE = 'entries';
 const TAG_RULE_STORE = 'tagRules';
 const DEVICE_ID_KEY = 'bilans-pwa-device-id';
@@ -16,7 +16,10 @@ const THEMES = {
   classic: { name: 'Jasny klasyczny', color: '#f6f3ea' },
   blue: { name: 'Błękitny firmowy', color: '#edf5ff' },
   green: { name: 'Zielony bilans', color: '#eef8f1' },
-  gold: { name: 'Grafitowo-złoty', color: '#f6f2e7' },
+  gold: { name: 'Złoty', color: '#fff6d7' },
+  ruby: { name: 'Rubinowy', color: '#fff1f5' },
+  amber: { name: 'Bursztynowy', color: '#fff7ed' },
+  diamond: { name: 'Diamentowy', color: '#f5fbff' },
   contrast: { name: 'Kontrastowy', color: '#ffffff' },
   dark: { name: 'Ciemny', color: '#101827' }
 };
@@ -116,6 +119,100 @@ const WEEKDAYS = [
   'sobota'
 ];
 
+const NAME_DAY_API_URLS = [
+  'https://nameday.abalin.net/api/V1/today?country=pl',
+  'https://nameday.abalin.net/api/V2/today/Europe%2FWarsaw'
+];
+
+function formatPolishDate(date = new Date()) {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function cleanNamedayText(value) {
+  return String(value || '')
+    .replace(/\s+/g, ' ')
+    .replace(/,+/g, ',')
+    .replace(/^[-,\s]+|[-,\s]+$/g, '')
+    .trim();
+}
+
+function extractPolishNamedays(payload) {
+  const seen = new Set();
+  const results = [];
+
+  const pushValue = value => {
+    if (Array.isArray(value)) {
+      value.forEach(pushValue);
+      return;
+    }
+    if (typeof value !== 'string') return;
+    const cleaned = cleanNamedayText(value);
+    if (!cleaned) return;
+    for (const part of cleaned.split(',').map(item => cleanNamedayText(item)).filter(Boolean)) {
+      const key = part.toLocaleLowerCase('pl-PL');
+      if (!seen.has(key)) {
+        seen.add(key);
+        results.push(part);
+      }
+    }
+  };
+
+  const scan = value => {
+    if (!value || typeof value !== 'object') return;
+    if (Array.isArray(value)) {
+      value.forEach(scan);
+      return;
+    }
+
+    const country = String(value.country || value.country_code || value.countryCode || '').toLocaleLowerCase('pl-PL');
+    if (['pl', 'poland', 'polska'].includes(country)) {
+      pushValue(value.name || value.names || value.nameday || value.namedays);
+    }
+
+    for (const [key, child] of Object.entries(value)) {
+      const normalizedKey = key.toLocaleLowerCase('pl-PL');
+      if (['name_pl', 'names_pl', 'nameday_pl', 'pl'].includes(normalizedKey)) {
+        pushValue(child);
+      } else {
+        scan(child);
+      }
+    }
+  };
+
+  scan(payload);
+  return results.join(', ');
+}
+
+function setTodayHeader(namedays = '') {
+  if (!el.todayLabel) return;
+  const dateText = formatPolishDate();
+  const names = cleanNamedayText(namedays);
+  el.todayLabel.textContent = names
+    ? `${dateText} · imieniny: ${names}`
+    : `${dateText} · imieniny: brak danych`;
+}
+
+async function updateTodayNamedays() {
+  setTodayHeader('wczytywanie...');
+  for (const url of NAME_DAY_API_URLS) {
+    try {
+      const response = await fetch(url, { cache: 'no-store' });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const payload = await response.json();
+      const namedays = extractPolishNamedays(payload);
+      if (namedays) {
+        setTodayHeader(namedays);
+        return;
+      }
+    } catch (_) {}
+  }
+  setTodayHeader('brak danych');
+}
+
+
 let db;
 let allEntries = [];
 let filteredEntries = [];
@@ -149,6 +246,7 @@ const el = {
   cacheResetButton: document.querySelector('#cacheResetButton'),
   appVersionBadge: document.querySelector('#appVersionBadge'),
   exportButton: document.querySelector('#exportButton'),
+  importButton: document.querySelector('#importButton'),
   importInput: document.querySelector('#importInput'),
   quickText: document.querySelector('#quickText'),
   parseButton: document.querySelector('#parseButton'),
@@ -175,7 +273,9 @@ const el = {
   exportYearPngButton: document.querySelector('#exportYearPngButton'),
   printYearPdfButton: document.querySelector('#printYearPdfButton'),
   syncExportButton: document.querySelector('#syncExportButton'),
+  syncImportButton: document.querySelector('#syncImportButton'),
   syncImportInput: document.querySelector('#syncImportInput'),
+  replaceImportButton: document.querySelector('#replaceImportButton'),
   replaceImportInput: document.querySelector('#replaceImportInput'),
   syncInfo: document.querySelector('#syncInfo'),
   startupModePanel: document.querySelector('#startupModePanel'),
@@ -2442,7 +2542,7 @@ async function getDropboxAccessToken() {
 
 function makeExportPayload() {
   return {
-    app: 'Bilans PWA',
+    app: 'Portfel PRO',
     version: APP_VERSION,
     exportedAt: new Date().toISOString(),
     deviceId: getDeviceId(),
@@ -2613,7 +2713,7 @@ function exportJson() {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = `bilans-pwa-backup-${todayISO()}.json`;
+  link.download = `portfel-pro-backup-${todayISO()}.json`;
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -2628,7 +2728,9 @@ async function importJson(file, options = {}) {
 }
 
 async function handleClearAll() {
-  if (!allEntries.length) {
+  const entriesToDelete = allEntries.length ? [...allEntries] : await getAllEntries();
+
+  if (!entriesToDelete.length) {
     showMessage('Nie ma danych do usunięcia.');
     return;
   }
@@ -2639,7 +2741,7 @@ async function handleClearAll() {
   const second = window.confirm('To jest operacja nieodwracalna, jeśli nie masz eksportu JSON. Na pewno usunąć?');
   if (!second) return;
 
-  rememberDeletedEntries(allEntries);
+  rememberDeletedEntries(entriesToDelete);
   await clearEntries();
   resetForm();
   await reloadEntries();
@@ -2761,7 +2863,7 @@ function drawMonthCalendarCanvas(ctx, width, height) {
   const monthSummary = summarize(monthEntries);
   const title = `${CALENDAR_MONTHS_PL[monthIndex]} ${year}`;
 
-  drawText(ctx, 'Bilans PWA — kalendarz miesięczny', 70, 70, { size: 30, weight: 800, color: '#7c4d00' });
+  drawText(ctx, 'Portfel PRO — kalendarz miesięczny', 70, 70, { size: 30, weight: 800, color: '#7c4d00' });
   drawText(ctx, title, 70, 115, { size: 42, weight: 900 });
   drawText(ctx, `Wpisy: ${monthEntries.length} · Przychody ${formatMoney(monthSummary.income)} · Wydatki ${formatMoney(monthSummary.expense)} · Bilans ${formatMoney(monthSummary.balance)}`, 70, 175, { size: 24, color: '#667085' });
 
@@ -2829,7 +2931,7 @@ function drawYearCalendarCanvas(ctx, width, height) {
     if (data.activity > maxActivity) maxActivity = data.activity;
   });
 
-  drawText(ctx, 'Bilans PWA — kalendarz roczny', 70, 70, { size: 30, weight: 800, color: '#7c4d00' });
+  drawText(ctx, 'Portfel PRO — kalendarz roczny', 70, 70, { size: 30, weight: 800, color: '#7c4d00' });
   drawText(ctx, `Rok ${year}`, 70, 115, { size: 42, weight: 900 });
   drawText(ctx, `Wpisy: ${yearEntries.length} · Przychody ${formatMoney(yearSummary.income)} · Wydatki ${formatMoney(yearSummary.expense)} · Bilans ${formatMoney(yearSummary.balance)}`, 70, 175, { size: 24, color: '#667085' });
 
@@ -2933,7 +3035,7 @@ async function clearAppCacheAndReload() {
   try {
     if ('caches' in window) {
       const keys = await caches.keys();
-      await Promise.all(keys.filter(key => key.startsWith('bilans-pwa')).map(key => caches.delete(key)));
+      await Promise.all(keys.filter(key => key.startsWith('bilans-pwa') || key.startsWith('portfel-pro')).map(key => caches.delete(key)));
     }
 
     if ('serviceWorker' in navigator && !isFileProtocol()) {
@@ -3155,6 +3257,12 @@ function setupTabs() {
   activate(saved);
 }
 
+function openFilePicker(input) {
+  if (!input) return;
+  input.value = '';
+  input.click();
+}
+
 function bindEvents() {
   el.entryForm.addEventListener('submit', handleFormSubmit);
   el.tagRuleForm.addEventListener('submit', event => handleTagRuleSubmit(event).catch(error => showMessage(error.message, 'error')));
@@ -3273,7 +3381,13 @@ function bindEvents() {
   el.exportYearPngButton.addEventListener('click', () => exportCalendarPng('year').catch(error => showMessage(error.message, 'error')));
   el.printMonthPdfButton.addEventListener('click', () => printCalendarPdf('month'));
   el.printYearPdfButton.addEventListener('click', () => printCalendarPdf('year'));
-  el.clearAllButton.addEventListener('click', () => handleClearAll().catch(error => showMessage(error.message, 'error')));
+  if (el.clearAllButton) {
+    el.clearAllButton.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      handleClearAll().catch(error => showMessage(error.message, 'error'));
+    });
+  }
   const handleImportChange = (event, options = {}) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -3282,9 +3396,32 @@ function bindEvents() {
       .finally(() => { event.target.value = ''; });
   };
 
-  el.importInput.addEventListener('change', event => handleImportChange(event, { replace: false }));
-  el.syncImportInput.addEventListener('change', event => handleImportChange(event, { replace: false }));
-  el.replaceImportInput.addEventListener('change', event => handleImportChange(event, { replace: true }));
+  if (el.importButton && el.importInput) {
+    el.importButton.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      openFilePicker(el.importInput);
+    });
+    el.importInput.addEventListener('change', event => handleImportChange(event, { replace: false }));
+  }
+
+  if (el.syncImportButton && el.syncImportInput) {
+    el.syncImportButton.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      openFilePicker(el.syncImportInput);
+    });
+    el.syncImportInput.addEventListener('change', event => handleImportChange(event, { replace: false }));
+  }
+
+  if (el.replaceImportButton && el.replaceImportInput) {
+    el.replaceImportButton.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      openFilePicker(el.replaceImportInput);
+    });
+    el.replaceImportInput.addEventListener('change', event => handleImportChange(event, { replace: true }));
+  }
 
   if (el.chooseLocalModeButton) el.chooseLocalModeButton.addEventListener('click', () => {
     setStorageMode('local');
@@ -3314,9 +3451,9 @@ function bindEvents() {
 
 async function init() {
   const today = todayISO();
-  document.title = `Bilans PWA — Etap ${APP_VERSION}`;
-  if (el.appVersionBadge) el.appVersionBadge.textContent = `Etap ${APP_VERSION}`;
-  el.todayLabel.textContent = `Dzisiaj: ${today} · dane lokalne w przeglądarce · Etap ${APP_VERSION}`;
+  document.title = 'Portfel PRO';
+  if (el.appVersionBadge) el.appVersionBadge.textContent = '';
+  setTodayHeader('wczytywanie...');
   if (isFileProtocol()) {
     showMessage('Program został otwarty bezpośrednio z index.html. Do importu JSON, PWA i cache użyj serwera lokalnego albo GitHub Pages.', 'error');
   }
@@ -3345,6 +3482,7 @@ async function init() {
   setupTabs();
   setupThemes();
   setupVoiceMode();
+  updateTodayNamedays();
   updateCloudUi();
   setupFirstRunMode();
   try {

@@ -4,12 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#f6f3ea">
-  <meta name="description" content="Bilans PWA — prosty lokalny rejestr przychodów, wydatków, raportów i kalendarza.">
-  <title>Bilans PWA — Etap 19</title>
-  <link rel="manifest" href="./manifest.webmanifest?v=18">
+  <meta name="description" content="Portfel PRO — lokalny rejestr przychodów, wydatków, raportów i kalendarza.">
+  <title>Portfel PRO</title>
+  <link rel="manifest" href="./manifest.webmanifest?v=21">
   <link rel="icon" href="./icons/icon-192.png">
   <link rel="apple-touch-icon" href="./icons/icon-192.png">
-  <link rel="stylesheet" href="./src/styles.css?v=18">
+  <link rel="stylesheet" href="./src/styles.css?v=21">
 </head>
 <body data-theme="classic">
   <script>
@@ -20,21 +20,18 @@
   <main class="app-shell">
     <header class="app-header">
       <div class="brand-block">
-        <div class="app-mark">B</div>
+        <div class="app-mark">P</div>
         <div>
-          <h1>Bilans PWA <span id="appVersionBadge" class="version-badge">Etap 19</span></h1>
+          <h1>Portfel PRO</h1>
           <p id="todayLabel">Lokalna aplikacja webowa</p>
         </div>
       </div>
       <div class="header-actions">
         <button id="installButton" class="secondary hidden" type="button">Zainstaluj</button>
-        <button id="voiceShortcutButton" class="secondary" type="button">Dodaj głosem</button>
         <button id="cacheResetButton" class="ghost" type="button">Odśwież program</button>
         <button id="exportButton" class="secondary" type="button">Zapisz kopię danych</button>
-        <label class="file-button">
-          Wczytaj dane
-          <input id="importInput" type="file" accept="application/json,.json">
-        </label>
+        <button id="importButton" class="file-button" type="button">Wczytaj dane</button>
+        <input id="importInput" class="hidden-file-input" type="file" accept="application/json,.json">
       </div>
     </header>
 
@@ -410,8 +407,10 @@
             <p>Zapisz dane do pliku JSON albo wczytaj dane z innego urządzenia.</p>
             <div class="button-row">
               <button id="syncExportButton" class="secondary" type="button">Zapisz kopię danych</button>
-              <label class="file-button">Scal dane z pliku<input id="syncImportInput" type="file" accept="application/json,.json"></label>
-              <label class="file-button danger-file">Zastąp dane plikiem<input id="replaceImportInput" type="file" accept="application/json,.json"></label>
+              <button id="syncImportButton" class="file-button" type="button">Scal dane z pliku</button>
+              <input id="syncImportInput" class="hidden-file-input" type="file" accept="application/json,.json">
+              <button id="replaceImportButton" class="file-button danger-file" type="button">Zastąp dane plikiem</button>
+              <input id="replaceImportInput" class="hidden-file-input" type="file" accept="application/json,.json">
             </div>
             <small id="syncInfo" class="sync-info">Tryb scalania dopisuje nowe wpisy i aktualizuje starsze wersje tych samych wpisów.</small>
           </article>
@@ -444,7 +443,10 @@
               <option value="classic">Jasny klasyczny</option>
               <option value="blue">Błękitny firmowy</option>
               <option value="green">Zielony bilans</option>
-              <option value="gold">Grafitowo-złoty</option>
+              <option value="gold">Złoty</option>
+              <option value="ruby">Rubinowy</option>
+              <option value="amber">Bursztynowy</option>
+              <option value="diamond">Diamentowy</option>
               <option value="contrast">Kontrastowy</option>
               <option value="dark">Ciemny</option>
             </select>
@@ -453,7 +455,10 @@
             <button class="theme-card" type="button" data-theme-option="classic"><span></span>Jasny</button>
             <button class="theme-card" type="button" data-theme-option="blue"><span></span>Błękitny</button>
             <button class="theme-card" type="button" data-theme-option="green"><span></span>Zielony</button>
-            <button class="theme-card" type="button" data-theme-option="gold"><span></span>Grafit-złoto</button>
+            <button class="theme-card" type="button" data-theme-option="gold"><span></span>Złoty</button>
+            <button class="theme-card" type="button" data-theme-option="ruby"><span></span>Rubinowy</button>
+            <button class="theme-card" type="button" data-theme-option="amber"><span></span>Bursztynowy</button>
+            <button class="theme-card" type="button" data-theme-option="diamond"><span></span>Diamentowy</button>
             <button class="theme-card" type="button" data-theme-option="contrast"><span></span>Kontrast</button>
             <button class="theme-card" type="button" data-theme-option="dark"><span></span>Ciemny</button>
           </div>
@@ -498,6 +503,6 @@
     </section>
   </main>
 
-  <script src="./src/app.js?v=18" type="module"></script>
+  <script src="./src/app.js?v=21" type="module"></script>
 </body>
 </html>

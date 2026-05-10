@@ -1,12 +1,12 @@
-const CACHE_NAME = 'bilans-pwa-etap19-v1';
-const APP_VERSION = '19';
+const CACHE_NAME = 'portfel-pro-etap21-v1';
+const APP_VERSION = '21';
 const APP_SHELL = [
   './',
   './index.html',
-  './index.html?v=19',
-  './manifest.webmanifest?v=19',
-  './src/styles.css?v=19',
-  './src/app.js?v=19',
+  './index.html?v=21',
+  './manifest.webmanifest?v=21',
+  './src/styles.css?v=21',
+  './src/app.js?v=21',
   './icons/icon-192.png',
   './icons/icon-512.png'
 ];
@@ -22,7 +22,7 @@ self.addEventListener('install', event => {
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(keys.filter(key => key.startsWith('bilans-pwa-') && key !== CACHE_NAME).map(key => caches.delete(key))))
+      .then(keys => Promise.all(keys.filter(key => (key.startsWith('bilans-pwa-') || key.startsWith('portfel-pro-')) && key !== CACHE_NAME).map(key => caches.delete(key))))
       .then(() => self.clients.claim())
   );
 });
@@ -47,7 +47,7 @@ self.addEventListener('fetch', event => {
         if (cached) return cached;
 
         if (event.request.mode === 'navigate') {
-          return await caches.match('./index.html?v=19') || await caches.match('./index.html');
+          return await caches.match('./index.html?v=21') || await caches.match('./index.html');
         }
 
         return new Response('Brak połączenia i brak pliku w cache.', {
