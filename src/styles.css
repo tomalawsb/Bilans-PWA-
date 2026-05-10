@@ -1102,7 +1102,7 @@ body[data-theme="dark"] .version-badge {
 }
 
 
-/* Etap 36: pełna korekta kontrastu motywu ciemnego */
+/* Etap 37: pełna korekta kontrastu motywu ciemnego */
 body[data-theme="dark"] {
   color-scheme: dark;
 }
@@ -1281,4 +1281,225 @@ body[data-theme="dark"] .message.error {
   background: #3a1720;
   color: #fecaca;
   border-color: #7f1d1d;
+}
+
+
+/* Etap 37: twarda korekta kontrastu motywu ciemnego — formularze, selecty, karty motywów i kalendarze */
+body[data-theme="dark"] {
+  --border: var(--line);
+  --accent-soft: var(--accent-2);
+  --panel-soft: #132033;
+  color-scheme: dark;
+}
+
+body[data-theme="dark"] input,
+body[data-theme="dark"] select,
+body[data-theme="dark"] textarea,
+body[data-theme="dark"] option,
+body[data-theme="dark"] optgroup {
+  background-color: #0f172a !important;
+  color: #eef4ff !important;
+  border-color: #3b4d67 !important;
+  caret-color: #eef4ff;
+}
+
+body[data-theme="dark"] select:focus,
+body[data-theme="dark"] input:focus,
+body[data-theme="dark"] textarea:focus {
+  background-color: #101b31 !important;
+  color: #ffffff !important;
+  border-color: #7dd3fc !important;
+}
+
+body[data-theme="dark"] input::placeholder,
+body[data-theme="dark"] textarea::placeholder {
+  color: #a8b6ca !important;
+  opacity: 1;
+}
+
+body[data-theme="dark"] .theme-preview-grid button.theme-card,
+body[data-theme="dark"] button.theme-card,
+body[data-theme="dark"] .theme-card,
+body[data-theme="dark"] .theme-card *,
+body[data-theme="dark"] .report-option,
+body[data-theme="dark"] .report-option *,
+body[data-theme="dark"] .mode-choice-card,
+body[data-theme="dark"] .mode-choice-card * {
+  color: #eef4ff !important;
+}
+
+body[data-theme="dark"] .theme-preview-grid button.theme-card,
+body[data-theme="dark"] button.theme-card,
+body[data-theme="dark"] .report-option,
+body[data-theme="dark"] .mode-choice-card {
+  background-color: #0f172a !important;
+  border-color: #30415a !important;
+}
+
+body[data-theme="dark"] .theme-preview-grid button.theme-card:hover,
+body[data-theme="dark"] button.theme-card:hover,
+body[data-theme="dark"] .report-option:hover,
+body[data-theme="dark"] .mode-choice-card:hover {
+  background-color: #17243a !important;
+  border-color: #7dd3fc !important;
+}
+
+body[data-theme="dark"] .theme-card.active,
+body[data-theme="dark"] .report-option:has(input:checked) {
+  background-color: #17243a !important;
+  border-color: #7dd3fc !important;
+  box-shadow: 0 0 0 3px rgba(125, 211, 252, .18) !important;
+}
+
+body[data-theme="dark"] .calendar-meta-row,
+body[data-theme="dark"] .calendar-day,
+body[data-theme="dark"] .year-day,
+body[data-theme="dark"] .year-month,
+body[data-theme="dark"] .year-month-card,
+body[data-theme="dark"] .calendar-day-summary,
+body[data-theme="dark"] .calendar-day-entry,
+body[data-theme="dark"] .year-top-row,
+body[data-theme="dark"] .heatmap-legend,
+body[data-theme="dark"] .heatmap-legend *,
+body[data-theme="dark"] .mini-weekdays span,
+body[data-theme="dark"] .calendar-weekdays span {
+  color: #eef4ff !important;
+}
+
+body[data-theme="dark"] .calendar-day,
+body[data-theme="dark"] .year-day,
+body[data-theme="dark"] .year-month,
+body[data-theme="dark"] .year-month-card,
+body[data-theme="dark"] .calendar-day-entry,
+body[data-theme="dark"] .year-top-row {
+  background-color: #0f172a !important;
+  border-color: #30415a !important;
+}
+
+body[data-theme="dark"] .calendar-day.outside,
+body[data-theme="dark"] .year-day.is-empty {
+  color: #7f8ea3 !important;
+  background-color: #111a2b !important;
+}
+
+body[data-theme="dark"] .calendar-day:hover,
+body[data-theme="dark"] .year-day:hover,
+body[data-theme="dark"] .calendar-day-entry:hover,
+body[data-theme="dark"] .year-top-row:hover {
+  background-color: #17243a !important;
+  color: #ffffff !important;
+  border-color: #7dd3fc !important;
+}
+
+body[data-theme="dark"] .heat-level-0,
+body[data-theme="dark"] .year-day.heat-level-0 { background-color: #0f172a !important; color: #eef4ff !important; }
+body[data-theme="dark"] .heat-level-1,
+body[data-theme="dark"] .year-day.heat-level-1 { background-color: #12301f !important; color: #eef4ff !important; }
+body[data-theme="dark"] .heat-level-2,
+body[data-theme="dark"] .year-day.heat-level-2 { background-color: #18512f !important; color: #ffffff !important; }
+body[data-theme="dark"] .heat-level-3,
+body[data-theme="dark"] .year-day.heat-level-3 { background-color: #247343 !important; color: #ffffff !important; }
+body[data-theme="dark"] .heat-level-4,
+body[data-theme="dark"] .year-day.heat-level-4 { background-color: #32a05b !important; color: #07111f !important; }
+body[data-theme="dark"] .heat-level-5,
+body[data-theme="dark"] .year-day.heat-level-5 { background-color: #6ee7b7 !important; color: #06150f !important; }
+
+body[data-theme="dark"] .panel,
+body[data-theme="dark"] .summary-card,
+body[data-theme="dark"] .mini-panel,
+body[data-theme="dark"] .help-card,
+body[data-theme="dark"] .dropbox-simple-card,
+body[data-theme="dark"] .dropbox-advanced-panel,
+body[data-theme="dark"] .report-settings-block,
+body[data-theme="dark"] .parse-card,
+body[data-theme="dark"] .parsed-card,
+body[data-theme="dark"] .entry-card,
+body[data-theme="dark"] .tag-rule-card,
+body[data-theme="dark"] .table-wrap,
+body[data-theme="dark"] .empty-state,
+body[data-theme="dark"] .tag,
+body[data-theme="dark"] .message {
+  color: #eef4ff !important;
+  border-color: #30415a !important;
+}
+
+body[data-theme="dark"] .panel,
+body[data-theme="dark"] .summary-card,
+body[data-theme="dark"] .mini-panel,
+body[data-theme="dark"] .help-card,
+body[data-theme="dark"] .dropbox-simple-card,
+body[data-theme="dark"] .dropbox-advanced-panel,
+body[data-theme="dark"] .report-settings-block {
+  background-color: #162235 !important;
+}
+
+body[data-theme="dark"] .report-row,
+body[data-theme="dark"] .category-row,
+body[data-theme="dark"] .item-row,
+body[data-theme="dark"] .entry-card,
+body[data-theme="dark"] .tag-rule-card,
+body[data-theme="dark"] .parse-card,
+body[data-theme="dark"] .parsed-card,
+body[data-theme="dark"] .empty-state,
+body[data-theme="dark"] .tag,
+body[data-theme="dark"] .message {
+  background-color: #0f172a !important;
+}
+
+body[data-theme="dark"] .entries-table th,
+body[data-theme="dark"] .entries-table td,
+body[data-theme="dark"] .entries-table td *,
+body[data-theme="dark"] .mobile-entries,
+body[data-theme="dark"] .mobile-entries * {
+  color: #eef4ff !important;
+}
+
+body[data-theme="dark"] .entries-table th { background-color: #1f3048 !important; }
+body[data-theme="dark"] .entries-table td { background-color: #0f172a !important; border-color: #30415a !important; }
+body[data-theme="dark"] .entries-table tr:hover td { background-color: #17243a !important; }
+
+body[data-theme="dark"] .muted-small,
+body[data-theme="dark"] small,
+body[data-theme="dark"] p,
+body[data-theme="dark"] .sync-info,
+body[data-theme="dark"] .mirror-info,
+body[data-theme="dark"] #todayLabel,
+body[data-theme="dark"] .summary-card span,
+body[data-theme="dark"] .summary-card small,
+body[data-theme="dark"] .report-option small {
+  color: #a8b6ca !important;
+}
+
+body[data-theme="dark"] .amount-income { color: #86efac !important; }
+body[data-theme="dark"] .amount-expense { color: #fca5a5 !important; }
+body[data-theme="dark"] .parse-summary,
+body[data-theme="dark"] .version-badge {
+  background-color: #19364d !important;
+  color: #7dd3fc !important;
+  border-color: #30415a !important;
+}
+
+body[data-theme="dark"] button.secondary,
+body[data-theme="dark"] button.ghost,
+body[data-theme="dark"] .file-button.secondary,
+body[data-theme="dark"] .file-button.ghost,
+body[data-theme="dark"] .small-button {
+  background-color: #0f172a !important;
+  color: #eef4ff !important;
+  border-color: #30415a !important;
+}
+
+body[data-theme="dark"] button.secondary:hover,
+body[data-theme="dark"] button.ghost:hover,
+body[data-theme="dark"] .file-button.secondary:hover,
+body[data-theme="dark"] .file-button.ghost:hover,
+body[data-theme="dark"] .small-button:hover {
+  background-color: #17243a !important;
+  color: #ffffff !important;
+  border-color: #7dd3fc !important;
+}
+
+body[data-theme="dark"] input[type="checkbox"],
+body[data-theme="dark"] input[type="radio"] {
+  accent-color: #7dd3fc;
 }
