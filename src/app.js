@@ -1,7 +1,8 @@
 const DB_NAME = 'bilans-pwa-etap1';
 const DB_VERSION = 3;
-const APP_VERSION = 33;
-const DROPBOX_DEFAULT_APP_KEY = String(window.PORTFEL_PRO_CONFIG?.dropboxAppKey || '').trim(); // Ustaw w src/config.js, wtedy użytkownik klika tylko Połącz z Dropbox.
+const APP_VERSION = 34;
+const RAW_DROPBOX_DEFAULT_APP_KEY = String(window.PORTFEL_PRO_CONFIG?.dropboxAppKey || '').trim();
+const DROPBOX_DEFAULT_APP_KEY = /^WSTAW_TUTAJ/i.test(RAW_DROPBOX_DEFAULT_APP_KEY) ? '' : RAW_DROPBOX_DEFAULT_APP_KEY; // Ustaw w src/config.js, wtedy użytkownik klika tylko Połącz z Dropbox.
 const MAIN_INSTALL_KEY = 'portfel-pro-main-installed';
 const VOICE_INSTALL_KEY = 'portfel-pro-voice-installed';
 let activeInstallTarget = null;
@@ -306,6 +307,7 @@ const el = {
   chooseDropboxModeButton: document.querySelector('#chooseDropboxModeButton'),
   storageModeSelect: document.querySelector('#storageModeSelect'),
   dropboxAppKeyInput: document.querySelector('#dropboxAppKeyInput'),
+  dropboxAppKeyLabel: document.querySelector('#dropboxAppKeyLabel'),
   dropboxFilePathInput: document.querySelector('#dropboxFilePathInput'),
   dropboxConnectButton: document.querySelector('#dropboxConnectButton'),
   dropboxSyncNowButton: document.querySelector('#dropboxSyncNowButton'),
@@ -2838,6 +2840,10 @@ function setStorageMode(mode) {
   updateCloudUi();
 }
 
+function hasBuiltInDropboxAppKey() {
+  return Boolean(DROPBOX_DEFAULT_APP_KEY);
+}
+
 function getDropboxConfig() {
   try {
     const saved = JSON.parse(localStorage.getItem(DROPBOX_CONFIG_KEY) || '{}');
@@ -2885,6 +2891,9 @@ function updateCloudUi(statusText = '') {
   const config = getDropboxConfig();
   if (el.storageModeSelect) el.storageModeSelect.value = mode;
   if (el.dropboxAppKeyInput && !el.dropboxAppKeyInput.value) el.dropboxAppKeyInput.value = config.appKey;
+  if (el.dropboxAppKeyLabel) {
+    el.dropboxAppKeyLabel.classList.toggle('hidden', hasBuiltInDropboxAppKey());
+  }
   if (el.dropboxFilePathInput && !el.dropboxFilePathInput.value) el.dropboxFilePathInput.value = config.path;
   if (el.cloudStatus) {
     if (statusText) el.cloudStatus.textContent = statusText;
@@ -2918,7 +2927,7 @@ async function startDropboxAuth() {
   setStorageMode('dropbox');
   const config = saveDropboxConfig();
   if (!config.appKey) {
-    showMessage('Dropbox nie jest jeszcze skonfigurowany w tej kopii programu. Autor musi wpisać App Key jeden raz w pliku src/config.js. Po tym użytkownik będzie klikał tylko „Połącz z Dropbox”. Tymczasowo możesz wpisać App Key w Trybie zaawansowanym.', 'error');
+    showMessage('Dropbox nie jest jeszcze skonfigurowany w tej kopii programu. Wpisz swój publiczny App Key jeden raz w pliku src/config.js. Potem zwykły użytkownik będzie tylko klikał „Połącz z Dropbox” i logował się na swoje konto.', 'error');
     return;
   }
   if (!window.isSecureContext && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
