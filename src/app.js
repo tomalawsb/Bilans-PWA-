@@ -1,9 +1,10 @@
 const DB_NAME = 'bilans-pwa-etap1';
 const DB_VERSION = 3;
-const APP_VERSION = 31;
+const APP_VERSION = 32;
 const DROPBOX_DEFAULT_APP_KEY = String(window.PORTFEL_PRO_CONFIG?.dropboxAppKey || '').trim(); // Ustaw w src/config.js, wtedy użytkownik klika tylko Połącz z Dropbox.
 const MAIN_INSTALL_KEY = 'portfel-pro-main-installed';
 const VOICE_INSTALL_KEY = 'portfel-pro-voice-installed';
+let activeInstallTarget = null;
 
 const STORE = 'entries';
 const TAG_RULE_STORE = 'tagRules';
@@ -3235,9 +3236,10 @@ function isVoiceInstallRemembered() {
   try { return localStorage.getItem(VOICE_INSTALL_KEY) === '1'; } catch (_) { return false; }
 }
 
-function rememberInstallState() {
+function rememberInstallState(target = null) {
+  const resolvedTarget = target || activeInstallTarget || (isVoiceActionRequested() ? 'voice' : 'main');
   try {
-    if (isVoiceActionRequested()) localStorage.setItem(VOICE_INSTALL_KEY, '1');
+    if (resolvedTarget === 'voice') localStorage.setItem(VOICE_INSTALL_KEY, '1');
     else localStorage.setItem(MAIN_INSTALL_KEY, '1');
   } catch (_) {}
 }
@@ -3248,9 +3250,19 @@ function hideInstallButtons() {
   el.voiceInstallNowButton?.classList.add('hidden');
 }
 
+function hideInstalledTargetButton(target = null) {
+  const resolvedTarget = target || activeInstallTarget || (isVoiceActionRequested() ? 'voice' : 'main');
+  if (resolvedTarget === 'voice') {
+    el.installVoiceButton?.classList.add('hidden');
+    el.voiceInstallNowButton?.classList.add('hidden');
+  } else {
+    el.installButton?.classList.add('hidden');
+  }
+}
+
 function refreshInstallButtons() {
   hideInstallButtons();
-  if (isFileProtocol() || isStandaloneDisplay()) return;
+  if (isFileProtocol()) return;
 
   if (isVoiceActionRequested()) {
     if (!isVoiceInstallRemembered()) {
@@ -3275,7 +3287,9 @@ function showInstallUnavailableMessage() {
   showMessage('Chrome nie udostępnił teraz automatycznego okna instalacji. Użyj menu Chrome → Dodaj do ekranu głównego / Zainstaluj aplikację. Jeśli widzisz „Otwórz aplikację”, program jest już zainstalowany.', 'error');
 }
 
-async function runInstallPrompt() {
+async function runInstallPrompt(target = null) {
+  activeInstallTarget = target || (isVoiceActionRequested() ? 'voice' : 'main');
+
   if (!deferredInstallPrompt) {
     showInstallUnavailableMessage();
     refreshInstallButtons();
@@ -3288,10 +3302,13 @@ async function runInstallPrompt() {
   const choice = await promptEvent.userChoice;
 
   if (choice?.outcome === 'accepted') {
-    rememberInstallState();
-    hideInstallButtons();
-    showMessage(isVoiceActionRequested() ? 'Skrót mikrofonu został zainstalowany.' : 'Program został zainstalowany.');
+    rememberInstallState(activeInstallTarget);
+    hideInstalledTargetButton(activeInstallTarget);
+    showMessage(activeInstallTarget === 'voice' ? 'Skrót mikrofonu został zainstalowany.' : 'Program został zainstalowany.');
+    activeInstallTarget = null;
+    setTimeout(refreshInstallButtons, 300);
   } else {
+    activeInstallTarget = null;
     refreshInstallButtons();
   }
 }
@@ -3314,10 +3331,13 @@ function setupInstallPrompt() {
   });
 
   window.addEventListener('appinstalled', () => {
-    rememberInstallState();
+    const installedTarget = activeInstallTarget || (isVoiceActionRequested() ? 'voice' : 'main');
+    rememberInstallState(installedTarget);
     deferredInstallPrompt = null;
-    hideInstallButtons();
-    showMessage(isVoiceActionRequested() ? 'Skrót mikrofonu został zainstalowany.' : 'Program został zainstalowany.');
+    hideInstalledTargetButton(installedTarget);
+    showMessage(installedTarget === 'voice' ? 'Skrót mikrofonu został zainstalowany.' : 'Program został zainstalowany.');
+    activeInstallTarget = null;
+    setTimeout(refreshInstallButtons, 300);
   });
 
   window.matchMedia?.('(display-mode: standalone)')?.addEventListener?.('change', refreshInstallButtons);
@@ -3326,7 +3346,7 @@ function setupInstallPrompt() {
   el.installButton?.addEventListener('click', event => {
     event.preventDefault();
     event.stopPropagation();
-    runInstallPrompt().catch(error => showMessage(error.message || 'Nie udało się uruchomić instalacji.', 'error'));
+    runInstallPrompt('main').catch(error => showMessage(error.message || 'Nie udało się uruchomić instalacji.', 'error'));
   });
 
   el.installVoiceButton?.addEventListener('click', event => {
@@ -3338,7 +3358,7 @@ function setupInstallPrompt() {
   el.voiceInstallNowButton?.addEventListener('click', event => {
     event.preventDefault();
     event.stopPropagation();
-    runInstallPrompt().catch(error => showMessage(error.message || 'Nie udało się uruchomić instalacji mikrofonu.', 'error'));
+    runInstallPrompt('voice').catch(error => showMessage(error.message || 'Nie udało się uruchomić instalacji mikrofonu.', 'error'));
   });
 }
 

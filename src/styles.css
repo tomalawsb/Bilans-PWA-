@@ -1080,3 +1080,23 @@ body[data-theme="dark"] .important-help {
   border-radius: 10px;
 }
 .small-button { padding: 6px 10px; font-size: 12px; margin-top: 8px; }
+
+/* Etap 32: poprawka czytelności motywu ciemnego */
+body[data-theme="dark"] .tab-button {
+  color: var(--text);
+}
+body[data-theme="dark"] .tab-button.active {
+  color: #08111f;
+}
+body[data-theme="dark"] .app-tabs {
+  background: rgba(22, 34, 53, 0.96);
+}
+body[data-theme="dark"] .tab-button:not(.active):hover {
+  background: #22334d;
+  border-color: #30415a;
+  color: #ffffff;
+}
+body[data-theme="dark"] .version-badge {
+  background: #19364d;
+  color: #7dd3fc;
+}
