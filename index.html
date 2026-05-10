@@ -14,7 +14,7 @@
   </script>
   <link rel="icon" href="./icons/icon-192.png?v=29">
   <link rel="apple-touch-icon" href="./icons/icon-192.png?v=29">
-  <link rel="stylesheet" href="./src/styles.css?v=29">
+  <link rel="stylesheet" href="./src/styles.css?v=30">
 </head>
 <body data-theme="classic">
   <script>
@@ -399,18 +399,25 @@
                 <option value="dropbox">Dropbox</option>
               </select>
             </label>
-            <label>
-              Dropbox App key
-              <input id="dropboxAppKeyInput" type="text" data-help="Tu wklej App key z aplikacji utworzonej w Dropbox Developers." placeholder="Wklej App key z Dropbox Developers">
-            </label>
-            <label>
-              Ścieżka pliku w Dropboxie
-              <input id="dropboxFilePathInput" type="text" data-help="Ścieżka pliku JSON w Dropboxie. Ten sam plik będzie używany przez telefon i komputer." value="/Apps/Bilans/bilans_dane.json">
-            </label>
-            <div class="button-row">
-              <button id="dropboxConnectButton" class="secondary" type="button" data-help="Uruchamia logowanie do Dropboxa i zapisuje token dostępu w tej przeglądarce.">Połącz z Dropbox</button>
-              <button id="dropboxSyncNowButton" class="secondary" type="button" data-help="Ręcznie wysyła i pobiera zmiany z pliku JSON w Dropboxie.">Synchronizuj teraz</button>
-              <button id="dropboxDisconnectButton" class="ghost" type="button" data-help="Usuwa lokalne połączenie z Dropboxem. Nie kasuje pliku danych w Dropboxie.">Odłącz Dropbox</button>
+            <div class="dropbox-simple-card">
+              <strong>Dropbox — tryb prosty</strong>
+              <p>Kliknij jeden przycisk, zaloguj się do Dropboxa i zatwierdź dostęp. Program sam użyje pliku JSON aplikacji.</p>
+              <div class="button-row">
+                <button id="dropboxConnectButton" class="primary" type="button" data-help="Otwiera bezpieczne logowanie Dropbox. Po zatwierdzeniu program sam zapisze połączenie w tej przeglądarce.">Połącz z Dropbox</button>
+                <button id="dropboxSyncNowButton" class="secondary" type="button" data-help="Ręcznie wysyła i pobiera zmiany z pliku JSON w Dropboxie.">Synchronizuj teraz</button>
+                <button id="dropboxDisconnectButton" class="ghost" type="button" data-help="Usuwa lokalne połączenie z Dropboxem. Nie kasuje pliku danych w Dropboxie.">Odłącz Dropbox</button>
+              </div>
+            </div>
+            <button id="dropboxAdvancedToggle" class="ghost small-button" type="button" data-help="Pokazuje techniczne ustawienia Dropboxa. Zwykły użytkownik nie musi ich zmieniać.">Tryb zaawansowany</button>
+            <div id="dropboxAdvancedPanel" class="dropbox-advanced-panel hidden">
+              <label>
+                Dropbox App key
+                <input id="dropboxAppKeyInput" type="text" data-help="App key aplikacji Dropbox. Dla klientów najlepiej wpisać go na stałe w kodzie programu." placeholder="Wklej App key tylko jeśli nie jest wpisany w programie">
+              </label>
+              <label>
+                Ścieżka pliku w Dropboxie
+                <input id="dropboxFilePathInput" type="text" data-help="Ścieżka pliku JSON w Dropboxie. Przy App folder używaj ścieżki /bilans_dane.json." value="/bilans_dane.json">
+              </label>
             </div>
             <small id="cloudStatus" class="sync-info">Tryb lokalny. Dane są zapisane tylko w tej przeglądarce.</small>
           </article>
@@ -643,6 +650,6 @@
     </section>
   </main>
 
-  <script src="./src/app.js?v=29" type="module"></script>
+  <script src="./src/app.js?v=30" type="module"></script>
 </body>
 </html>

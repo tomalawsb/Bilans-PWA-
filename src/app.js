@@ -1,6 +1,7 @@
 const DB_NAME = 'bilans-pwa-etap1';
 const DB_VERSION = 3;
-const APP_VERSION = 29;
+const APP_VERSION = 30;
+const DROPBOX_DEFAULT_APP_KEY = ""; // Wpisz tutaj publiczny App key Dropbox, żeby użytkownik nie musiał go podawać ręcznie.
 const MAIN_INSTALL_KEY = 'portfel-pro-main-installed';
 const VOICE_INSTALL_KEY = 'portfel-pro-voice-installed';
 
@@ -308,6 +309,8 @@ const el = {
   dropboxConnectButton: document.querySelector('#dropboxConnectButton'),
   dropboxSyncNowButton: document.querySelector('#dropboxSyncNowButton'),
   dropboxDisconnectButton: document.querySelector('#dropboxDisconnectButton'),
+  dropboxAdvancedToggle: document.querySelector('#dropboxAdvancedToggle'),
+  dropboxAdvancedPanel: document.querySelector('#dropboxAdvancedPanel'),
   cloudStatus: document.querySelector('#cloudStatus'),
   tagRuleForm: document.querySelector('#tagRuleForm'),
   tagGroupName: document.querySelector('#tagGroupName'),
@@ -2838,18 +2841,18 @@ function getDropboxConfig() {
   try {
     const saved = JSON.parse(localStorage.getItem(DROPBOX_CONFIG_KEY) || '{}');
     return {
-      appKey: String(saved.appKey || '').trim(),
-      path: String(saved.path || '/Apps/Bilans/bilans_dane.json').trim() || '/Apps/Bilans/bilans_dane.json'
+      appKey: String(saved.appKey || DROPBOX_DEFAULT_APP_KEY || '').trim(),
+      path: String(saved.path || '/bilans_dane.json').trim() || '/bilans_dane.json'
     };
   } catch (_) {
-    return { appKey: '', path: '/Apps/Bilans/bilans_dane.json' };
+    return { appKey: String(DROPBOX_DEFAULT_APP_KEY || '').trim(), path: '/bilans_dane.json' };
   }
 }
 
 function saveDropboxConfig() {
   const config = {
-    appKey: String(el.dropboxAppKeyInput?.value || '').trim(),
-    path: String(el.dropboxFilePathInput?.value || '/Apps/Bilans/bilans_dane.json').trim() || '/Apps/Bilans/bilans_dane.json'
+    appKey: String(el.dropboxAppKeyInput?.value || DROPBOX_DEFAULT_APP_KEY || '').trim(),
+    path: String(el.dropboxFilePathInput?.value || '/bilans_dane.json').trim() || '/bilans_dane.json'
   };
   if (!config.path.startsWith('/')) config.path = `/${config.path}`;
   try { localStorage.setItem(DROPBOX_CONFIG_KEY, JSON.stringify(config)); } catch (_) {}
@@ -2914,7 +2917,7 @@ async function startDropboxAuth() {
   setStorageMode('dropbox');
   const config = saveDropboxConfig();
   if (!config.appKey) {
-    showMessage('Najpierw wklej Dropbox App key w zakładce Synchronizacja.', 'error');
+    showMessage('Brak Dropbox App key. Autor programu musi wpisać DROPBOX_DEFAULT_APP_KEY w pliku src/app.js albo podać go w trybie zaawansowanym.', 'error');
     return;
   }
   if (!window.isSecureContext && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
@@ -4072,14 +4075,17 @@ function bindEvents() {
     setStorageMode('dropbox');
     el.startupModePanel?.classList.add('hidden');
     document.querySelector('[data-tab="sync"]')?.click();
-    updateCloudUi('Wklej Dropbox App key i kliknij „Połącz z Dropbox”.');
+    updateCloudUi('Kliknij „Połącz z Dropbox”, zaloguj się i zatwierdź dostęp.');
   });
   if (el.storageModeSelect) el.storageModeSelect.addEventListener('change', event => {
     setStorageMode(event.target.value);
-    if (event.target.value === 'dropbox') updateCloudUi('Tryb Dropbox wybrany. Połącz konto albo synchronizuj, jeśli jest już połączone.');
+    if (event.target.value === 'dropbox') updateCloudUi('Kliknij „Połącz z Dropbox”, zaloguj się i zatwierdź dostęp.');
   });
   if (el.dropboxAppKeyInput) el.dropboxAppKeyInput.addEventListener('change', saveDropboxConfig);
   if (el.dropboxFilePathInput) el.dropboxFilePathInput.addEventListener('change', saveDropboxConfig);
+  if (el.dropboxAdvancedToggle) el.dropboxAdvancedToggle.addEventListener('click', () => {
+    el.dropboxAdvancedPanel?.classList.toggle('hidden');
+  });
   if (el.dropboxConnectButton) el.dropboxConnectButton.addEventListener('click', () => startDropboxAuth().catch(error => showMessage(error.message, 'error')));
   if (el.dropboxDisconnectButton) el.dropboxDisconnectButton.addEventListener('click', disconnectDropbox);
   if (el.dropboxSyncNowButton) el.dropboxSyncNowButton.addEventListener('click', () => syncDropboxNow().catch(error => {

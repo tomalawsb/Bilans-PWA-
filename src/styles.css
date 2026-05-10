@@ -1064,3 +1064,19 @@ body[data-theme="dark"] .important-help {
 .compact-report-option { padding: 7px; }
 .small-empty { padding: 8px; font-size: 12px; }
 .custom-report-row { border-left: 4px solid var(--accent); }
+
+
+.dropbox-simple-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  background: color-mix(in srgb, var(--accent-soft) 42%, white);
+}
+.dropbox-simple-card p { margin: 6px 0 10px; color: var(--muted); }
+.dropbox-advanced-panel {
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+}
+.small-button { padding: 6px 10px; font-size: 12px; margin-top: 8px; }

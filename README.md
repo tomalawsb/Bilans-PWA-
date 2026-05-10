@@ -1,11 +1,9 @@
-# Portfel PRO v. 1.0 — Etap 29
+# Portfel PRO v. 1.0 — Etap 30
 
-Poprawki tego etapu:
-- Dodano konfigurację raportu głównego w zakładce **Ustawienia**.
-- Można ukrywać/pokazywać domyślne kafelki: Komputerowe, Montaże, Wydatki domowe, Wynik firmy / wypłata.
-- Można dodać do raportu głównego własne grupy/tagi z bazy tagów.
-- Ustawienia raportu zapisują się lokalnie w przeglądarce.
-- Dodano przycisk **Przywróć domyślne** dla raportu głównego.
-- Podbito wersję cache do v29.
+Zmiany:
+- uproszczone połączenie z Dropbox: zwykły użytkownik klika tylko „Połącz z Dropbox”, loguje się i zatwierdza dostęp,
+- pola techniczne Dropbox ukryte pod „Tryb zaawansowany”,
+- domyślna ścieżka pliku Dropbox ustawiona na `/bilans_dane.json` dla trybu App folder,
+- cache podbite do v30.
 
-Po wgraniu na GitHub Pages kliknij w programie **Odśwież program** albo otwórz adres z dopiskiem `?v=29`.
+Uwaga dla autora: aby klienci nie wpisywali App key, wpisz swój publiczny Dropbox App key w `src/app.js` w stałej `DROPBOX_DEFAULT_APP_KEY`.
