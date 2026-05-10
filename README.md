@@ -47,4 +47,11 @@ Dodano w zakładce **Raporty** sekcję **Portfel gotówkowy**:
 - ignorowanie płatności: karta, BLIK, bank/przelew i inne,
 - ręczne korekty portfela, np. po fizycznym przeliczeniu gotówki,
 - eksport/import `walletMonths` w JSON razem z wpisami, regułami tagów i samouczeniem,
-- podbicie cache PWA do `v112`.
+- podbicie cache PWA do `v113`.
+
+
+## Hotfix v113
+
+- Podpięcie zakładek i podstawowych kliknięć przeniesione przed start IndexedDB/raportów/Dropbox.
+- Jeżeli baza lub raport zatrzymają start, interfejs nie powinien już całkowicie zamierać.
+- Cache PWA podbity do v113.

@@ -4,7 +4,7 @@
   "description": "Lokalny rejestr przychodów i wydatków z parserem, kalendarzem, motywami, szybkim dodawaniem głosem i trybem Dropbox.",
   "lang": "pl",
   "id": "./?app=portfel-pro",
-  "start_url": "./index.html?v=112",
+  "start_url": "./index.html?v=113",
   "scope": "./",
   "display": "standalone",
   "background_color": "#f7f3e8",
@@ -30,7 +30,7 @@
       "name": "Dodaj głosem",
       "short_name": "Głos",
       "description": "Otwórz szybkie dodawanie wpisu głosem.",
-      "url": "./voice/index.html?v=112",
+      "url": "./voice/index.html?v=113",
       "icons": [
         {
           "src": "./icons/mic-192.png",
@@ -43,7 +43,7 @@
       "name": "Dodaj wpis",
       "short_name": "Dodaj",
       "description": "Otwórz ekran szybkiego dodawania wpisu.",
-      "url": "./index.html?v=112",
+      "url": "./index.html?v=113",
       "icons": [
         {
           "src": "./icons/icon-192.png",

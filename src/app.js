@@ -1,6 +1,6 @@
 const DB_NAME = 'bilans-pwa-etap1';
 const DB_VERSION = 5;
-const APP_VERSION = '1.1';
+const APP_VERSION = '1.1'; // hotfix kliknięć v113
 const RAW_DROPBOX_DEFAULT_APP_KEY = String(window.PORTFEL_PRO_CONFIG?.dropboxAppKey || '').trim();
 const DROPBOX_DEFAULT_APP_KEY = /^WSTAW_TUTAJ/i.test(RAW_DROPBOX_DEFAULT_APP_KEY) ? '' : RAW_DROPBOX_DEFAULT_APP_KEY; // Ustaw w src/config.js, wtedy użytkownik klika tylko Połącz z Dropbox.
 const MAIN_INSTALL_KEY = 'portfel-pro-main-installed';
@@ -294,6 +294,7 @@ let learningRules = [];
 let walletMonths = [];
 let calendarMonth = todayISO().slice(0, 7);
 let selectedCalendarDate = todayISO();
+let coreUiInitialized = false;
 let calendarYear = Number(todayISO().slice(0, 4));
 let draggedEntryId = null;
 let voiceRecognition = null;
@@ -1692,6 +1693,7 @@ function escapeHtml(value) {
 }
 
 function showMessage(text, type = 'success') {
+  if (!el.messageBox) { console[type === 'error' ? 'error' : 'log'](text); return; }
   el.messageBox.textContent = text;
   el.messageBox.classList.toggle('error', type === 'error');
   el.messageBox.classList.remove('hidden');
@@ -4934,8 +4936,10 @@ function openFilePicker(input) {
 }
 
 function bindEvents() {
-  el.entryForm.addEventListener('submit', handleFormSubmit);
-  el.tagRuleForm.addEventListener('submit', event => handleTagRuleSubmit(event).catch(error => showMessage(error.message, 'error')));
+  if (coreUiInitialized) return;
+  coreUiInitialized = true;
+  el.entryForm?.addEventListener('submit', handleFormSubmit);
+  el.tagRuleForm?.addEventListener('submit', event => handleTagRuleSubmit(event).catch(error => showMessage(error.message, 'error')));
   if (el.tagRulesList) el.tagRulesList.addEventListener('click', handleTagRulesClick);
   if (el.learningRulesList) el.learningRulesList.addEventListener('click', handleLearningRulesClick);
   if (el.learningClearButton) el.learningClearButton.addEventListener('click', () => clearAllLearningRules().catch(error => showMessage(error.message, 'error')));
@@ -4945,12 +4949,12 @@ function bindEvents() {
   if (el.walletReport) el.walletReport.addEventListener('click', handleWalletReportClick);
   if (el.mainReportSettings) el.mainReportSettings.addEventListener('change', handleMainReportSettingsChange);
   if (el.mainReportResetButton) el.mainReportResetButton.addEventListener('click', resetMainReportSettings);
-  el.parseButton.addEventListener('click', handleParseText);
-  el.addParsedButton.addEventListener('click', () => handleAddParsedEntries().catch(error => showMessage(error.message, 'error')));
-  el.parsePreview.addEventListener('input', event => updateParsedDraftFromElement(event.target));
-  el.parsePreview.addEventListener('change', event => updateParsedDraftFromElement(event.target));
+  el.parseButton?.addEventListener('click', handleParseText);
+  el.addParsedButton?.addEventListener('click', () => handleAddParsedEntries().catch(error => showMessage(error.message, 'error')));
+  el.parsePreview?.addEventListener('input', event => updateParsedDraftFromElement(event.target));
+  el.parsePreview?.addEventListener('change', event => updateParsedDraftFromElement(event.target));
   if (el.cacheResetButton) el.cacheResetButton.addEventListener('click', clearAppCacheAndReload);
-  el.quickText.addEventListener('keydown', event => {
+  el.quickText?.addEventListener('keydown', event => {
     if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
       event.preventDefault();
       handleParseText();
@@ -4977,37 +4981,37 @@ function bindEvents() {
   }));
   if (el.voiceText) el.voiceText.addEventListener('input', () => setVoiceButtonsState(false));
 
-  el.calendarPrevButton.addEventListener('click', () => shiftCalendarMonth(-1));
-  el.calendarNextButton.addEventListener('click', () => shiftCalendarMonth(1));
-  el.calendarTodayButton.addEventListener('click', () => {
+  el.calendarPrevButton?.addEventListener('click', () => shiftCalendarMonth(-1));
+  el.calendarNextButton?.addEventListener('click', () => shiftCalendarMonth(1));
+  el.calendarTodayButton?.addEventListener('click', () => {
     const today = todayISO();
     calendarMonth = today.slice(0, 7);
     selectedCalendarDate = today;
     renderCalendar();
   });
-  el.calendarClearDayButton.addEventListener('click', () => {
+  el.calendarClearDayButton?.addEventListener('click', () => {
     selectedCalendarDate = '';
     el.filterFrom.value = '';
     el.filterTo.value = '';
     applyFilters();
     showMessage('Filtr dnia został wyczyszczony.');
   });
-  el.calendarGrid.addEventListener('click', event => {
+  el.calendarGrid?.addEventListener('click', event => {
     const button = event.target.closest('button[data-date]');
     if (!button) return;
     selectCalendarDate(button.dataset.date);
   });
-  el.calendarGrid.addEventListener('dragover', handleCalendarDragOver);
-  el.calendarGrid.addEventListener('dragleave', event => {
+  el.calendarGrid?.addEventListener('dragover', handleCalendarDragOver);
+  el.calendarGrid?.addEventListener('dragleave', event => {
     if (!el.calendarGrid.contains(event.relatedTarget)) clearDropTargets();
   });
-  el.calendarGrid.addEventListener('drop', handleCalendarDrop);
-  el.calendarDayDetails.addEventListener('click', handleEntriesClick);
-  el.calendarDayDetails.addEventListener('dragstart', handleEntryDragStart);
-  el.calendarDayDetails.addEventListener('dragend', handleEntryDragEnd);
-  el.yearPrevButton.addEventListener('click', () => shiftCalendarYear(-1));
-  el.yearNextButton.addEventListener('click', () => shiftCalendarYear(1));
-  el.yearTodayButton.addEventListener('click', () => {
+  el.calendarGrid?.addEventListener('drop', handleCalendarDrop);
+  el.calendarDayDetails?.addEventListener('click', handleEntriesClick);
+  el.calendarDayDetails?.addEventListener('dragstart', handleEntryDragStart);
+  el.calendarDayDetails?.addEventListener('dragend', handleEntryDragEnd);
+  el.yearPrevButton?.addEventListener('click', () => shiftCalendarYear(-1));
+  el.yearNextButton?.addEventListener('click', () => shiftCalendarYear(1));
+  el.yearTodayButton?.addEventListener('click', () => {
     const today = todayISO();
     calendarYear = Number(today.slice(0, 4));
     selectedCalendarDate = today;
@@ -5015,50 +5019,51 @@ function bindEvents() {
     renderYearCalendar();
     renderCalendar();
   });
-  el.yearCalendarGrid.addEventListener('click', event => {
+  el.yearCalendarGrid?.addEventListener('click', event => {
     const button = event.target.closest('button[data-date]');
     if (!button) return;
     selectCalendarDate(button.dataset.date);
   });
-  el.yearCalendarGrid.addEventListener('dragover', handleCalendarDragOver);
-  el.yearCalendarGrid.addEventListener('dragleave', event => {
+  el.yearCalendarGrid?.addEventListener('dragover', handleCalendarDragOver);
+  el.yearCalendarGrid?.addEventListener('dragleave', event => {
     if (!el.yearCalendarGrid.contains(event.relatedTarget)) clearDropTargets();
   });
-  el.yearCalendarGrid.addEventListener('drop', handleCalendarDrop);
-  el.yearTopDays.addEventListener('click', event => {
+  el.yearCalendarGrid?.addEventListener('drop', handleCalendarDrop);
+  el.yearTopDays?.addEventListener('click', event => {
     const button = event.target.closest('button[data-date]');
     if (!button) return;
     selectCalendarDate(button.dataset.date);
   });
-  el.cancelEditButton.addEventListener('click', resetForm);
-  el.filterForm.addEventListener('submit', event => {
+  el.cancelEditButton?.addEventListener('click', resetForm);
+  el.filterForm?.addEventListener('submit', event => {
     event.preventDefault();
     applyFilters();
   });
 
   for (const input of [el.searchQuery, el.filterFrom, el.filterTo, el.filterType, el.filterScope, el.filterCategory, el.filterPayment]) {
+    if (!input) continue;
     input.addEventListener('input', applyFilters);
     input.addEventListener('change', applyFilters);
   }
 
-  el.clearFiltersButton.addEventListener('click', () => {
+  el.clearFiltersButton?.addEventListener('click', () => {
     selectedCalendarDate = '';
-    el.filterForm.reset();
+    el.filterForm?.reset();
     applyFilters();
   });
 
-  el.entriesTableBody.addEventListener('click', handleEntriesClick);
-  el.entriesTableBody.addEventListener('dragstart', handleEntryDragStart);
-  el.entriesTableBody.addEventListener('dragend', handleEntryDragEnd);
-  el.mobileEntries.addEventListener('click', handleEntriesClick);
-  el.mobileEntries.addEventListener('dragstart', handleEntryDragStart);
-  el.mobileEntries.addEventListener('dragend', handleEntryDragEnd);
-  el.exportButton.addEventListener('click', exportJson);
-  el.syncExportButton.addEventListener('click', exportJson);
-  el.exportMonthPngButton.addEventListener('click', () => exportCalendarPng('month').catch(error => showMessage(error.message, 'error')));
-  el.exportYearPngButton.addEventListener('click', () => exportCalendarPng('year').catch(error => showMessage(error.message, 'error')));
-  el.printMonthPdfButton.addEventListener('click', () => printCalendarPdf('month'));
-  el.printYearPdfButton.addEventListener('click', () => printCalendarPdf('year'));
+  el.entriesTableBody?.addEventListener('click', handleEntriesClick);
+  el.entriesTableBody?.addEventListener('dragstart', handleEntryDragStart);
+  el.entriesTableBody?.addEventListener('dragend', handleEntryDragEnd);
+  el.mobileEntries?.addEventListener('click', handleEntriesClick);
+  el.mobileEntries?.addEventListener('dragstart', handleEntryDragStart);
+  el.mobileEntries?.addEventListener('dragend', handleEntryDragEnd);
+  el.exportButton?.addEventListener('click', exportJson);
+  el.syncExportButton?.addEventListener('click', exportJson);
+  el.exportMonthPngButton?.addEventListener('click', () => exportCalendarPng('month').catch(error => showMessage(error.message, 'error')));
+  el.exportYearPngButton?.addEventListener('click', () => exportCalendarPng('year').catch(error => showMessage(error.message, 'error')));
+  el.printMonthPdfButton?.addEventListener('click', () => printCalendarPdf('month'));
+  el.printYearPdfButton?.addEventListener('click', () => printCalendarPdf('year'));
   if (el.clearAllButton) {
     el.clearAllButton.addEventListener('click', event => {
       event.preventDefault();
@@ -5142,52 +5147,71 @@ async function init() {
   document.title = 'Portfel PRO';
   if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.1';
   setTodayHeader('wczytywanie...');
+
   if (isFileProtocol()) {
     showMessage('Program został otwarty bezpośrednio z index.html. Do importu JSON, PWA i cache użyj serwera lokalnego albo GitHub Pages.', 'error');
   }
+
   if (el.syncInfo) el.syncInfo.textContent = `Tryb „Połącz” dopisuje nowe wpisy i aktualizuje starsze wersje tych samych wpisów. ID urządzenia: ${getDeviceId()}.`;
+
   fillSelect(el.category, CATEGORIES);
   fillSelect(el.filterCategory, CATEGORIES, true);
   fillSelect(el.tagRuleCategory, CATEGORIES);
-  if (el.tagRuleCategory.options.length === 0) fillSelect(el.tagRuleCategory, CATEGORIES);
+  if (el.tagRuleCategory?.options?.length === 0) fillSelect(el.tagRuleCategory, CATEGORIES);
+
   resetForm();
   renderParsePreview();
   setupInstallPrompt();
   registerServiceWorker();
+
+  // Hotfix v113: zakładki podpinają się przed bazą, raportami i Dropboxem.
+  // Dzięki temu błąd danych nie zamraża całego interfejsu.
+  setupTabs();
+  setupThemes();
+  setupSmartTooltips();
+  setupVoiceMode();
+  try {
+    bindEvents();
+  } catch (error) {
+    console.error('Błąd podpinania zdarzeń UI:', error);
+    showMessage(error.message || 'Część przycisków może nie działać, bo wystąpił błąd podpinania interfejsu.', 'error');
+  }
+  updateTodayNamedays();
+  updateCloudUi();
+  setupFirstRunMode();
 
   if (!('indexedDB' in window)) {
     showMessage('Ta przeglądarka nie obsługuje IndexedDB. Program nie zapisze danych lokalnie.', 'error');
     return;
   }
 
-  db = await openDatabase();
-  await seedDefaultTagRules();
-  await reloadLearningRules();
-  await reloadWalletMonths();
-  await ensureEntrySyncIds();
-  renderTagRules();
-  renderMainReportSettings();
-  el.tagRuleCategory.value = 'Inne';
-  await reloadEntries();
-  renderMainReportSettings();
-  bindEvents();
-  setupTabs();
-  setupThemes();
-  setupSmartTooltips();
-  setupVoiceMode();
-  updateTodayNamedays();
-  updateCloudUi();
-  setupFirstRunMode();
+  try {
+    db = await openDatabase();
+    await seedDefaultTagRules();
+    await reloadLearningRules();
+    await reloadWalletMonths();
+    await ensureEntrySyncIds();
+    renderTagRules();
+    renderMainReportSettings();
+    if (el.tagRuleCategory) el.tagRuleCategory.value = 'Inne';
+    await reloadEntries();
+    renderMainReportSettings();
+  } catch (error) {
+    console.error('Błąd startu danych Portfel PRO:', error);
+    showMessage(error.message || 'Błąd uruchamiania danych aplikacji. Zakładki powinny działać, ale dane mogą się nie wczytać.', 'error');
+    return;
+  }
+
   try {
     await handleDropboxOAuthReturn();
   } catch (error) {
     showMessage(error.message || 'Nie udało się zakończyć logowania Dropbox.', 'error');
   }
+
   if (getStorageMode() === 'dropbox' && hasDropboxConnection() && !new URL(window.location.href).searchParams.get('code')) {
     syncDropboxNow().catch(error => updateCloudUi(`Błąd synchronizacji Dropbox: ${error.message}`));
   }
 }
-
 init().catch(error => {
   showMessage(error.message || 'Błąd uruchamiania aplikacji.', 'error');
 });
