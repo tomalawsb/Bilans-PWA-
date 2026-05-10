@@ -1,6 +1,6 @@
 const DB_NAME = 'bilans-pwa-etap1';
-const DB_VERSION = 3;
-const APP_VERSION = 39;
+const DB_VERSION = 4;
+const APP_VERSION = '1.1';
 const RAW_DROPBOX_DEFAULT_APP_KEY = String(window.PORTFEL_PRO_CONFIG?.dropboxAppKey || '').trim();
 const DROPBOX_DEFAULT_APP_KEY = /^WSTAW_TUTAJ/i.test(RAW_DROPBOX_DEFAULT_APP_KEY) ? '' : RAW_DROPBOX_DEFAULT_APP_KEY; // Ustaw w src/config.js, wtedy użytkownik klika tylko Połącz z Dropbox.
 const MAIN_INSTALL_KEY = 'portfel-pro-main-installed';
@@ -9,6 +9,7 @@ let activeInstallTarget = null;
 
 const STORE = 'entries';
 const TAG_RULE_STORE = 'tagRules';
+const LEARNING_RULE_STORE = 'learningRules';
 const DEVICE_ID_KEY = 'bilans-pwa-device-id';
 const THEME_KEY = 'bilans-pwa-theme';
 const STORAGE_MODE_KEY = 'bilans-pwa-storage-mode';
@@ -18,6 +19,8 @@ const DROPBOX_OAUTH_KEY = 'bilans-pwa-dropbox-oauth';
 const DELETED_ENTRIES_KEY = 'bilans-pwa-deleted-entries';
 const DELETE_TOMBSTONE_RETENTION_DAYS = 365;
 const MAIN_REPORT_SETTINGS_KEY = 'portfel-pro-main-report-settings-v1';
+const LEARNING_AUTO_CONFIRMATIONS = 2;
+const LEARNING_MAX_EXAMPLES = 8;
 
 const THEMES = {
   classic: { name: 'Jasny klasyczny', color: '#f6f3ea' },
@@ -242,6 +245,7 @@ let editingId = null;
 let deferredInstallPrompt = null;
 let parsedDrafts = [];
 let tagRules = [];
+let learningRules = [];
 let calendarMonth = todayISO().slice(0, 7);
 let selectedCalendarDate = todayISO();
 let calendarYear = Number(todayISO().slice(0, 4));
@@ -321,6 +325,9 @@ const el = {
   tagRuleCategory: document.querySelector('#tagRuleCategory'),
   tagRuleType: document.querySelector('#tagRuleType'),
   tagRulesList: document.querySelector('#tagRulesList'),
+  learningRulesList: document.querySelector('#learningRulesList'),
+  learningSummary: document.querySelector('#learningSummary'),
+  learningClearButton: document.querySelector('#learningClearButton'),
   entryForm: document.querySelector('#entryForm'),
   formTitle: document.querySelector('#formTitle'),
   saveButton: document.querySelector('#saveButton'),
@@ -546,6 +553,11 @@ function isValidLocalEntryId(value) {
 function prepareEntryForStorage(entry, options = {}) {
   const { forceNewId = false } = options;
   const cleaned = { ...entry };
+  delete cleaned.learningOriginalCategory;
+  delete cleaned.learningSourceText;
+  delete cleaned.learningAppliedRuleId;
+  delete cleaned.learningConfidence;
+  delete cleaned.learningSuggestionNote;
   const numericId = Number(cleaned.id);
 
   if (forceNewId || !isValidLocalEntryId(numericId)) {
@@ -708,6 +720,337 @@ function normalizeText(value) {
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '');
+}
+
+const LEARNING_STOP_WORDS = new Set([
+  'kupilem', 'kupilam', 'kupione', 'kupiony', 'kupiona', 'kupic', 'zakup', 'zakupy', 'zaplacilem', 'zaplacilam',
+  'wydalem', 'wydalam', 'koszt', 'kosztowalo', 'paragon', 'faktura', 'rachunek', 'rachunki', 'dostalem', 'otrzymalem',
+  'zarobilem', 'zarobek', 'przychod', 'wplata', 'wplyw', 'gotowka', 'karta', 'bank', 'blik', 'inne',
+  'domowe', 'firmowe', 'domowy', 'firmowy', 'domowa', 'firmowa', 'nieokreslone', 'dzieci', 'dziecko', 'dzieciom',
+  'oraz', 'albo', 'czyli', 'jest', 'bylo', 'byla', 'byly', 'ten', 'ta', 'to', 'tego', 'tej', 'tych', 'dla', 'przez',
+  'przy', 'nad', 'pod', 'bez', 'oraz', 'wraz', 'jako', 'szt', 'sztuk', 'sztuki', 'zlotych', 'zlote', 'zloty', 'pln'
+]);
+
+function learningStem(token) {
+  let value = normalizeText(token).replace(/[^a-z0-9]/g, '');
+  if (value.length <= 3) return value;
+  const suffixes = ['ciom', 'ami', 'ach', 'ego', 'emu', 'owa', 'owe', 'owy', 'ych', 'ymi', 'ami', 'owi', 'owe', 'owa', 'om', 'ow', 'em', 'ie', 'ia', 'iu', 'go', 'ej', 'y', 'a', 'e', 'i', 'u'];
+  for (const suffix of suffixes) {
+    if (value.endsWith(suffix) && value.length - suffix.length >= 3) {
+      value = value.slice(0, -suffix.length);
+      break;
+    }
+  }
+  return value;
+}
+
+function learningTokens(value) {
+  return normalizeText(value)
+    .replace(new RegExp(`\\b${MONEY_NUMBER_PATTERN}\\s*(?:${ZLOTY_WORDS}|${GROSZ_WORDS})?\\b`, 'gi'), ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .split(/\s+/)
+    .map(learningStem)
+    .filter(token => token.length >= 3 && !LEARNING_STOP_WORDS.has(token))
+    .filter((token, index, array) => array.indexOf(token) === index);
+}
+
+function normalizeLearningPhrase(value) {
+  return learningTokens(value).join(' ');
+}
+
+function makeLearningPhrase(entryOrText) {
+  const text = typeof entryOrText === 'string'
+    ? entryOrText
+    : [entryOrText?.description, entryOrText?.originalText].filter(Boolean).join(' ');
+  const tokens = learningTokens(text);
+  if (tokens.length) return tokens.slice(0, 5).join(' ');
+  return normalizeAlias(text).split(/\s+/).slice(0, 5).join(' ');
+}
+
+function learningConfidence(rule) {
+  const confirmations = Number(rule?.confirmations || 0);
+  const misses = Number(rule?.misses || 0);
+  return Math.max(35, Math.min(99, 45 + confirmations * 18 - misses * 12));
+}
+
+function normalizeLearningRule(rule) {
+  const phrase = String(rule?.phrase || rule?.text || '').trim();
+  const now = new Date().toISOString();
+  const normalizedPhrase = normalizeLearningPhrase(phrase || rule?.normalizedPhrase || '');
+  const idBase = normalizedPhrase || normalizeAlias(phrase) || String(Date.now());
+  return {
+    id: rule?.id || `learn-${idBase.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`,
+    phrase: phrase || normalizedPhrase,
+    normalizedPhrase,
+    category: CATEGORIES.includes(rule?.category) ? rule.category : 'Inne',
+    entryType: ['przychód', 'wydatek', ''].includes(rule?.entryType) ? rule.entryType : '',
+    confirmations: Math.max(1, Number(rule?.confirmations || 1)),
+    misses: Math.max(0, Number(rule?.misses || 0)),
+    examples: Array.isArray(rule?.examples) ? rule.examples.slice(-LEARNING_MAX_EXAMPLES).map(String) : [],
+    source: rule?.source || 'correction',
+    createdAt: rule?.createdAt || rule?.created_at || now,
+    updatedAt: rule?.updatedAt || rule?.updated_at || now
+  };
+}
+
+function tokenMatchesLearning(ruleToken, sourceTokens) {
+  if (sourceTokens.includes(ruleToken)) return true;
+  if (ruleToken.length < 4) return false;
+  return sourceTokens.some(token => {
+    if (token === ruleToken) return true;
+    if (token.length >= 4 && (token.startsWith(ruleToken) || ruleToken.startsWith(token))) return true;
+    return Math.abs(token.length - ruleToken.length) <= 1 && levenshteinDistance(token, ruleToken) <= 1;
+  });
+}
+
+function levenshteinDistance(a, b) {
+  const prev = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= a.length; i += 1) {
+    let old = prev[0];
+    prev[0] = i;
+    for (let j = 1; j <= b.length; j += 1) {
+      const temp = prev[j];
+      prev[j] = Math.min(
+        prev[j] + 1,
+        prev[j - 1] + 1,
+        old + (a[i - 1] === b[j - 1] ? 0 : 1)
+      );
+      old = temp;
+    }
+  }
+  return prev[b.length];
+}
+
+function scoreLearningRule(rule, text) {
+  if (!rule || !CATEGORIES.includes(rule.category)) return 0;
+  if (Number(rule.confirmations || 0) < LEARNING_AUTO_CONFIRMATIONS) return 0;
+
+  const sourceTokens = learningTokens(text);
+  const ruleTokens = learningTokens(rule.normalizedPhrase || rule.phrase);
+  if (!sourceTokens.length || !ruleTokens.length) return 0;
+
+  const sourcePhrase = ` ${sourceTokens.join(' ')} `;
+  const rulePhrase = ` ${ruleTokens.join(' ')} `;
+  let baseScore = sourcePhrase.includes(rulePhrase.trim()) ? 1 : 0;
+
+  if (!baseScore) {
+    const matched = ruleTokens.filter(token => tokenMatchesLearning(token, sourceTokens)).length;
+    const required = Math.max(1, Math.ceil(ruleTokens.length * 0.6));
+    if (matched >= required) baseScore = matched / ruleTokens.length;
+  }
+
+  if (baseScore < 0.6) return 0;
+  return Math.round(baseScore * learningConfidence(rule));
+}
+
+function findBestLearningRule(text) {
+  const candidates = learningRules
+    .map(rule => ({ rule, score: scoreLearningRule(rule, text) }))
+    .filter(item => item.score > 0)
+    .sort((a, b) => b.score - a.score || Number(b.rule.confirmations || 0) - Number(a.rule.confirmations || 0));
+  return candidates[0] || null;
+}
+
+function trainingSimilarity(rule, phrase) {
+  const ruleTokens = learningTokens(rule?.normalizedPhrase || rule?.phrase || '');
+  const phraseTokens = learningTokens(phrase);
+  if (!ruleTokens.length || !phraseTokens.length) return 0;
+  const matched = ruleTokens.filter(token => tokenMatchesLearning(token, phraseTokens)).length;
+  return matched / Math.max(ruleTokens.length, phraseTokens.length);
+}
+
+function findSimilarLearningRuleForTraining(phrase, category) {
+  return learningRules
+    .filter(rule => rule.category === category)
+    .map(rule => ({ rule, score: trainingSimilarity(rule, phrase) }))
+    .filter(item => item.score >= 0.5)
+    .sort((a, b) => b.score - a.score || Number(b.rule.confirmations || 0) - Number(a.rule.confirmations || 0))[0]?.rule || null;
+}
+
+function applyLearningToEntry(entry, options = {}) {
+  const sourceText = options.sourceText || [entry.description, entry.originalText].filter(Boolean).join(' ');
+  const originalCategory = options.originalCategory || entry.category || 'Inne';
+  const match = findBestLearningRule(sourceText);
+  const updated = {
+    ...entry,
+    learningOriginalCategory: originalCategory,
+    learningSourceText: makeLearningPhrase(sourceText)
+  };
+
+  if (match?.rule?.category && match.rule.category !== updated.category) {
+    updated.category = match.rule.category;
+    updated.tags = normalizeTags([...(updated.tags ?? []), match.rule.category, 'nauczone'].join(','));
+    updated.reportGroup = updated.reportGroup || inferReportGroup(updated.description || updated.originalText || updated.category);
+    updated.learningAppliedRuleId = match.rule.id;
+    updated.learningConfidence = match.score;
+    updated.learningSuggestionNote = `Nauczona reguła: ${match.rule.phrase}`;
+  }
+
+  return updated;
+}
+
+async function saveLearningRule(rule) {
+  const normalized = normalizeLearningRule(rule);
+  if (!normalized.normalizedPhrase || normalized.category === 'Inne') return null;
+  return new Promise((resolve, reject) => {
+    const request = txNamedStore(LEARNING_RULE_STORE, 'readwrite').put(normalized);
+    request.onsuccess = () => resolve(normalized);
+    request.onerror = event => reject(event.target.error);
+  });
+}
+
+function getAllLearningRules() {
+  return new Promise((resolve, reject) => {
+    const request = txNamedStore(LEARNING_RULE_STORE).getAll();
+    request.onsuccess = () => resolve(request.result ?? []);
+    request.onerror = event => reject(event.target.error);
+  });
+}
+
+function deleteLearningRule(id) {
+  return new Promise((resolve, reject) => {
+    const request = txNamedStore(LEARNING_RULE_STORE, 'readwrite').delete(id);
+    request.onsuccess = () => resolve();
+    request.onerror = event => reject(event.target.error);
+  });
+}
+
+function clearLearningRulesStore() {
+  return new Promise((resolve, reject) => {
+    const request = txNamedStore(LEARNING_RULE_STORE, 'readwrite').clear();
+    request.onsuccess = () => resolve();
+    request.onerror = event => reject(event.target.error);
+  });
+}
+
+async function reloadLearningRules() {
+  learningRules = (await getAllLearningRules())
+    .map(normalizeLearningRule)
+    .filter(rule => rule.normalizedPhrase && CATEGORIES.includes(rule.category))
+    .sort((a, b) => learningConfidence(b) - learningConfidence(a) || b.updatedAt.localeCompare(a.updatedAt));
+  renderLearningRules();
+}
+
+async function importLearningRulesFromPayload(payload, replace = false) {
+  if (!Array.isArray(payload?.learningRules)) return;
+  if (replace) await clearLearningRulesStore();
+  const existing = new Map((await getAllLearningRules()).map(rule => [rule.id, normalizeLearningRule(rule)]));
+  for (const incoming of payload.learningRules) {
+    const normalized = normalizeLearningRule(incoming);
+    const current = existing.get(normalized.id);
+    if (!current || Date.parse(normalized.updatedAt || '') >= Date.parse(current.updatedAt || '')) {
+      await saveLearningRule(normalized);
+    }
+  }
+  await reloadLearningRules();
+}
+
+async function learnFromCorrection(entry, previousCategory) {
+  const nextCategory = entry?.category || 'Inne';
+  const oldCategory = previousCategory || entry?.learningOriginalCategory || 'Inne';
+  if (!entry || !CATEGORIES.includes(nextCategory) || nextCategory === 'Inne' || nextCategory === oldCategory) return null;
+
+  const phrase = makeLearningPhrase(entry.learningSourceText || entry.description || entry.originalText || '');
+  if (!phrase) return null;
+
+  const normalizedPhrase = normalizeLearningPhrase(phrase);
+  if (!normalizedPhrase) return null;
+
+  const id = `learn-${normalizedPhrase.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}-${normalizeAlias(nextCategory)}`;
+  const similar = findSimilarLearningRuleForTraining(normalizedPhrase, nextCategory);
+  const existing = similar || learningRules.find(rule => rule.id === id) || null;
+  const now = new Date().toISOString();
+  const examples = [...(existing?.examples ?? []), entry.description || entry.originalText || phrase]
+    .filter(Boolean)
+    .filter((item, index, array) => array.findIndex(x => normalizeText(x) === normalizeText(item)) === index)
+    .slice(-LEARNING_MAX_EXAMPLES);
+
+  const saved = await saveLearningRule({
+    ...(existing ?? {}),
+    id: existing?.id || id,
+    phrase: existing?.phrase || phrase,
+    normalizedPhrase: existing?.normalizedPhrase || normalizedPhrase,
+    category: nextCategory,
+    entryType: entry.entryType || existing?.entryType || '',
+    confirmations: Number(existing?.confirmations || 0) + 1,
+    examples,
+    source: 'correction',
+    createdAt: existing?.createdAt || now,
+    updatedAt: now
+  });
+
+  await reloadLearningRules();
+  scheduleDropboxAutoSync();
+  return saved;
+}
+
+async function learnFromParsedEntries(entries) {
+  let learned = 0;
+  for (const entry of entries) {
+    const saved = await learnFromCorrection(entry, entry.learningOriginalCategory);
+    if (saved) learned += 1;
+  }
+  return learned;
+}
+
+function renderLearningRules() {
+  if (el.learningSummary) {
+    const active = learningRules.filter(rule => Number(rule.confirmations || 0) >= LEARNING_AUTO_CONFIRMATIONS).length;
+    el.learningSummary.textContent = `Reguły: ${learningRules.length} · aktywne automatycznie: ${active} · próg: ${LEARNING_AUTO_CONFIRMATIONS} potwierdzenia.`;
+  }
+
+  if (!el.learningRulesList) return;
+  if (!learningRules.length) {
+    el.learningRulesList.innerHTML = '<div class="empty-state">Brak nauczonych reguł. Popraw kategorię w podglądzie rozpoznania, zapisz wpis i program zacznie się uczyć.</div>';
+    return;
+  }
+
+  el.learningRulesList.innerHTML = learningRules.map(rule => {
+    const confidence = learningConfidence(rule);
+    const active = Number(rule.confirmations || 0) >= LEARNING_AUTO_CONFIRMATIONS;
+    const examples = (rule.examples || []).slice(-2).map(example => `<span class="tag">${escapeHtml(example)}</span>`).join('');
+    return `
+      <article class="tag-rule-card learning-rule-card">
+        <div>
+          <strong>${escapeHtml(rule.phrase)}</strong>
+          <small>${escapeHtml(rule.category)} · potwierdzenia: ${Number(rule.confirmations || 0)} · pewność: ${confidence}% · ${active ? 'aktywna' : 'uczy się'}</small>
+          <div class="tag-list"><span class="tag learning-tag">${escapeHtml(rule.normalizedPhrase)}</span>${examples}</div>
+        </div>
+        <div class="row-actions">
+          <button class="danger" type="button" data-learning-action="delete" data-id="${escapeHtml(rule.id)}" data-help="Usuwa tę nauczoną regułę. Wpisy finansowe zostają bez zmian.">Usuń</button>
+        </div>
+      </article>
+    `;
+  }).join('');
+}
+
+async function handleLearningRuleDelete(id) {
+  const rule = learningRules.find(item => item.id === id);
+  if (!rule) return;
+  if (!window.confirm(`Usunąć nauczoną regułę: ${rule.phrase} → ${rule.category}?`)) return;
+  await deleteLearningRule(id);
+  await reloadLearningRules();
+  showMessage('Nauczona reguła usunięta.');
+  scheduleDropboxAutoSync();
+}
+
+function handleLearningRulesClick(event) {
+  const button = event.target.closest('button[data-learning-action]');
+  if (!button) return;
+  const { learningAction, id } = button.dataset;
+  if (learningAction === 'delete') handleLearningRuleDelete(id).catch(error => showMessage(error.message, 'error'));
+}
+
+async function clearAllLearningRules() {
+  if (!learningRules.length) {
+    showMessage('Nie ma nauczonych reguł do usunięcia.');
+    return;
+  }
+  if (!window.confirm('Usunąć wszystkie nauczone reguły kategorii? Wpisy finansowe zostaną bez zmian.')) return;
+  await clearLearningRulesStore();
+  await reloadLearningRules();
+  showMessage('Wyczyszczono nauczone reguły.');
+  scheduleDropboxAutoSync();
 }
 
 const ZLOTY_WORDS = 'złotych|zlotych|złoty|zloty|złote|zlote|zł|zl|pln';
@@ -1054,7 +1397,7 @@ function parseNaturalText(rawText) {
     const category = detectCategory(`${description} ${context}`);
     const scope = detectScope(`${source} ${description} ${context}`, entryType, category);
 
-    return enrichEntryWithTagRules({
+    const baseEntry = enrichEntryWithTagRules({
       entryDate,
       weekday: getWeekday(entryDate),
       entryType,
@@ -1072,6 +1415,11 @@ function parseNaturalText(rawText) {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     }, { overrideCategory: true, overrideType: true });
+
+    return applyLearningToEntry(baseEntry, {
+      originalCategory: baseEntry.category,
+      sourceText: `${description} ${context}`
+    });
   });
 
   return drafts.filter(item => item.amount > 0 && item.description);
@@ -1185,6 +1533,9 @@ function renderParsePreview() {
     </div>
     ${parsedDrafts.map((entry, index) => {
       const amountClass = entry.entryType === 'przychód' ? 'amount-income' : 'amount-expense';
+      const learningInfo = entry.learningAppliedRuleId
+        ? ` · nauczona reguła: ${escapeHtml(entry.learningSuggestionNote || '')} (${escapeHtml(entry.learningConfidence || '')}%)`
+        : '';
       return `
         <article class="parse-card parse-card-editable" data-parse-index="${index}">
           <div class="parse-card-header">
@@ -1223,7 +1574,7 @@ function renderParsePreview() {
               <textarea data-field="originalText" rows="2">${escapeHtml(entry.originalText || '')}</textarea>
             </label>
           </div>
-          <small>${escapeHtml(entry.weekday || '')} · grupa: ${escapeHtml(resolveReportGroup(entry))}${entry.quantity > 1 ? ` · ilość ${escapeHtml(entry.quantity)} · cena ${escapeHtml(formatMoney(entry.unitAmount))}` : ''}</small>
+          <small>${escapeHtml(entry.weekday || '')} · grupa: ${escapeHtml(resolveReportGroup(entry))}${entry.quantity > 1 ? ` · ilość ${escapeHtml(entry.quantity)} · cena ${escapeHtml(formatMoney(entry.unitAmount))}` : ''}${learningInfo}</small>
         </article>
       `;
     }).join('')}
@@ -1253,6 +1604,7 @@ async function handleAddParsedEntries() {
   await ensureDatabaseReady();
 
   const now = new Date().toISOString();
+  const learnedCount = await learnFromParsedEntries(parsedDrafts);
   const entries = parsedDrafts.map(entry => {
     const cleanEntry = stripLocalId(entry);
     return {
@@ -1270,7 +1622,7 @@ async function handleAddParsedEntries() {
   renderParsePreview();
   await reloadEntries();
   el.quickText.focus();
-  showMessage(`Dodano wpisy z parsera: ${entries.length}.`);
+  showMessage(`Dodano wpisy z parsera: ${entries.length}${learnedCount ? ` · nauka: ${learnedCount}` : ''}.`);
   scheduleDropboxAutoSync();
 }
 
@@ -1509,6 +1861,13 @@ function openDatabase() {
         const ruleStore = database.createObjectStore(TAG_RULE_STORE, { keyPath: 'id' });
         ruleStore.createIndex('name', 'name', { unique: false });
         ruleStore.createIndex('category', 'category', { unique: false });
+      }
+
+      if (!database.objectStoreNames.contains(LEARNING_RULE_STORE)) {
+        const learningStore = database.createObjectStore(LEARNING_RULE_STORE, { keyPath: 'id' });
+        learningStore.createIndex('normalizedPhrase', 'normalizedPhrase', { unique: false });
+        learningStore.createIndex('category', 'category', { unique: false });
+        learningStore.createIndex('updatedAt', 'updatedAt', { unique: false });
       }
     };
 
@@ -2645,9 +3004,13 @@ async function handleFormSubmit(event) {
   event.preventDefault();
 
   try {
+    const previousEntry = editingId ? getEntryById(editingId) : null;
     const entry = makeEntryFromForm();
+    const learned = previousEntry && previousEntry.category !== entry.category
+      ? await learnFromCorrection(entry, previousEntry.category)
+      : null;
     await saveEntry(entry);
-    showMessage(editingId ? 'Zmiany zapisane.' : 'Wpis dodany.');
+    showMessage(editingId ? `Zmiany zapisane${learned ? ' i dodano naukę kategorii' : ''}.` : 'Wpis dodany.');
     resetForm();
     await reloadEntries();
     scheduleDropboxAutoSync();
@@ -3018,6 +3381,7 @@ function makeExportPayload() {
     deviceId: getDeviceId(),
     syncMode: 'dropbox-merge-safe-v2',
     tagRules,
+    learningRules,
     deletedEntries: getDeletedEntries(),
     entries: allEntries.map(entry => ({
       ...entry,
@@ -3061,6 +3425,7 @@ async function dropboxUploadPayload(payload) {
 async function importPayload(payload, options = {}) {
   const { replace = false, silent = false } = options;
   const deletionResult = await applyImportedDeletions(payload);
+  await importLearningRulesFromPayload(payload, replace);
   const imported = collectImportedEntries(payload);
 
   if (!Array.isArray(imported) || !imported.length) {
@@ -3935,7 +4300,9 @@ function openFilePicker(input) {
 function bindEvents() {
   el.entryForm.addEventListener('submit', handleFormSubmit);
   el.tagRuleForm.addEventListener('submit', event => handleTagRuleSubmit(event).catch(error => showMessage(error.message, 'error')));
-  el.tagRulesList.addEventListener('click', handleTagRulesClick);
+  if (el.tagRulesList) el.tagRulesList.addEventListener('click', handleTagRulesClick);
+  if (el.learningRulesList) el.learningRulesList.addEventListener('click', handleLearningRulesClick);
+  if (el.learningClearButton) el.learningClearButton.addEventListener('click', () => clearAllLearningRules().catch(error => showMessage(error.message, 'error')));
   if (el.mainReportSettings) el.mainReportSettings.addEventListener('change', handleMainReportSettingsChange);
   if (el.mainReportResetButton) el.mainReportResetButton.addEventListener('click', resetMainReportSettings);
   el.parseButton.addEventListener('click', handleParseText);
@@ -4133,7 +4500,7 @@ function bindEvents() {
 async function init() {
   const today = todayISO();
   document.title = 'Portfel PRO';
-  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.0';
+  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.1';
   setTodayHeader('wczytywanie...');
   if (isFileProtocol()) {
     showMessage('Program został otwarty bezpośrednio z index.html. Do importu JSON, PWA i cache użyj serwera lokalnego albo GitHub Pages.', 'error');
@@ -4155,6 +4522,7 @@ async function init() {
 
   db = await openDatabase();
   await seedDefaultTagRules();
+  await reloadLearningRules();
   await ensureEntrySyncIds();
   renderTagRules();
   renderMainReportSettings();

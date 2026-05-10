@@ -1607,3 +1607,34 @@ body[data-theme="dark"] .year-day.heat-level-5 { background: #7ee5b6 !important;
 
 body[data-theme="dark"] .amount-income { color: #7dffb0 !important; }
 body[data-theme="dark"] .amount-expense { color: #ff9e9e !important; }
+
+/* Portfel PRO v. 1.1 — samouczenie kategorii */
+.learning-panel .panel-title-row { align-items: flex-start; }
+.learning-summary {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--line, #e2ddcf);
+  border-radius: 10px;
+  background: var(--soft-bg, #f7f3e8);
+  color: var(--text, #1f2933);
+  font-size: .92rem;
+}
+.learning-rules-list { margin-top: 10px; }
+.learning-rule-card small { display: block; margin-top: 3px; }
+.learning-tag { font-weight: 700; }
+body[data-theme="dark"] .learning-summary,
+body[data-theme="dark"] .learning-rule-card {
+  background: #132238 !important;
+  color: #f3f8ff !important;
+  border-color: #3c5270 !important;
+}
+body[data-theme="dark"] .learning-summary *,
+body[data-theme="dark"] .learning-rule-card *,
+body[data-theme="dark"] .learning-rule-card small {
+  color: #f3f8ff !important;
+}
+body[data-theme="dark"] .learning-tag {
+  background: #203654 !important;
+  color: #ffffff !important;
+  border-color: #8ad7ff !important;
+}

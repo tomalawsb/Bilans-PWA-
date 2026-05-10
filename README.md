@@ -1,33 +1,31 @@
-# Portfel PRO v. 1.0 — Etap 39
+# Portfel PRO v. 1.1 — samouczenie kategorii
 
-## Zmiany
-- przygotowano prosty wariant Dropboxa z kluczem wpisanym przez autora w `src/config.js`;
-- zwykły użytkownik nie wpisuje App Key — klika tylko **Połącz z Dropbox**;
-- Tryb zaawansowany zostaje jako awaryjna konfiguracja, gdy klucz nie został wpisany w paczce;
-- podbito cache do `v37`.
+## Zmiany w wersji 1.1
+- dodano lokalne samouczenie kategorii na podstawie poprawek użytkownika;
+- program zapamiętuje poprawki z podglądu rozpoznania, np. `lody -> Jedzenie`;
+- po dwóch potwierdzeniach podobne frazy są kategoryzowane automatycznie;
+- dodano panel **Ustawienia -> Samouczenie kategorii** z listą nauczonych reguł;
+- dodano usuwanie pojedynczych nauczonych reguł oraz czyszczenie całej nauki;
+- nauczone reguły są eksportowane do JSON i synchronizowane przez Dropbox razem z wpisami;
+- podbito cache PWA do `v110`;
+- wersja widoczna w programie: `v. 1.1`.
 
-## Jak zaszyć Dropbox App Key
-1. Otwórz plik `src/config.js`.
-2. Zamień:
+## Jak działa nauka
+1. Wpisujesz tekst i klikasz **Rozpoznaj**.
+2. Program wybiera kategorię.
+3. Jeżeli poprawisz kategorię w podglądzie i zapiszesz wpis, program zapisuje tę poprawkę jako regułę.
+4. Po dwóch takich potwierdzeniach reguła staje się aktywna automatycznie.
+
+Przykład: jeśli dwa razy poprawisz `lody` z `Inne` na `Jedzenie`, kolejne podobne wpisy z lodami dostaną kategorię `Jedzenie`.
+
+## Ważne
+Rdzeń zapisu wpisów, importu JSON i połączenia Dropbox nie został przebudowany. Dodano osobny magazyn `learningRules` w IndexedDB oraz eksport/import tych reguł w pliku JSON.
+
+## Dropbox App Key
+Jeżeli chcesz zaszyć własny Dropbox App Key, otwórz `src/config.js` i ustaw:
 
 ```js
 dropboxAppKey: "WSTAW_TUTAJ_SWÓJ_DROPBOX_APP_KEY"
 ```
 
-na swój publiczny App Key z Dropbox App Console, np.:
-
-```js
-dropboxAppKey: "abcd1234twojklucz"
-```
-
-3. Nie wpisuj App Secret.
-4. Wgraj całą paczkę na GitHub Pages.
-5. Użytkownik kliknie **Połącz z Dropbox** i zaloguje się na swoje konto Dropbox.
-
-## Ważne
-App Key jest publicznym identyfikatorem aplikacji. Nie daje dostępu do Twojego Dropboxa. Dane użytkownika zapisują się w Dropboxie użytkownika, po jego logowaniu i zgodzie.
-
-
-## Etap 39
-
-W tym wydaniu wpisano publiczny Dropbox App Key do `src/config.js`, dzięki czemu zwykły użytkownik klika tylko **Połącz z Dropbox** i loguje się na swoje konto Dropbox.
+Nie wpisuj App Secret.
