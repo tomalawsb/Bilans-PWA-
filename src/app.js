@@ -1,6 +1,6 @@
 const DB_NAME = 'bilans-pwa-etap1';
 const DB_VERSION = 3;
-const APP_VERSION = 32;
+const APP_VERSION = 33;
 const DROPBOX_DEFAULT_APP_KEY = String(window.PORTFEL_PRO_CONFIG?.dropboxAppKey || '').trim(); // Ustaw w src/config.js, wtedy użytkownik klika tylko Połącz z Dropbox.
 const MAIN_INSTALL_KEY = 'portfel-pro-main-installed';
 const VOICE_INSTALL_KEY = 'portfel-pro-voice-installed';
@@ -3284,6 +3284,10 @@ function refreshInstallButtons() {
 }
 
 function showInstallUnavailableMessage() {
+  if (isVoiceActionRequested()) {
+    showMessage('Chrome nie udostępnił automatycznego okna instalacji mikrofonu. Użyj menu Chrome → Dodaj do ekranu głównego / Zainstaluj aplikację, będąc na tym ekranie mikrofonu.', 'error');
+    return;
+  }
   showMessage('Chrome nie udostępnił teraz automatycznego okna instalacji. Użyj menu Chrome → Dodaj do ekranu głównego / Zainstaluj aplikację. Jeśli widzisz „Otwórz aplikację”, program jest już zainstalowany.', 'error');
 }
 
@@ -3314,8 +3318,7 @@ async function runInstallPrompt(target = null) {
 }
 
 function openVoiceInstallPage() {
-  const url = new URL(window.location.href);
-  url.searchParams.set('action', 'voice');
+  const url = new URL('./voice/index.html', window.location.href);
   url.searchParams.set('install', 'voice');
   url.searchParams.set('v', `${APP_VERSION}-${Date.now()}`);
   window.location.href = url.toString();
@@ -3704,8 +3707,9 @@ function getSpeechRecognitionConstructor() {
 }
 
 function isVoiceActionRequested() {
-  const params = new URL(window.location.href).searchParams;
-  return params.get('action') === 'voice';
+  const url = new URL(window.location.href);
+  const path = url.pathname.replace(/\/+$/, '');
+  return url.searchParams.get('action') === 'voice' || path.endsWith('/voice') || path.endsWith('/voice/index.html');
 }
 
 function setVoiceButtonsState(recording = false) {
