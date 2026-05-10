@@ -297,6 +297,59 @@ input:focus, select:focus, textarea:focus {
   gap: 12px;
 }
 
+
+/* Etap 47-48: inteligentne raporty i wykrywanie wydatków cyklicznych */
+.smart-report-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+}
+.smart-insight-card {
+  display: grid;
+  gap: 4px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-strong);
+}
+.smart-insight-card span,
+.recurring-row small {
+  color: var(--muted);
+  font-size: 12px;
+}
+.smart-insight-card strong {
+  font-size: 17px;
+  line-height: 1.15;
+}
+.smart-insight-card small {
+  color: var(--muted);
+  line-height: 1.3;
+}
+.smart-positive { border-left: 4px solid #2f8f5b; }
+.smart-warning { border-left: 4px solid #d97706; }
+.smart-negative { border-left: 4px solid var(--danger); }
+.smart-neutral { border-left: 4px solid var(--accent); }
+.recurring-row { align-items: center; }
+.confidence-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 48px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--accent-2);
+  color: var(--accent);
+  font-size: 12px;
+}
+body[data-theme="dark"] .smart-insight-card,
+body[data-theme="dark"] .confidence-pill {
+  background: var(--row-bg);
+  border-color: var(--line);
+  color: var(--text);
+}
+body[data-theme="dark"] .confidence-pill { color: #a7f3d0; }
+
 .export-sync-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

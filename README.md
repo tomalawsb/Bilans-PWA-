@@ -7,7 +7,7 @@
 - dodano panel **Ustawienia -> Samouczenie kategorii** z listą nauczonych reguł;
 - dodano usuwanie pojedynczych nauczonych reguł oraz czyszczenie całej nauki;
 - nauczone reguły są eksportowane do JSON i synchronizowane przez Dropbox razem z wpisami;
-- podbito cache PWA do `v110`;
+- podbito cache PWA do `v111`;
 - wersja widoczna w programie: `v. 1.1`.
 
 ## Jak działa nauka
@@ -29,3 +29,11 @@ dropboxAppKey: "WSTAW_TUTAJ_SWÓJ_DROPBOX_APP_KEY"
 ```
 
 Nie wpisuj App Secret.
+
+
+## Etap 47-48 — Portfel PRO v. 1.1
+
+Dodano:
+- inteligentne wnioski w zakładce Raporty,
+- wykrywanie wydatków cyklicznych na podstawie podobnych opisów/grup,
+- podbicie cache PWA do v111.
