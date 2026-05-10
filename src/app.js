@@ -1,6 +1,6 @@
 const DB_NAME = 'bilans-pwa-etap1';
 const DB_VERSION = 3;
-const APP_VERSION = 27;
+const APP_VERSION = 28;
 const MAIN_INSTALL_KEY = 'portfel-pro-main-installed';
 const VOICE_INSTALL_KEY = 'portfel-pro-voice-installed';
 
@@ -1311,7 +1311,9 @@ function setupSmartTooltips() {
   document.body.appendChild(tooltip);
 
   let activeNode = null;
+  let pendingNode = null;
   let hideTimer = null;
+  let showTimer = null;
   let longPressTimer = null;
   let longPressFired = false;
   let suppressClickNode = null;
@@ -1400,8 +1402,20 @@ function setupSmartTooltips() {
 
   function hideTooltip() {
     window.clearTimeout(hideTimer);
+    window.clearTimeout(showTimer);
+    pendingNode = null;
     tooltip.classList.remove('visible');
     activeNode = null;
+  }
+
+  function scheduleTooltipFor(node, text, delay = 650) {
+    if (!node || !text) return;
+    window.clearTimeout(showTimer);
+    pendingNode = node;
+    showTimer = window.setTimeout(() => {
+      if (pendingNode !== node) return;
+      showTooltipFor(node, text);
+    }, delay);
   }
 
   document.addEventListener('pointerdown', event => {
@@ -1411,18 +1425,23 @@ function setupSmartTooltips() {
   document.addEventListener('mouseover', event => {
     if (isTouchTooltipMode() || lastPointerType === 'touch') return;
     const { node, text } = getHelpText(event.target);
-    if (node && text) showTooltipFor(node, text);
+    if (node && text) scheduleTooltipFor(node, text, 700);
   });
 
   document.addEventListener('mouseout', event => {
+    const related = event.relatedTarget;
+    if (pendingNode && !pendingNode.contains(related)) {
+      window.clearTimeout(showTimer);
+      pendingNode = null;
+    }
     if (!activeNode) return;
-    if (!activeNode.contains(event.relatedTarget)) hideTooltip();
+    if (!activeNode.contains(related)) hideTooltip();
   });
 
   document.addEventListener('focusin', event => {
     if (isTouchTooltipMode() || lastPointerType === 'touch') return;
     const { node, text } = getHelpText(event.target);
-    if (node && text) showTooltipFor(node, text);
+    if (node && text) scheduleTooltipFor(node, text, 700);
   });
 
   document.addEventListener('focusout', hideTooltip);
