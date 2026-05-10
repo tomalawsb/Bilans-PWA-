@@ -52,6 +52,13 @@ button, .file-button { user-select: none; }
 }
 
 .brand-block { display: flex; align-items: center; gap: 12px; min-width: 260px; }
+.app-logo {
+  width: 46px;
+  height: 46px;
+  object-fit: contain;
+  display: block;
+  flex: 0 0 auto;
+}
 .app-mark {
   width: 38px;
   height: 38px;
@@ -961,4 +968,14 @@ body[data-theme="dark"] .year-day.heat-level-5 { background:#6ee7b7; color:#0615
   .startup-mode-options { grid-template-columns: 1fr; }
   .year-month-days, .mini-weekdays { gap:3px; }
   .year-day { min-height: 30px; font-size: 12px; padding: 3px; }
+}
+
+
+/* Etap 22: logo i reset fabryczny */
+.voice-top-buttons { justify-content: flex-end; }
+#factoryResetButton { white-space: nowrap; }
+@media (max-width: 640px) {
+  .brand-block { min-width: 0; }
+  .app-logo { width: 42px; height: 42px; }
+  .header-actions { width: 100%; }
 }

@@ -1,6 +1,6 @@
 const DB_NAME = 'bilans-pwa-etap1';
 const DB_VERSION = 3;
-const APP_VERSION = 21;
+const APP_VERSION = 22;
 const STORE = 'entries';
 const TAG_RULE_STORE = 'tagRules';
 const DEVICE_ID_KEY = 'bilans-pwa-device-id';
@@ -121,6 +121,7 @@ const WEEKDAYS = [
 
 const NAME_DAY_API_URLS = [
   'https://nameday.abalin.net/api/V1/today?country=pl',
+  'https://nameday.abalin.net/api/V1/today?country=pl&timezone=Europe/Warsaw',
   'https://nameday.abalin.net/api/V2/today/Europe%2FWarsaw'
 ];
 
@@ -233,9 +234,11 @@ const el = {
   todayLabel: document.querySelector('#todayLabel'),
   messageBox: document.querySelector('#messageBox'),
   installButton: document.querySelector('#installButton'),
+  installVoiceButton: document.querySelector('#installVoiceButton'),
   voiceShortcutButton: document.querySelector('#voiceShortcutButton'),
   voiceQuickPanel: document.querySelector('#voiceQuickPanel'),
   voiceCloseButton: document.querySelector('#voiceCloseButton'),
+  voiceInstallNowButton: document.querySelector('#voiceInstallNowButton'),
   voiceRecordButton: document.querySelector('#voiceRecordButton'),
   voiceStopButton: document.querySelector('#voiceStopButton'),
   voiceParseButton: document.querySelector('#voiceParseButton'),
@@ -328,6 +331,7 @@ const el = {
   filterPayment: document.querySelector('#filterPayment'),
   clearFiltersButton: document.querySelector('#clearFiltersButton'),
   clearAllButton: document.querySelector('#clearAllButton'),
+  factoryResetButton: document.querySelector('#factoryResetButton'),
   entriesTableBody: document.querySelector('#entriesTableBody'),
   mobileEntries: document.querySelector('#mobileEntries'),
   themeSelect: document.querySelector('#themeSelect'),
@@ -2763,19 +2767,53 @@ function registerServiceWorker() {
     });
 }
 
+function showInstallUnavailableMessage() {
+  showMessage('Instalacja PWA jest dostępna tylko z HTTPS/GitHub Pages i tylko wtedy, gdy przeglądarka pozwala dodać aplikację. Jeśli nie pojawi się okno instalacji, użyj menu Chrome: Dodaj do ekranu głównego.', 'error');
+}
+
+async function runInstallPrompt() {
+  if (!deferredInstallPrompt) {
+    showInstallUnavailableMessage();
+    return;
+  }
+  deferredInstallPrompt.prompt();
+  await deferredInstallPrompt.userChoice;
+  deferredInstallPrompt = null;
+}
+
+function openVoiceInstallPage() {
+  const url = new URL(window.location.href);
+  url.searchParams.set('action', 'voice');
+  url.searchParams.set('install', 'voice');
+  url.searchParams.set('v', `${APP_VERSION}-${Date.now()}`);
+  window.location.href = url.toString();
+}
+
 function setupInstallPrompt() {
   window.addEventListener('beforeinstallprompt', event => {
     event.preventDefault();
     deferredInstallPrompt = event;
-    el.installButton.classList.remove('hidden');
+    el.installButton?.classList.remove('hidden');
+    el.installVoiceButton?.classList.remove('hidden');
+    el.voiceInstallNowButton?.classList.remove('hidden');
   });
 
-  el.installButton.addEventListener('click', async () => {
-    if (!deferredInstallPrompt) return;
-    deferredInstallPrompt.prompt();
-    await deferredInstallPrompt.userChoice;
-    deferredInstallPrompt = null;
-    el.installButton.classList.add('hidden');
+  el.installButton?.addEventListener('click', event => {
+    event.preventDefault();
+    event.stopPropagation();
+    runInstallPrompt().catch(error => showMessage(error.message || 'Nie udało się uruchomić instalacji.', 'error'));
+  });
+
+  el.installVoiceButton?.addEventListener('click', event => {
+    event.preventDefault();
+    event.stopPropagation();
+    openVoiceInstallPage();
+  });
+
+  el.voiceInstallNowButton?.addEventListener('click', event => {
+    event.preventDefault();
+    event.stopPropagation();
+    runInstallPrompt().catch(error => showMessage(error.message || 'Nie udało się uruchomić instalacji mikrofonu.', 'error'));
   });
 }
 
@@ -3027,21 +3065,84 @@ function printCalendarPdf(mode) {
   showMessage('Otworzono widok PDF/drukowania. Wybierz „Zapisz jako PDF”.');
 }
 
+function deleteIndexedDatabase() {
+  return new Promise((resolve, reject) => {
+    if (!('indexedDB' in window)) {
+      resolve();
+      return;
+    }
+    try { db?.close?.(); } catch (_) {}
+    db = null;
+    const request = indexedDB.deleteDatabase(DB_NAME);
+    request.onsuccess = () => resolve();
+    request.onerror = event => reject(event.target.error || new Error('Nie udało się usunąć bazy IndexedDB.'));
+    request.onblocked = () => reject(new Error('Baza danych jest zablokowana przez inną kartę. Zamknij inne karty z programem i spróbuj ponownie.'));
+  });
+}
+
+function clearAppLocalStorage() {
+  const prefixes = ['bilans-pwa-', 'portfel-pro'];
+  for (let i = localStorage.length - 1; i >= 0; i -= 1) {
+    const key = localStorage.key(i);
+    if (!key) continue;
+    if (prefixes.some(prefix => key.startsWith(prefix))) localStorage.removeItem(key);
+  }
+  try { sessionStorage.clear(); } catch (_) {}
+}
+
+async function clearAppCachesAndWorkers() {
+  if ('caches' in window) {
+    const keys = await caches.keys();
+    await Promise.all(keys.filter(key => key.startsWith('bilans-pwa') || key.startsWith('portfel-pro')).map(key => caches.delete(key)));
+  }
+
+  if ('serviceWorker' in navigator && !isFileProtocol()) {
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(registrations.map(registration => registration.unregister()));
+  }
+}
+
+async function factoryResetApp() {
+  const first = window.confirm('Przywrócić ustawienia fabryczne programu? Znikną wpisy, ustawienia, tagi, połączenie Dropbox i lokalna baza tej przeglądarki.');
+  if (!first) return;
+
+  const code = window.prompt('Dla bezpieczeństwa wpisz RESET, żeby potwierdzić przywrócenie ustawień fabrycznych.');
+  if (code !== 'RESET') {
+    showMessage('Reset fabryczny anulowany. Nie wpisano RESET.', 'error');
+    return;
+  }
+
+  const shouldClearDropbox = getStorageMode() === 'dropbox' && hasDropboxConnection() && window.confirm('Wyczyścić także plik danych w Dropboxie? Jeśli wybierzesz NIE, reset dotyczy tylko tej przeglądarki.');
+
+  try {
+    if (shouldClearDropbox) {
+      const entriesToDelete = allEntries.length ? [...allEntries] : await getAllEntries();
+      if (entriesToDelete.length) rememberDeletedEntries(entriesToDelete);
+      await clearEntries();
+      await dropboxUploadPayload(makeExportPayload());
+    }
+  } catch (error) {
+    const continueReset = window.confirm(`Nie udało się wyczyścić Dropboxa: ${error.message}. Kontynuować reset lokalny?`);
+    if (!continueReset) return;
+  }
+
+  await deleteIndexedDatabase();
+  clearAppLocalStorage();
+  await clearAppCachesAndWorkers();
+
+  const reloadUrl = new URL(window.location.href);
+  reloadUrl.search = '';
+  reloadUrl.searchParams.set('v', `${APP_VERSION}-${Date.now()}`);
+  window.location.replace(reloadUrl.toString());
+}
+
 
 async function clearAppCacheAndReload() {
   const accepted = window.confirm('Wyczyścić cache tej aplikacji i uruchomić ponownie? Dane wpisów w IndexedDB nie zostaną usunięte.');
   if (!accepted) return;
 
   try {
-    if ('caches' in window) {
-      const keys = await caches.keys();
-      await Promise.all(keys.filter(key => key.startsWith('bilans-pwa') || key.startsWith('portfel-pro')).map(key => caches.delete(key)));
-    }
-
-    if ('serviceWorker' in navigator && !isFileProtocol()) {
-      const registration = await navigator.serviceWorker.getRegistration('./');
-      if (registration) await registration.unregister();
-    }
+    await clearAppCachesAndWorkers();
 
     showMessage('Cache aplikacji wyczyszczony. Uruchamiam najnowszą wersję.');
     const reloadUrl = new URL(window.location.href);
@@ -3233,7 +3334,13 @@ async function saveVoiceParsedEntries() {
 
 function setupVoiceMode() {
   if (!el.voiceQuickPanel) return;
-  if (isVoiceActionRequested()) openVoiceMode();
+  if (isVoiceActionRequested()) {
+    openVoiceMode();
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('install') === 'voice') {
+      setVoiceStatus('Kliknij „Zainstaluj mikrofon”, żeby dodać osobną ikonę szybkiego dodawania.');
+    }
+  }
 }
 
 function setupTabs() {
@@ -3386,6 +3493,13 @@ function bindEvents() {
       event.preventDefault();
       event.stopPropagation();
       handleClearAll().catch(error => showMessage(error.message, 'error'));
+    });
+  }
+  if (el.factoryResetButton) {
+    el.factoryResetButton.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      factoryResetApp().catch(error => showMessage(error.message || 'Nie udało się przywrócić ustawień fabrycznych.', 'error'));
     });
   }
   const handleImportChange = (event, options = {}) => {

@@ -6,10 +6,15 @@
   <meta name="theme-color" content="#f6f3ea">
   <meta name="description" content="Portfel PRO — lokalny rejestr przychodów, wydatków, raportów i kalendarza.">
   <title>Portfel PRO</title>
-  <link rel="manifest" href="./manifest.webmanifest?v=21">
-  <link rel="icon" href="./icons/icon-192.png">
-  <link rel="apple-touch-icon" href="./icons/icon-192.png">
-  <link rel="stylesheet" href="./src/styles.css?v=21">
+  <script>
+    const __manifestFile = new URLSearchParams(location.search).get('action') === 'voice'
+      ? 'manifest-voice.webmanifest'
+      : 'manifest.webmanifest';
+    document.write(`<link id="appManifest" rel="manifest" href="./${__manifestFile}?v=22">`);
+  </script>
+  <link rel="icon" href="./icons/icon-192.png?v=22">
+  <link rel="apple-touch-icon" href="./icons/icon-192.png?v=22">
+  <link rel="stylesheet" href="./src/styles.css?v=22">
 </head>
 <body data-theme="classic">
   <script>
@@ -20,14 +25,15 @@
   <main class="app-shell">
     <header class="app-header">
       <div class="brand-block">
-        <div class="app-mark">P</div>
+        <img class="app-logo" src="./icons/logo-portfel-pro.png?v=22" alt="Portfel PRO">
         <div>
           <h1>Portfel PRO</h1>
           <p id="todayLabel">Lokalna aplikacja webowa</p>
         </div>
       </div>
       <div class="header-actions">
-        <button id="installButton" class="secondary hidden" type="button">Zainstaluj</button>
+        <button id="installButton" class="secondary" type="button">Zainstaluj program</button>
+        <button id="installVoiceButton" class="secondary" type="button">Zainstaluj mikrofon</button>
         <button id="cacheResetButton" class="ghost" type="button">Odśwież program</button>
         <button id="exportButton" class="secondary" type="button">Zapisz kopię danych</button>
         <button id="importButton" class="file-button" type="button">Wczytaj dane</button>
@@ -70,7 +76,10 @@
             <h2>Dodaj głosem</h2>
             <p>Powiedz wydatek albo przychód. Po rozpoznaniu sprawdź wynik i zapisz wpisy.</p>
           </div>
-          <button id="voiceCloseButton" class="ghost" type="button">Wróć</button>
+          <div class="button-row voice-top-buttons">
+            <button id="voiceInstallNowButton" class="secondary" type="button">Zainstaluj mikrofon</button>
+            <button id="voiceCloseButton" class="ghost" type="button">Wróć</button>
+          </div>
         </div>
         <button id="voiceRecordButton" class="voice-record-button" type="button" aria-pressed="false">🎙️</button>
         <strong id="voiceStatus" class="voice-status">Kliknij mikrofon i mów</strong>
@@ -218,7 +227,10 @@
             <h2>Historia wpisów</h2>
             <p id="entriesCounter">Brak wpisów.</p>
           </div>
-          <button id="clearAllButton" class="danger-outline" type="button">Usuń wszystkie dane</button>
+          <div class="button-row">
+            <button id="clearAllButton" class="danger-outline" type="button">Usuń wpisy</button>
+            <button id="factoryResetButton" class="danger-outline" type="button">↺ Ustawienia fabryczne</button>
+          </div>
         </div>
 
         <form id="filterForm" class="filter-form" autocomplete="off">
@@ -503,6 +515,6 @@
     </section>
   </main>
 
-  <script src="./src/app.js?v=21" type="module"></script>
+  <script src="./src/app.js?v=22" type="module"></script>
 </body>
 </html>
