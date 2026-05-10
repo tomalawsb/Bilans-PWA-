@@ -4,5 +4,5 @@
 // Po wpisaniu klucza użytkownik kliknie tylko „Połącz z Dropbox” i zaloguje się na swoje konto.
 // Nie wpisuj tutaj App Secret.
 window.PORTFEL_PRO_CONFIG = {
-  dropboxAppKey: "WSTAW_TUTAJ_SWÓJ_DROPBOX_APP_KEY"
+  dropboxAppKey: "e8kgsps58sx7vw3"
 };
