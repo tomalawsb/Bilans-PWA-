@@ -1,7 +1,7 @@
 const DB_NAME = 'bilans-pwa-etap1';
 const DB_VERSION = 3;
-const APP_VERSION = 30;
-const DROPBOX_DEFAULT_APP_KEY = ""; // Wpisz tutaj publiczny App key Dropbox, żeby użytkownik nie musiał go podawać ręcznie.
+const APP_VERSION = 31;
+const DROPBOX_DEFAULT_APP_KEY = String(window.PORTFEL_PRO_CONFIG?.dropboxAppKey || '').trim(); // Ustaw w src/config.js, wtedy użytkownik klika tylko Połącz z Dropbox.
 const MAIN_INSTALL_KEY = 'portfel-pro-main-installed';
 const VOICE_INSTALL_KEY = 'portfel-pro-voice-installed';
 
@@ -2917,7 +2917,7 @@ async function startDropboxAuth() {
   setStorageMode('dropbox');
   const config = saveDropboxConfig();
   if (!config.appKey) {
-    showMessage('Brak Dropbox App key. Autor programu musi wpisać DROPBOX_DEFAULT_APP_KEY w pliku src/app.js albo podać go w trybie zaawansowanym.', 'error');
+    showMessage('Dropbox nie jest jeszcze skonfigurowany w tej kopii programu. Autor musi wpisać App Key jeden raz w pliku src/config.js. Po tym użytkownik będzie klikał tylko „Połącz z Dropbox”. Tymczasowo możesz wpisać App Key w Trybie zaawansowanym.', 'error');
     return;
   }
   if (!window.isSecureContext && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
@@ -3253,13 +3253,15 @@ function refreshInstallButtons() {
   if (isFileProtocol() || isStandaloneDisplay()) return;
 
   if (isVoiceActionRequested()) {
-    if (deferredInstallPrompt && !isVoiceInstallRemembered()) {
+    if (!isVoiceInstallRemembered()) {
       el.voiceInstallNowButton?.classList.remove('hidden');
     }
     return;
   }
 
-  if (deferredInstallPrompt && !isMainInstallRemembered()) {
+  // Przycisk instalacji aplikacji ma być widoczny także wtedy, gdy Chrome jeszcze nie wysłał
+  // beforeinstallprompt. Wtedy kliknięcie pokaże jasną instrukcję ręcznej instalacji z menu Chrome.
+  if (!isMainInstallRemembered()) {
     el.installButton?.classList.remove('hidden');
   }
 
@@ -3270,7 +3272,7 @@ function refreshInstallButtons() {
 }
 
 function showInstallUnavailableMessage() {
-  showMessage('Ta aplikacja jest już zainstalowana albo Chrome nie udostępnił teraz okna instalacji. Jeżeli widzisz w pasku „Otwórz aplikację”, program jest już zainstalowany.', 'error');
+  showMessage('Chrome nie udostępnił teraz automatycznego okna instalacji. Użyj menu Chrome → Dodaj do ekranu głównego / Zainstaluj aplikację. Jeśli widzisz „Otwórz aplikację”, program jest już zainstalowany.', 'error');
 }
 
 async function runInstallPrompt() {

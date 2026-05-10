@@ -1,9 +1,15 @@
-# Portfel PRO v. 1.0 — Etap 30
+# Portfel PRO v. 1.0 — Etap 31
 
-Zmiany:
-- uproszczone połączenie z Dropbox: zwykły użytkownik klika tylko „Połącz z Dropbox”, loguje się i zatwierdza dostęp,
-- pola techniczne Dropbox ukryte pod „Tryb zaawansowany”,
-- domyślna ścieżka pliku Dropbox ustawiona na `/bilans_dane.json` dla trybu App folder,
-- cache podbite do v30.
+Poprawki:
+- przycisk **Zainstaluj aplikację** jest widoczny także wtedy, gdy Chrome nie wysłał jeszcze automatycznego zdarzenia instalacji;
+- po kliknięciu bez dostępnego instalatora program pokazuje instrukcję ręcznej instalacji z menu Chrome;
+- konfiguracja Dropboxa została przeniesiona do `src/config.js`;
+- użytkownik końcowy po wpisaniu App Key przez właściciela programu klika tylko **Połącz z Dropbox**;
+- podbito cache do v31.
 
-Uwaga dla autora: aby klienci nie wpisywali App key, wpisz swój publiczny Dropbox App key w `src/app.js` w stałej `DROPBOX_DEFAULT_APP_KEY`.
+Ważne dla autora programu:
+1. Otwórz `src/config.js`.
+2. Wpisz publiczny Dropbox App Key w polu `dropboxAppKey`.
+3. Wgraj całą paczkę na GitHub Pages.
+
+Bez App Key Dropbox nie może uruchomić logowania OAuth — tego nie da się pominąć technicznie.

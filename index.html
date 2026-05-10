@@ -10,11 +10,11 @@
     const __manifestFile = new URLSearchParams(location.search).get('action') === 'voice'
       ? 'manifest-voice.webmanifest'
       : 'manifest.webmanifest';
-    document.write(`<link id="appManifest" rel="manifest" href="./${__manifestFile}?v=29">`);
+    document.write(`<link id="appManifest" rel="manifest" href="./${__manifestFile}?v=31">`);
   </script>
-  <link rel="icon" href="./icons/icon-192.png?v=29">
-  <link rel="apple-touch-icon" href="./icons/icon-192.png?v=29">
-  <link rel="stylesheet" href="./src/styles.css?v=30">
+  <link rel="icon" href="./icons/icon-192.png?v=31">
+  <link rel="apple-touch-icon" href="./icons/icon-192.png?v=31">
+  <link rel="stylesheet" href="./src/styles.css?v=31">
 </head>
 <body data-theme="classic">
   <script>
@@ -25,14 +25,14 @@
   <main class="app-shell">
     <header class="app-header">
       <div class="brand-block">
-        <img class="app-logo" src="./icons/logo-portfel-pro.png?v=29" alt="Portfel PRO">
+        <img class="app-logo" src="./icons/logo-portfel-pro.png?v=31" alt="Portfel PRO">
         <div>
           <h1>Portfel PRO <span id="appVersionBadge" class="version-badge">v. 1.0</span></h1>
           <p id="todayLabel">Lokalna aplikacja webowa</p>
         </div>
       </div>
       <div class="header-actions">
-        <button id="installButton" class="secondary hidden" type="button" data-help="Instaluje Portfel PRO jako aplikację na tym urządzeniu. Po instalacji można uruchamiać program z ikony, bez wchodzenia przez przeglądarkę.">Zainstaluj program</button>
+        <button id="installButton" class="secondary hidden" type="button" data-help="Instaluje Portfel PRO jako aplikację na tym urządzeniu. Po instalacji można uruchamiać program z ikony, bez wchodzenia przez przeglądarkę.">Zainstaluj aplikację</button>
         <button id="installVoiceButton" class="secondary hidden" type="button" data-help="Tworzy osobny skrót do szybkiego dodawania głosem. Na telefonie otwiera mały panel mikrofonu zamiast całego programu.">Zainstaluj mikrofon</button>
         <button id="cacheResetButton" class="ghost" type="button" data-help="Czyści pamięć podręczną PWA i wymusza pobranie najnowszej wersji programu. Nie usuwa wpisów finansowych.">Odśwież program</button>
         <button id="exportButton" class="secondary" type="button" data-help="Zapisuje lokalną kopię danych do pliku JSON. Przydatne przed większymi zmianami albo testami.">Zapisz kopię danych</button>
@@ -557,7 +557,7 @@
             <ol>
               <li>Kliknij <strong>Odśwież program</strong>.</li>
               <li>Odśwież stronę w przeglądarce.</li>
-              <li>Jeżeli dalej widzisz starą wersję, otwórz adres z dopiskiem <code>?v=29</code>.</li>
+              <li>Jeżeli dalej widzisz starą wersję, otwórz adres z dopiskiem <code>?v=31</code>.</li>
             </ol>
           </article>
         </div>
@@ -650,6 +650,7 @@
     </section>
   </main>
 
-  <script src="./src/app.js?v=30" type="module"></script>
+  <script src="./src/config.js?v=31"></script>
+  <script src="./src/app.js?v=31" type="module"></script>
 </body>
 </html>
