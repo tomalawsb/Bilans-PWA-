@@ -10,11 +10,11 @@
     const __manifestFile = new URLSearchParams(location.search).get('action') === 'voice'
       ? 'manifest-voice.webmanifest'
       : 'manifest.webmanifest';
-    document.write(`<link id="appManifest" rel="manifest" href="./${__manifestFile}?v=23">`);
+    document.write(`<link id="appManifest" rel="manifest" href="./${__manifestFile}?v=25">`);
   </script>
-  <link rel="icon" href="./icons/icon-192.png?v=23">
-  <link rel="apple-touch-icon" href="./icons/icon-192.png?v=23">
-  <link rel="stylesheet" href="./src/styles.css?v=23">
+  <link rel="icon" href="./icons/icon-192.png?v=25">
+  <link rel="apple-touch-icon" href="./icons/icon-192.png?v=25">
+  <link rel="stylesheet" href="./src/styles.css?v=25">
 </head>
 <body data-theme="classic">
   <script>
@@ -25,29 +25,30 @@
   <main class="app-shell">
     <header class="app-header">
       <div class="brand-block">
-        <img class="app-logo" src="./icons/logo-portfel-pro.png?v=23" alt="Portfel PRO">
+        <img class="app-logo" src="./icons/logo-portfel-pro.png?v=25" alt="Portfel PRO">
         <div>
-          <h1>Portfel PRO</h1>
+          <h1>Portfel PRO <span id="appVersionBadge" class="version-badge">v. 1.0</span></h1>
           <p id="todayLabel">Lokalna aplikacja webowa</p>
         </div>
       </div>
       <div class="header-actions">
-        <button id="installButton" class="secondary hidden" type="button">Zainstaluj program</button>
-        <button id="installVoiceButton" class="secondary hidden" type="button">Zainstaluj mikrofon</button>
-        <button id="cacheResetButton" class="ghost" type="button">Odśwież program</button>
-        <button id="exportButton" class="secondary" type="button">Zapisz kopię danych</button>
-        <button id="importButton" class="file-button" type="button">Wczytaj dane</button>
+        <button id="installButton" class="secondary hidden" type="button" data-help="Instaluje Portfel PRO jako aplikację na tym urządzeniu. Po instalacji można uruchamiać program z ikony, bez wchodzenia przez przeglądarkę.">Zainstaluj program</button>
+        <button id="installVoiceButton" class="secondary hidden" type="button" data-help="Tworzy osobny skrót do szybkiego dodawania głosem. Na telefonie otwiera mały panel mikrofonu zamiast całego programu.">Zainstaluj mikrofon</button>
+        <button id="cacheResetButton" class="ghost" type="button" data-help="Czyści pamięć podręczną PWA i wymusza pobranie najnowszej wersji programu. Nie usuwa wpisów finansowych.">Odśwież program</button>
+        <button id="exportButton" class="secondary" type="button" data-help="Zapisuje lokalną kopię danych do pliku JSON. Przydatne przed większymi zmianami albo testami.">Zapisz kopię danych</button>
+        <button id="importButton" class="file-button" type="button" data-help="Wczytuje dane z pliku JSON i scala je z obecnymi wpisami.">Wczytaj dane</button>
         <input id="importInput" class="hidden-file-input" type="file" accept="application/json,.json">
       </div>
     </header>
 
     <nav class="app-tabs" aria-label="Główne sekcje programu">
-      <button class="tab-button active" type="button" data-tab="start">Start</button>
-      <button class="tab-button" type="button" data-tab="history">Historia</button>
-      <button class="tab-button" type="button" data-tab="reports">Raporty</button>
-      <button class="tab-button" type="button" data-tab="calendar">Kalendarz</button>
-      <button class="tab-button" type="button" data-tab="sync">Synchronizacja</button>
-      <button class="tab-button" type="button" data-tab="settings">Ustawienia</button>
+      <button class="tab-button active" type="button" data-tab="start" data-help="Ekran główny: szybkie dodawanie, podsumowanie i najważniejszy raport.">Start</button>
+      <button class="tab-button" type="button" data-tab="history" data-help="Lista wszystkich wpisów, filtrowanie, edycja, usuwanie i reset programu.">Historia</button>
+      <button class="tab-button" type="button" data-tab="reports" data-help="Szczegółowe raporty kategorii i grup wydatków/przychodów.">Raporty</button>
+      <button class="tab-button" type="button" data-tab="calendar" data-help="Widok miesięczny i roczny. Wpisy można przenosić między dniami.">Kalendarz</button>
+      <button class="tab-button" type="button" data-tab="sync" data-help="Kopia danych, import, eksport i połączenie z Dropboxem.">Synchronizacja</button>
+      <button class="tab-button" type="button" data-tab="help" data-help="Instrukcja obsługi programu, instalacji PWA, synchronizacji Dropbox i resetowania danych.">Pomoc</button>
+      <button class="tab-button" type="button" data-tab="settings" data-help="Motyw programu oraz baza tagów używana do raportów i rozpoznawania.">Ustawienia</button>
     </nav>
 
     <section id="messageBox" class="message hidden" role="status"></section>
@@ -77,11 +78,11 @@
             <p>Powiedz wydatek albo przychód. Po rozpoznaniu sprawdź wynik i zapisz wpisy.</p>
           </div>
           <div class="button-row voice-top-buttons">
-            <button id="voiceInstallNowButton" class="secondary hidden" type="button">Zainstaluj mikrofon</button>
-            <button id="voiceCloseButton" class="ghost" type="button">Wróć</button>
+            <button id="voiceInstallNowButton" class="secondary hidden" type="button" data-help="Dodaje osobny skrót PWA do szybkiego dodawania głosem.">Zainstaluj mikrofon</button>
+            <button id="voiceCloseButton" class="ghost" type="button" data-help="Zamyka szybki panel głosowy i wraca do pełnego programu.">Wróć</button>
           </div>
         </div>
-        <button id="voiceRecordButton" class="voice-record-button" type="button" aria-pressed="false">🎙️</button>
+        <button id="voiceRecordButton" class="voice-record-button" type="button" aria-pressed="false" data-help="Uruchamia rozpoznawanie mowy. Na telefonie może wymagać zgody na mikrofon.">🎙️</button>
         <strong id="voiceStatus" class="voice-status">Kliknij mikrofon i mów</strong>
         <textarea id="voiceText" class="voice-text" rows="4" placeholder="Tu pojawi się rozpoznany tekst"></textarea>
         <div class="voice-actions">
@@ -104,11 +105,11 @@
         </div>
         <label>
           Tekst do rozpoznania
-          <textarea id="quickText" rows="4" placeholder="np. zarobek 100 zł ustawienie anteny&#10;np. firmowe kupiłem 2 routery za 300 zł i antenę za 120 zł&#10;np. domowe hot-dog 12,50 zł"></textarea>
+          <textarea id="quickText" data-help="Wpisz albo podyktuj tekst, np. „zarobek 100 zł ustawienie anteny” lub „domowe hotdog 12 zł”." rows="4" placeholder="np. zarobek 100 zł ustawienie anteny&#10;np. firmowe kupiłem 2 routery za 300 zł i antenę za 120 zł&#10;np. domowe hot-dog 12,50 zł"></textarea>
         </label>
         <div class="form-actions parser-actions">
-          <button id="parseButton" type="button">Rozpoznaj</button>
-          <button id="addParsedButton" class="secondary" type="button" disabled>Zapisz wpisy</button>
+          <button id="parseButton" type="button" data-help="Analizuje wpisany tekst i przygotowuje pozycje do zapisania. Niczego jeszcze nie zapisuje.">Rozpoznaj</button>
+          <button id="addParsedButton" class="secondary" type="button" disabled data-help="Zapisuje rozpoznane pozycje do historii, raportów i kalendarza.">Zapisz wpisy</button>
         </div>
         <div id="parsePreview" class="parse-preview"></div>
       </section>
@@ -228,15 +229,15 @@
             <p id="entriesCounter">Brak wpisów.</p>
           </div>
           <div class="button-row">
-            <button id="clearAllButton" class="danger-outline" type="button">Usuń wpisy</button>
-            <button id="factoryResetButton" class="danger-outline" type="button">↺ Ustawienia fabryczne</button>
+            <button id="clearAllButton" class="danger-outline" type="button" data-help="Usuwa wszystkie wpisy finansowe. Nie usuwa ustawień programu ani połączenia z Dropboxem.">Usuń wpisy</button>
+            <button id="factoryResetButton" class="danger-outline" type="button" data-help="Pełny reset: usuwa wpisy, ustawienia, połączenie z Dropboxem, cache i lokalną bazę aplikacji.">↺ Ustawienia fabryczne</button>
           </div>
         </div>
 
         <form id="filterForm" class="filter-form" autocomplete="off">
           <label class="wide">
             Szukaj
-            <input id="searchQuery" type="search" placeholder="np. hotdog, kamera, paliwo, firma, domowe">
+            <input id="searchQuery" type="search" data-help="Filtruje historię po opisie, tagach, kategorii lub tekście źródłowym." placeholder="np. hotdog, kamera, paliwo, firma, domowe">
           </label>
           <label>
             Od
@@ -393,23 +394,23 @@
             <p>Wybierz, czy program ma pracować lokalnie, czy na jednym pliku JSON w Dropboxie.</p>
             <label>
               Tryb pracy
-              <select id="storageModeSelect">
+              <select id="storageModeSelect" data-help="Lokalnie zapisuje dane tylko w tej przeglądarce. Dropbox pozwala korzystać z jednego pliku na telefonie i komputerze.">
                 <option value="local">Lokalnie</option>
                 <option value="dropbox">Dropbox</option>
               </select>
             </label>
             <label>
               Dropbox App key
-              <input id="dropboxAppKeyInput" type="text" placeholder="Wklej App key z Dropbox Developers">
+              <input id="dropboxAppKeyInput" type="text" data-help="Tu wklej App key z aplikacji utworzonej w Dropbox Developers." placeholder="Wklej App key z Dropbox Developers">
             </label>
             <label>
               Ścieżka pliku w Dropboxie
-              <input id="dropboxFilePathInput" type="text" value="/Apps/Bilans/bilans_dane.json">
+              <input id="dropboxFilePathInput" type="text" data-help="Ścieżka pliku JSON w Dropboxie. Ten sam plik będzie używany przez telefon i komputer." value="/Apps/Bilans/bilans_dane.json">
             </label>
             <div class="button-row">
-              <button id="dropboxConnectButton" class="secondary" type="button">Połącz z Dropbox</button>
-              <button id="dropboxSyncNowButton" class="secondary" type="button">Synchronizuj teraz</button>
-              <button id="dropboxDisconnectButton" class="ghost" type="button">Odłącz Dropbox</button>
+              <button id="dropboxConnectButton" class="secondary" type="button" data-help="Uruchamia logowanie do Dropboxa i zapisuje token dostępu w tej przeglądarce.">Połącz z Dropbox</button>
+              <button id="dropboxSyncNowButton" class="secondary" type="button" data-help="Ręcznie wysyła i pobiera zmiany z pliku JSON w Dropboxie.">Synchronizuj teraz</button>
+              <button id="dropboxDisconnectButton" class="ghost" type="button" data-help="Usuwa lokalne połączenie z Dropboxem. Nie kasuje pliku danych w Dropboxie.">Odłącz Dropbox</button>
             </div>
             <small id="cloudStatus" class="sync-info">Tryb lokalny. Dane są zapisane tylko w tej przeglądarce.</small>
           </article>
@@ -418,10 +419,10 @@
             <h3>Kopia danych</h3>
             <p>Zapisz dane do pliku JSON albo wczytaj dane z innego urządzenia.</p>
             <div class="button-row">
-              <button id="syncExportButton" class="secondary" type="button">Zapisz kopię danych</button>
-              <button id="syncImportButton" class="file-button" type="button">Scal dane z pliku</button>
+              <button id="syncExportButton" class="secondary" type="button" data-help="Eksportuje aktualne dane do pliku JSON.">Zapisz kopię danych</button>
+              <button id="syncImportButton" class="file-button" type="button" data-help="Dopisuje wpisy z pliku JSON do obecnej bazy i aktualizuje starsze wpisy.">Scal dane z pliku</button>
               <input id="syncImportInput" class="hidden-file-input" type="file" accept="application/json,.json">
-              <button id="replaceImportButton" class="file-button danger-file" type="button">Zastąp dane plikiem</button>
+              <button id="replaceImportButton" class="file-button danger-file" type="button" data-help="Czyści obecną bazę wpisów i zastępuje ją zawartością wskazanego pliku JSON.">Zastąp dane plikiem</button>
               <input id="replaceImportInput" class="hidden-file-input" type="file" accept="application/json,.json">
             </div>
             <small id="syncInfo" class="sync-info">Tryb scalania dopisuje nowe wpisy i aktualizuje starsze wersje tych samych wpisów.</small>
@@ -440,6 +441,122 @@
       </section>
     </section>
 
+
+
+    <section class="tab-page" data-tab-page="help">
+      <section class="panel help-panel">
+        <div class="panel-title-row">
+          <div>
+            <h2>Pomoc i instrukcja obsługi</h2>
+            <p>Krótka instrukcja dla pierwszej wersji testowej Portfel PRO v. 1.0.</p>
+          </div>
+        </div>
+
+        <div class="help-grid">
+          <article class="help-card">
+            <h3>1. Do czego służy program</h3>
+            <p><strong>Portfel PRO</strong> zapisuje przychody, wydatki firmowe i wydatki domowe. Najważniejszy raport pokazuje:</p>
+            <ul>
+              <li><strong>Komputerowe</strong> — przychody i koszty z usług komputerowych,</li>
+              <li><strong>Montaże</strong> — przychody i koszty z montaży, anten, monitoringu i usług,</li>
+              <li><strong>Wydatki domowe</strong> — osobno, bez odejmowania od wyniku firmy,</li>
+              <li><strong>Wynik firmy / wypłata</strong> — przychody firmowe minus koszty firmowe.</li>
+            </ul>
+          </article>
+
+          <article class="help-card">
+            <h3>2. Szybkie dodawanie wpisu</h3>
+            <ol>
+              <li>Wejdź w zakładkę <strong>Start</strong>.</li>
+              <li>Wpisz albo podyktuj tekst, np. <em>„zarobek 100 zł ustawienie anteny”</em>.</li>
+              <li>Kliknij <strong>Rozpoznaj</strong>.</li>
+              <li>Sprawdź podgląd. W razie potrzeby popraw kwotę, opis, kategorię lub typ.</li>
+              <li>Kliknij <strong>Zapisz wpisy</strong>.</li>
+            </ol>
+            <p>Program zapisze wpis w historii, raportach i kalendarzu.</p>
+          </article>
+
+          <article class="help-card">
+            <h3>3. Dodawanie ręczne</h3>
+            <p>Użyj sekcji <strong>Dodaj wpis ręcznie</strong>, gdy parser źle rozpozna tekst albo chcesz od razu wpisać dokładne dane.</p>
+            <ul>
+              <li><strong>Typ</strong>: przychód albo wydatek.</li>
+              <li><strong>Rodzaj</strong>: firmowe, domowe albo nieokreślone.</li>
+              <li><strong>Kategoria</strong>: wpływa na raporty.</li>
+              <li><strong>Data</strong>: decyduje, gdzie wpis pojawi się w kalendarzu.</li>
+            </ul>
+          </article>
+
+          <article class="help-card">
+            <h3>4. Historia, edycja i usuwanie</h3>
+            <p>Zakładka <strong>Historia</strong> pokazuje wszystkie wpisy. Możesz je filtrować po dacie, kategorii, typie, rodzaju i płatności.</p>
+            <ul>
+              <li><strong>Edytuj</strong> — poprawia pojedynczy wpis.</li>
+              <li><strong>Usuń</strong> przy wpisie — usuwa tylko ten jeden wpis.</li>
+              <li><strong>Usuń wpisy</strong> — usuwa wszystkie wpisy finansowe, ale nie usuwa ustawień programu.</li>
+              <li><strong>Ustawienia fabryczne</strong> — usuwa wpisy, ustawienia, Dropbox, cache i lokalną bazę aplikacji.</li>
+            </ul>
+          </article>
+
+          <article class="help-card">
+            <h3>5. Instalacja jako aplikacja</h3>
+            <p>Program najlepiej działa z GitHub Pages albo innego hostingu HTTPS. Nie uruchamiaj go na stałe przez samo otwarcie pliku <code>index.html</code> z dysku.</p>
+            <ol>
+              <li>Otwórz adres programu w Chrome albo Edge.</li>
+              <li>Jeżeli przeglądarka pozwala na instalację, pojawi się przycisk <strong>Zainstaluj program</strong>.</li>
+              <li>Po instalacji uruchamiaj aplikację z ikony systemowej.</li>
+              <li>Osobny skrót <strong>Zainstaluj mikrofon</strong> służy do szybkiego dodawania głosem.</li>
+            </ol>
+          </article>
+
+          <article class="help-card important-help">
+            <h3>6. Jak połączyć z Dropbox</h3>
+            <p>Dropbox pozwala używać jednego pliku JSON na telefonie i komputerze.</p>
+            <ol>
+              <li>Wejdź na stronę <strong>Dropbox Developers</strong> i utwórz nową aplikację.</li>
+              <li>Wybierz <strong>Scoped access</strong>.</li>
+              <li>Wybierz dostęp <strong>App folder</strong>, żeby aplikacja miała dostęp tylko do swojego folderu w Dropboxie.</li>
+              <li>Po utworzeniu aplikacji skopiuj <strong>App key</strong>.</li>
+              <li>W ustawieniach aplikacji Dropbox dodaj adres programu jako <strong>Redirect URI</strong>, np. adres z GitHub Pages.</li>
+              <li>W zakładce <strong>Permissions</strong> włącz uprawnienia do odczytu i zapisu plików, czyli minimum: <code>files.content.read</code>, <code>files.content.write</code> oraz odczyt metadanych plików.</li>
+              <li>W Portfel PRO przejdź do <strong>Synchronizacja</strong>.</li>
+              <li>Ustaw <strong>Tryb pracy: Dropbox</strong>.</li>
+              <li>Wklej <strong>Dropbox App key</strong>.</li>
+              <li>Zostaw ścieżkę pliku albo wpisz własną, np. <code>/Apps/PortfelPRO/portfel_dane.json</code>.</li>
+              <li>Kliknij <strong>Połącz z Dropbox</strong>.</li>
+              <li>Zaloguj się do Dropboxa i zatwierdź dostęp.</li>
+              <li>Po powrocie do programu kliknij <strong>Synchronizuj teraz</strong>.</li>
+            </ol>
+            <p><strong>Ważne:</strong> ten sam App key i ta sama ścieżka pliku muszą być ustawione na telefonie i komputerze.</p>
+          </article>
+
+          <article class="help-card">
+            <h3>7. Kopia danych i import JSON</h3>
+            <ul>
+              <li><strong>Zapisz kopię danych</strong> — tworzy plik JSON z danymi.</li>
+              <li><strong>Scal dane z pliku</strong> — dopisuje brakujące wpisy i aktualizuje starsze wersje tych samych wpisów.</li>
+              <li><strong>Zastąp dane plikiem</strong> — usuwa obecną lokalną bazę wpisów i wczytuje wskazany plik.</li>
+            </ul>
+            <p>Przed testami u innych osób warto zrobić kopię JSON.</p>
+          </article>
+
+          <article class="help-card">
+            <h3>8. Tooltipy i pomoc kontekstowa</h3>
+            <p>Na komputerze najedź myszą na przycisk albo pole. Na telefonie przytrzymaj element palcem przez chwilę. Program pokaże krótką podpowiedź.</p>
+          </article>
+
+          <article class="help-card">
+            <h3>9. Gdy program pokazuje starą wersję</h3>
+            <ol>
+              <li>Kliknij <strong>Odśwież program</strong>.</li>
+              <li>Odśwież stronę w przeglądarce.</li>
+              <li>Jeżeli dalej widzisz starą wersję, otwórz adres z dopiskiem <code>?v=25</code>.</li>
+            </ol>
+          </article>
+        </div>
+      </section>
+    </section>
+
     <section class="tab-page" data-tab-page="settings">
       <section class="panel appearance-panel">
         <div class="panel-title-row">
@@ -451,7 +568,7 @@
         <div class="appearance-grid">
           <label>
             Motyw kolorystyczny
-            <select id="themeSelect">
+            <select id="themeSelect" data-help="Zmienia motyw kolorystyczny programu. Ustawienie zapisuje się lokalnie w przeglądarce.">
               <option value="classic">Jasny klasyczny</option>
               <option value="blue">Błękitny firmowy</option>
               <option value="green">Zielony bilans</option>
@@ -515,6 +632,6 @@
     </section>
   </main>
 
-  <script src="./src/app.js?v=23" type="module"></script>
+  <script src="./src/app.js?v=25" type="module"></script>
 </body>
 </html>
