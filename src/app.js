@@ -1,6 +1,6 @@
 const DB_NAME = 'bilans-pwa-etap1';
 const DB_VERSION = 4;
-const APP_VERSION = '1.1-115';
+const APP_VERSION = '1.1-116';
 const RAW_DROPBOX_DEFAULT_APP_KEY = String(window.PORTFEL_PRO_CONFIG?.dropboxAppKey || '').trim();
 const DROPBOX_DEFAULT_APP_KEY = /^WSTAW_TUTAJ/i.test(RAW_DROPBOX_DEFAULT_APP_KEY) ? '' : RAW_DROPBOX_DEFAULT_APP_KEY; // Ustaw w src/config.js, wtedy użytkownik klika tylko Połącz z Dropbox.
 const MAIN_INSTALL_KEY = 'portfel-pro-main-installed';
@@ -19,6 +19,7 @@ const DROPBOX_OAUTH_KEY = 'bilans-pwa-dropbox-oauth';
 const DELETED_ENTRIES_KEY = 'bilans-pwa-deleted-entries';
 const DELETE_TOMBSTONE_RETENTION_DAYS = 365;
 const MAIN_REPORT_SETTINGS_KEY = 'portfel-pro-main-report-settings-v1';
+const CUSTOM_CATEGORIES_KEY = 'portfel-pro-custom-categories-v1';
 const WALLET_MONTHS_KEY = 'portfel-pro-wallet-months-v1';
 const LEARNING_AUTO_CONFIRMATIONS = 2;
 const LEARNING_MAX_EXAMPLES = 8;
@@ -247,6 +248,7 @@ let deferredInstallPrompt = null;
 let parsedDrafts = [];
 let tagRules = [];
 let learningRules = [];
+let customCategories = loadCustomCategories();
 let calendarMonth = todayISO().slice(0, 7);
 let selectedCalendarDate = todayISO();
 let calendarYear = Number(todayISO().slice(0, 4));
@@ -352,6 +354,9 @@ const el = {
   mainReport: document.querySelector('#mainReport'),
   mainReportSettings: document.querySelector('#mainReportSettings'),
   mainReportResetButton: document.querySelector('#mainReportResetButton'),
+  categoryForm: document.querySelector('#categoryForm'),
+  newCategoryName: document.querySelector('#newCategoryName'),
+  customCategoriesList: document.querySelector('#customCategoriesList'),
   categoryReport: document.querySelector('#categoryReport'),
   itemReport: document.querySelector('#itemReport'),
   smartReport: document.querySelector('#smartReport'),
@@ -601,7 +606,7 @@ function getWeekday(dateISO) {
 }
 
 function monthKey(dateISO) {
-  return dateISO.slice(0, 7);
+  return String(dateISO || '').slice(0, 7);
 }
 
 function formatMoney(value) {
@@ -630,7 +635,187 @@ function normalizeTags(raw) {
     .filter((item, index, array) => array.findIndex(x => x.toLowerCase() === item.toLowerCase()) === index);
 }
 
+function categoryKey(value) {
+  return normalizeText(value).replace(/[^a-z0-9]+/g, ' ').trim();
+}
 
+function sanitizeCategoryName(value) {
+  return String(value ?? '')
+    .replace(/\s+/g, ' ')
+    .replace(/[<>]/g, '')
+    .trim()
+    .slice(0, 40);
+}
+
+function uniqueCategoryList(values) {
+  const result = [];
+  const seen = new Set();
+  for (const value of values || []) {
+    const name = sanitizeCategoryName(value);
+    const key = categoryKey(name);
+    if (!name || !key || seen.has(key)) continue;
+    seen.add(key);
+    result.push(name);
+  }
+  return result;
+}
+
+function loadCustomCategories() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(CUSTOM_CATEGORIES_KEY) || '[]');
+    if (!Array.isArray(parsed)) return [];
+    const defaults = new Set(CATEGORIES.map(categoryKey));
+    return uniqueCategoryList(parsed)
+      .filter(name => !defaults.has(categoryKey(name)))
+      .sort((a, b) => a.localeCompare(b, 'pl'));
+  } catch (_) {
+    return [];
+  }
+}
+
+function saveCustomCategories(categories = customCategories) {
+  const defaults = new Set(CATEGORIES.map(categoryKey));
+  customCategories = uniqueCategoryList(categories)
+    .filter(name => !defaults.has(categoryKey(name)))
+    .sort((a, b) => a.localeCompare(b, 'pl'));
+  try { localStorage.setItem(CUSTOM_CATEGORIES_KEY, JSON.stringify(customCategories)); } catch (_) {}
+}
+
+function getAllCategories() {
+  const defaults = [...CATEGORIES];
+  const dynamic = [
+    ...customCategories,
+    ...(allEntries || []).map(entry => entry.category),
+    ...(tagRules || []).map(rule => rule.category),
+    ...(learningRules || []).map(rule => rule.category)
+  ];
+  const defaultKeys = new Set(defaults.map(categoryKey));
+  const custom = uniqueCategoryList(dynamic)
+    .filter(name => !defaultKeys.has(categoryKey(name)))
+    .sort((a, b) => a.localeCompare(b, 'pl'));
+  return [...defaults, ...custom];
+}
+
+function isKnownCategory(value) {
+  const key = categoryKey(value);
+  return Boolean(key && getAllCategories().some(category => categoryKey(category) === key));
+}
+
+function normalizeKnownCategory(value, fallback = 'Inne') {
+  const key = categoryKey(value);
+  if (!key) return fallback;
+  return getAllCategories().find(category => categoryKey(category) === key) || fallback;
+}
+
+function addCustomCategory(name) {
+  const category = sanitizeCategoryName(name);
+  if (!category) throw new Error('Podaj nazwę kategorii.');
+  if (isKnownCategory(category)) throw new Error('Taka kategoria już istnieje.');
+  customCategories.push(category);
+  saveCustomCategories();
+  return category;
+}
+
+function canDeleteCustomCategory(category) {
+  const key = categoryKey(category);
+  if (!key) return false;
+  if (CATEGORIES.some(item => categoryKey(item) === key)) return false;
+  const usedInEntries = (allEntries || []).some(entry => categoryKey(entry.category) === key);
+  const usedInTagRules = (tagRules || []).some(rule => categoryKey(rule.category) === key);
+  const usedInLearningRules = (learningRules || []).some(rule => categoryKey(rule.category) === key);
+  return !usedInEntries && !usedInTagRules && !usedInLearningRules;
+}
+
+function deleteCustomCategory(category) {
+  if (!canDeleteCustomCategory(category)) {
+    throw new Error('Nie można usunąć tej kategorii, bo jest użyta we wpisach, regułach tagów albo nauce programu.');
+  }
+  const key = categoryKey(category);
+  saveCustomCategories(customCategories.filter(item => categoryKey(item) !== key));
+  const settings = getMainReportSettings();
+  settings.categoryRows = (settings.categoryRows || []).filter(item => categoryKey(item) !== key);
+  saveMainReportSettings(settings);
+}
+
+function refreshCategorySelects() {
+  const categories = getAllCategories();
+  const oldCategory = el.category?.value || 'Inne';
+  const oldFilterCategory = el.filterCategory?.value || '';
+  const oldTagCategory = el.tagRuleCategory?.value || 'Inne';
+
+  if (el.category) {
+    fillSelect(el.category, categories);
+    el.category.value = normalizeKnownCategory(oldCategory, 'Inne');
+  }
+  if (el.filterCategory) {
+    fillSelect(el.filterCategory, categories, true);
+    el.filterCategory.value = oldFilterCategory && isKnownCategory(oldFilterCategory) ? normalizeKnownCategory(oldFilterCategory, '') : '';
+  }
+  if (el.tagRuleCategory) {
+    fillSelect(el.tagRuleCategory, categories);
+    el.tagRuleCategory.value = normalizeKnownCategory(oldTagCategory, 'Inne');
+  }
+}
+
+function renderCustomCategoriesList() {
+  if (!el.customCategoriesList) return;
+  const categories = getAllCategories();
+  const customKeys = new Set(customCategories.map(categoryKey));
+  const defaultKeys = new Set(CATEGORIES.map(categoryKey));
+
+  el.customCategoriesList.innerHTML = categories.map(category => {
+    const key = categoryKey(category);
+    const custom = customKeys.has(key);
+    const defaultCategory = defaultKeys.has(key);
+    const canDelete = custom && canDeleteCustomCategory(category);
+    return `
+      <article class="tag-rule-card compact-category-card">
+        <div>
+          <strong>${escapeHtml(category)}</strong>
+          <small>${custom ? 'Kategoria własna' : (defaultCategory ? 'Kategoria domyślna' : 'Kategoria z wpisów/importu')}</small>
+        </div>
+        <div class="row-actions">
+          ${custom ? `<button class="danger" type="button" data-category-action="delete" data-category="${escapeHtml(category)}" ${canDelete ? '' : 'disabled'} data-help="Kategorię można usunąć tylko wtedy, gdy nie jest użyta we wpisach ani regułach.">Usuń</button>` : '<span class="muted-small">stała</span>'}
+        </div>
+      </article>
+    `;
+  }).join('');
+}
+
+async function handleCategoryFormSubmit(event) {
+  event.preventDefault();
+  const category = addCustomCategory(el.newCategoryName?.value || '');
+  el.categoryForm?.reset();
+
+  const settings = getMainReportSettings();
+  const selected = new Set(settings.categoryRows || []);
+  selected.add(category);
+  settings.categoryRows = Array.from(selected).sort((a, b) => a.localeCompare(b, 'pl'));
+  saveMainReportSettings(settings);
+
+  refreshCategorySelects();
+  renderCustomCategoriesList();
+  renderMainReportSettings();
+  renderMainReport();
+  showMessage(`Dodano kategorię: ${category}.`);
+}
+
+function handleCustomCategoryClick(event) {
+  const button = event.target.closest('button[data-category-action="delete"]');
+  if (!button) return;
+  const category = button.dataset.category;
+  if (!window.confirm(`Usunąć kategorię: ${category}?`)) return;
+  try {
+    deleteCustomCategory(category);
+    refreshCategorySelects();
+    renderCustomCategoriesList();
+    renderMainReportSettings();
+    renderMainReport();
+    showMessage('Kategoria usunięta.');
+  } catch (error) {
+    showMessage(error.message, 'error');
+  }
+}
 
 function ruleIdFromName(name) {
   return `rule-${normalizeText(name).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || Date.now()}`;
@@ -653,7 +838,7 @@ function normalizeRule(rule) {
     id: rule?.id || ruleIdFromName(name),
     name,
     aliases: normalizeTags(aliases.join(',')).filter(Boolean),
-    category: CATEGORIES.includes(rule?.category) ? rule.category : 'Inne',
+    category: isKnownCategory(rule?.category) ? normalizeKnownCategory(rule.category, 'Inne') : 'Inne',
     entryType: ['przychód', 'wydatek', ''].includes(rule?.entryType) ? rule.entryType : '',
     system: Boolean(rule?.system),
     syncId: rule?.syncId || rule?.sync_id || rule?.id || makeSyncId('rule'),
@@ -790,7 +975,7 @@ function normalizeLearningRule(rule) {
     id: rule?.id || `learn-${idBase.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`,
     phrase: phrase || normalizedPhrase,
     normalizedPhrase,
-    category: CATEGORIES.includes(rule?.category) ? rule.category : 'Inne',
+    category: isKnownCategory(rule?.category) ? normalizeKnownCategory(rule.category, 'Inne') : 'Inne',
     entryType: ['przychód', 'wydatek', ''].includes(rule?.entryType) ? rule.entryType : '',
     confirmations: Math.max(1, Number(rule?.confirmations || 1)),
     misses: Math.max(0, Number(rule?.misses || 0)),
@@ -830,7 +1015,7 @@ function levenshteinDistance(a, b) {
 }
 
 function scoreLearningRule(rule, text) {
-  if (!rule || !CATEGORIES.includes(rule.category)) return 0;
+  if (!rule || !isKnownCategory(rule.category)) return 0;
   if (Number(rule.confirmations || 0) < LEARNING_AUTO_CONFIRMATIONS) return 0;
 
   const sourceTokens = learningTokens(text);
@@ -934,7 +1119,7 @@ function clearLearningRulesStore() {
 async function reloadLearningRules() {
   learningRules = (await getAllLearningRules())
     .map(normalizeLearningRule)
-    .filter(rule => rule.normalizedPhrase && CATEGORIES.includes(rule.category))
+    .filter(rule => rule.normalizedPhrase && isKnownCategory(rule.category))
     .sort((a, b) => learningConfidence(b) - learningConfidence(a) || b.updatedAt.localeCompare(a.updatedAt));
   renderLearningRules();
 }
@@ -956,7 +1141,7 @@ async function importLearningRulesFromPayload(payload, replace = false) {
 async function learnFromCorrection(entry, previousCategory) {
   const nextCategory = entry?.category || 'Inne';
   const oldCategory = previousCategory || entry?.learningOriginalCategory || 'Inne';
-  if (!entry || !CATEGORIES.includes(nextCategory) || nextCategory === 'Inne' || nextCategory === oldCategory) return null;
+  if (!entry || !isKnownCategory(nextCategory) || nextCategory === 'Inne' || nextCategory === oldCategory) return null;
 
   const phrase = makeLearningPhrase(entry.learningSourceText || entry.description || entry.originalText || '');
   if (!phrase) return null;
@@ -1561,7 +1746,7 @@ function renderParsePreview() {
               <select data-field="scope">${optionsHtml(SCOPES, normalizeScope(entry.scope))}</select>
             </label>
             <label>Kategoria
-              <select data-field="category">${optionsHtml(CATEGORIES, entry.category || 'Inne')}</select>
+              <select data-field="category">${optionsHtml(getAllCategories(), entry.category || 'Inne')}</select>
             </label>
             <label>Kwota łączna
               <input data-field="amount" type="text" inputmode="decimal" value="${escapeHtml(String(entry.amount).replace('.', ','))}">
@@ -2180,6 +2365,7 @@ const DEFAULT_MAIN_REPORT_SETTINGS = {
     homeExpense: true,
     companyResult: true
   },
+  categoryRows: [],
   customGroups: []
 };
 
@@ -2191,6 +2377,9 @@ function getMainReportSettings() {
         ...DEFAULT_MAIN_REPORT_SETTINGS.rows,
         ...(parsed.rows && typeof parsed.rows === 'object' ? parsed.rows : {})
       },
+      categoryRows: Array.isArray(parsed.categoryRows)
+        ? parsed.categoryRows.map(item => normalizeKnownCategory(item, String(item))).filter(Boolean)
+        : [],
       customGroups: Array.isArray(parsed.customGroups)
         ? parsed.customGroups.map(item => String(item)).filter(Boolean)
         : []
@@ -2243,6 +2432,8 @@ function renderMainReportSettings() {
   const settings = getMainReportSettings();
   const groups = availableCustomReportGroups();
   const selected = new Set(settings.customGroups);
+  const selectedCategories = new Set(settings.categoryRows || []);
+  const categories = getAllCategories();
 
   const fixedRows = [
     ['computers', 'Komputerowe', 'Pokazuje bilans kategorii Komputerowe.'],
@@ -2258,6 +2449,13 @@ function renderMainReportSettings() {
     </label>
   `).join('');
 
+  const categoryHtml = categories.map(category => `
+    <label class="report-option compact-report-option">
+      <input type="checkbox" data-report-category="${escapeHtml(category)}" ${selectedCategories.has(category) ? 'checked' : ''}>
+      <span><b>${escapeHtml(category)}</b><small>Dokładna kategoria na stronie startowej</small></span>
+    </label>
+  `).join('');
+
   const groupsHtml = groups.length ? groups.map(group => `
     <label class="report-option compact-report-option">
       <input type="checkbox" data-report-group="${escapeHtml(group.name)}" ${selected.has(group.name) ? 'checked' : ''}>
@@ -2267,12 +2465,17 @@ function renderMainReportSettings() {
 
   el.mainReportSettings.innerHTML = `
     <div class="report-settings-block">
-      <h3>Widoczne kafelki</h3>
+      <h3>Stałe podsumowania</h3>
       <div class="report-option-grid">${fixedHtml}</div>
     </div>
     <div class="report-settings-block">
+      <h3>Kategorie widoczne na stronie startowej</h3>
+      <p class="muted-small">Tu wybierasz pełnoprawne kategorie, które mają mieć osobny kafelek w raporcie głównym.</p>
+      <div class="report-option-grid">${categoryHtml}</div>
+    </div>
+    <div class="report-settings-block">
       <h3>Własne grupy/tagi w raporcie głównym</h3>
-      <p class="muted-small">Zaznaczone grupy pojawią się dodatkowo w raporcie głównym na stronie startowej.</p>
+      <p class="muted-small">Grupy/tagi są podgrupami opisów, np. Hotdog, Kia, Orlen. Kategoria dalej zostaje kategorią nadrzędną.</p>
       <div class="report-option-grid">${groupsHtml}</div>
     </div>
   `;
@@ -2285,6 +2488,14 @@ function handleMainReportSettingsChange(event) {
 
   if (input.dataset.reportRow) {
     settings.rows[input.dataset.reportRow] = input.checked;
+  }
+
+  if (input.dataset.reportCategory) {
+    const category = input.dataset.reportCategory;
+    const selectedCategories = new Set(settings.categoryRows || []);
+    if (input.checked) selectedCategories.add(category);
+    else selectedCategories.delete(category);
+    settings.categoryRows = Array.from(selectedCategories).sort((a, b) => a.localeCompare(b, 'pl'));
   }
 
   if (input.dataset.reportGroup) {
@@ -2400,6 +2611,36 @@ function importWalletMonthsFromPayload(payload, replace = false) {
   }
 
   saveWalletMonths(current);
+}
+
+function importCustomCategoriesFromPayload(payload, replace = false) {
+  const incoming = payload?.customCategories || payload?.custom_categories || [];
+  if (!Array.isArray(incoming)) return;
+  const next = replace ? [] : [...customCategories];
+  const defaultKeys = new Set(CATEGORIES.map(categoryKey));
+  const seen = new Set(next.map(categoryKey));
+  for (const item of incoming) {
+    const name = sanitizeCategoryName(item);
+    const key = categoryKey(name);
+    if (name && key && !defaultKeys.has(key) && !seen.has(key)) {
+      next.push(name);
+      seen.add(key);
+    }
+  }
+  saveCustomCategories(next);
+
+  const importedSettings = payload?.mainReportSettings || payload?.main_report_settings || null;
+  if (importedSettings && typeof importedSettings === 'object') {
+    const currentSettings = replace ? structuredClone(DEFAULT_MAIN_REPORT_SETTINGS) : getMainReportSettings();
+    const categoryRows = Array.isArray(importedSettings.categoryRows) ? importedSettings.categoryRows : [];
+    currentSettings.categoryRows = uniqueCategoryList([...(currentSettings.categoryRows || []), ...categoryRows])
+      .filter(category => isKnownCategory(category));
+    saveMainReportSettings(currentSettings);
+  }
+
+  refreshCategorySelects();
+  renderCustomCategoriesList();
+  renderMainReportSettings();
 }
 
 function isCashPayment(entry) {
@@ -2651,16 +2892,40 @@ function mainReportRow(title, note, value, extraClass = '') {
   `;
 }
 
+function hasActiveMainReportFilters() {
+  return Boolean(
+    el.searchQuery?.value ||
+    el.filterFrom?.value ||
+    el.filterTo?.value ||
+    el.filterType?.value ||
+    el.filterScope?.value ||
+    el.filterCategory?.value ||
+    el.filterPayment?.value
+  );
+}
+
+function getMainReportEntries() {
+  if (hasActiveMainReportFilters()) return filteredEntries;
+  const currentMonth = monthKey(todayISO());
+  return allEntries.filter(entry => monthKey(entry.entryDate) === currentMonth);
+}
+
+function summarizePayout(entries) {
+  return summarize(entries.filter(isFirmEntry));
+}
+
 function renderMainReport() {
   if (!el.mainReport) return;
 
-  if (!filteredEntries.length) {
+  const reportEntries = getMainReportEntries();
+
+  if (!reportEntries.length) {
     el.mainReport.innerHTML = '<div class="empty-state">Brak danych do raportu głównego.</div>';
     return;
   }
 
   const settings = getMainReportSettings();
-  const report = summarizeMainReport(filteredEntries);
+  const report = summarizeMainReport(reportEntries);
   const rows = [];
 
   if (settings.rows.computers) {
@@ -2697,8 +2962,19 @@ function renderMainReport() {
     ));
   }
 
+  for (const categoryName of settings.categoryRows || []) {
+    const categorySummary = summarize(reportEntries.filter(entry => entry.category === categoryName));
+    if (!categorySummary.income && !categorySummary.expense) continue;
+    rows.push(mainReportRow(
+      categoryName,
+      `Kategoria · przychody ${formatMoney(categorySummary.income)} · koszty ${formatMoney(categorySummary.expense)}`,
+      categorySummary.balance,
+      'category-report-row'
+    ));
+  }
+
   for (const groupName of settings.customGroups || []) {
-    const groupSummary = summarizeGroup(filteredEntries, groupName);
+    const groupSummary = summarizeGroup(reportEntries, groupName);
     if (!groupSummary.income && !groupSummary.expense) continue;
     rows.push(mainReportRow(
       groupName,
@@ -2800,10 +3076,11 @@ function renderCalendarDayDetails(dayEntries) {
   }
 
   const summary = summarize(dayEntries);
+  const payout = summarizePayout(dayEntries);
   el.calendarDayDetails.innerHTML = `
     <div class="calendar-day-summary">
       <strong>${escapeHtml(selectedCalendarDate)}</strong>
-      <span>Wpisy: ${dayEntries.length} · Przychody ${formatMoney(summary.income)} · Wydatki ${formatMoney(summary.expense)} · Bilans ${formatMoney(summary.balance)}</span>
+      <span>Wpisy: ${dayEntries.length} · Przychody ${formatMoney(summary.income)} · Wydatki ${formatMoney(summary.expense)} · Bilans ${formatMoney(summary.balance)} · Wypłata ${formatMoney(payout.balance)}</span>
     </div>
     <div class="calendar-day-list">
       ${dayEntries.slice(0, 6).map(entry => {
@@ -2836,9 +3113,10 @@ function renderCalendar() {
   const monthPrefix = buildMonthKey(year, monthIndex);
   const monthEntries = allEntries.filter(entry => entry.entryDate?.startsWith(monthPrefix));
   const monthSummary = summarize(monthEntries);
+  const monthPayout = summarizePayout(monthEntries);
 
   el.calendarMonthLabel.textContent = `${CALENDAR_MONTHS_PL[monthIndex]} ${year}`;
-  el.calendarMonthSummary.textContent = `Wpisy: ${monthEntries.length} · Przychody ${formatMoney(monthSummary.income)} · Wydatki ${formatMoney(monthSummary.expense)} · Bilans ${formatMoney(monthSummary.balance)}`;
+  el.calendarMonthSummary.textContent = `Wpisy: ${monthEntries.length} · Przychody ${formatMoney(monthSummary.income)} · Wydatki ${formatMoney(monthSummary.expense)} · Bilans ${formatMoney(monthSummary.balance)} · Wypłata ${formatMoney(monthPayout.balance)}`;
 
   const cells = [];
   for (let i = 0; i < leadingBlanks; i += 1) {
@@ -2882,6 +3160,7 @@ function renderYearCalendar() {
   const today = todayISO();
   const yearEntries = entriesForYear(year);
   const yearSummary = summarize(yearEntries);
+  const yearPayout = summarizePayout(yearEntries);
   const entriesByDate = new Map();
   const activityByDate = new Map();
 
@@ -2900,7 +3179,7 @@ function renderYearCalendar() {
   });
 
   el.yearCalendarLabel.textContent = `Rok ${year}`;
-  el.yearCalendarSummary.textContent = `Wpisy: ${yearEntries.length} · Przychody ${formatMoney(yearSummary.income)} · Wydatki ${formatMoney(yearSummary.expense)} · Bilans ${formatMoney(yearSummary.balance)}`;
+  el.yearCalendarSummary.textContent = `Wpisy: ${yearEntries.length} · Przychody ${formatMoney(yearSummary.income)} · Wydatki ${formatMoney(yearSummary.expense)} · Bilans ${formatMoney(yearSummary.balance)} · Wypłata ${formatMoney(yearPayout.balance)}`;
 
   const monthsHtml = CALENDAR_MONTHS_PL.map((monthName, monthIndex) => {
     const monthPrefix = buildMonthKey(year, monthIndex);
@@ -2909,6 +3188,7 @@ function renderYearCalendar() {
     const leadingBlanks = (firstDay.getDay() + 6) % 7;
     const monthEntries = yearEntries.filter(entry => entry.entryDate?.startsWith(monthPrefix));
     const monthSummary = summarize(monthEntries);
+    const monthPayout = summarizePayout(monthEntries);
     const monthBalanceClass = monthSummary.balance >= 0 ? 'amount-income' : 'amount-expense';
 
     const dayCells = [];
@@ -2940,7 +3220,7 @@ function renderYearCalendar() {
           <strong>${escapeHtml(monthName)}</strong>
           <span class="${monthBalanceClass}">${formatMoney(monthSummary.balance)}</span>
         </div>
-        <small>Wpisy: ${monthEntries.length} · Obrót ${formatMoney(monthSummary.income + monthSummary.expense)}</small>
+        <small>Wpisy: ${monthEntries.length} · Obrót ${formatMoney(monthSummary.income + monthSummary.expense)} · Wypłata ${formatMoney(monthPayout.balance)}</small>
         <div class="mini-weekdays" aria-hidden="true"><span>P</span><span>W</span><span>Ś</span><span>C</span><span>P</span><span>S</span><span>N</span></div>
         <div class="year-month-days">${dayCells.join('')}</div>
       </article>
@@ -3392,7 +3672,7 @@ function normalizeImportedDate(value) {
 
 function normalizeImportedCategory(value, fallbackText = '') {
   const raw = String(value ?? '').trim();
-  if (CATEGORIES.includes(raw)) return raw;
+  if (isKnownCategory(raw)) return normalizeKnownCategory(raw, raw);
 
   const normalized = normalizeText(raw);
   const aliases = {
@@ -3423,7 +3703,9 @@ function normalizeImportedCategory(value, fallbackText = '') {
   };
 
   if (aliases[normalized]) return aliases[normalized];
-  return detectCategory(`${raw} ${fallbackText}`);
+  const detected = detectCategory(`${raw} ${fallbackText}`);
+  if (detected && detected !== 'Inne') return detected;
+  return raw && raw.length <= 40 ? raw : 'Inne';
 }
 
 function collectImportedEntries(payload) {
@@ -3698,6 +3980,8 @@ function makeExportPayload() {
     learningRules,
     deletedEntries: getDeletedEntries(),
     walletMonths: getWalletMonths(),
+    customCategories,
+    mainReportSettings: getMainReportSettings(),
     entries: allEntries.map(entry => ({
       ...entry,
       syncId: entry.syncId || makeSyncId('entry'),
@@ -3740,6 +4024,7 @@ async function dropboxUploadPayload(payload) {
 async function importPayload(payload, options = {}) {
   const { replace = false, silent = false } = options;
   const deletionResult = await applyImportedDeletions(payload);
+  importCustomCategoriesFromPayload(payload, replace);
   await importLearningRulesFromPayload(payload, replace);
   importWalletMonthsFromPayload(payload, replace);
   const imported = collectImportedEntries(payload);
@@ -4141,7 +4426,7 @@ function drawMonthCalendarCanvas(ctx, width, height) {
 
   drawText(ctx, 'Portfel PRO — kalendarz miesięczny', 70, 70, { size: 30, weight: 800, color: '#7c4d00' });
   drawText(ctx, title, 70, 115, { size: 42, weight: 900 });
-  drawText(ctx, `Wpisy: ${monthEntries.length} · Przychody ${formatMoney(monthSummary.income)} · Wydatki ${formatMoney(monthSummary.expense)} · Bilans ${formatMoney(monthSummary.balance)}`, 70, 175, { size: 24, color: '#667085' });
+  drawText(ctx, `Wpisy: ${monthEntries.length} · Przychody ${formatMoney(monthSummary.income)} · Wydatki ${formatMoney(monthSummary.expense)} · Bilans ${formatMoney(monthSummary.balance)} · Wypłata ${formatMoney(summarizePayout(monthEntries).balance)}`, 70, 175, { size: 24, color: '#667085' });
 
   const weekdays = ['Pon', 'Wt', 'Śr', 'Czw', 'Pt', 'Sob', 'Nd'];
   const gridX = 70;
@@ -4192,6 +4477,7 @@ function drawYearCalendarCanvas(ctx, width, height) {
   const year = Number(calendarYear) || Number(todayISO().slice(0, 4));
   const yearEntries = entriesForYear(year);
   const yearSummary = summarize(yearEntries);
+  const yearPayout = summarizePayout(yearEntries);
   const entriesByDate = new Map();
 
   yearEntries.forEach(entry => {
@@ -4209,7 +4495,7 @@ function drawYearCalendarCanvas(ctx, width, height) {
 
   drawText(ctx, 'Portfel PRO — kalendarz roczny', 70, 70, { size: 30, weight: 800, color: '#7c4d00' });
   drawText(ctx, `Rok ${year}`, 70, 115, { size: 42, weight: 900 });
-  drawText(ctx, `Wpisy: ${yearEntries.length} · Przychody ${formatMoney(yearSummary.income)} · Wydatki ${formatMoney(yearSummary.expense)} · Bilans ${formatMoney(yearSummary.balance)}`, 70, 175, { size: 24, color: '#667085' });
+  drawText(ctx, `Wpisy: ${yearEntries.length} · Przychody ${formatMoney(yearSummary.income)} · Wydatki ${formatMoney(yearSummary.expense)} · Bilans ${formatMoney(yearSummary.balance)} · Wypłata ${formatMoney(summarizePayout(yearEntries).balance)}`, 70, 175, { size: 24, color: '#667085' });
 
   const startX = 70;
   const startY = 255;
@@ -4283,12 +4569,14 @@ async function exportCalendarPng(mode) {
 function buildPrintableCalendarHtml(mode = 'month') {
   const isYear = mode === 'year';
   const title = isYear ? `Kalendarz roczny ${calendarYear}` : `Kalendarz miesięczny ${calendarMonth}`;
-  const summary = isYear ? summarize(entriesForYear(calendarYear)) : summarize(allEntries.filter(entry => entry.entryDate?.startsWith(calendarMonth)));
+  const printEntries = isYear ? entriesForYear(calendarYear) : allEntries.filter(entry => entry.entryDate?.startsWith(calendarMonth));
+  const summary = summarize(printEntries);
+  const payout = summarizePayout(printEntries);
   const body = isYear ? el.yearCalendarGrid.innerHTML : el.calendarGrid.innerHTML;
   const extra = isYear ? el.yearTopDays.innerHTML : el.calendarDayDetails.innerHTML;
   return `<!doctype html><html lang="pl"><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>
     body{font-family:Arial,sans-serif;color:#1f2933;margin:24px;background:#fff} h1{margin:0 0 8px;font-size:28px} .meta{color:#667085;margin-bottom:18px} .calendar-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}.calendar-day,.year-day{border:1px solid #ddd;border-radius:8px;background:#fff;padding:8px;min-height:82px;text-align:left}.calendar-day-number{font-weight:700}.calendar-weekdays{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;font-weight:700;color:#667085;margin-bottom:8px}.year-calendar-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.year-month-card{border:1px solid #ddd;border-radius:12px;padding:10px;break-inside:avoid}.year-month-days,.mini-weekdays{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}.year-day{min-height:26px;padding:4px;text-align:center}.heat-level-0{background:#fff}.heat-level-1{background:#fff4cf}.heat-level-2{background:#fedf89}.heat-level-3{background:#fdb022}.heat-level-4{background:#dc6803}.heat-level-5{background:#93370d;color:#fff}.amount-income{color:#067647}.amount-expense{color:#b42318}button{font:inherit;color:inherit}.is-empty{visibility:hidden}@page{size:${isYear ? 'A4 landscape' : 'A4 portrait'};margin:12mm}@media print{body{margin:0}.no-print{display:none!important}}
-  </style></head><body><h1>${escapeHtml(title)}</h1><div class="meta">Wpisy: ${isYear ? entriesForYear(calendarYear).length : allEntries.filter(entry => entry.entryDate?.startsWith(calendarMonth)).length} · Przychody ${formatMoney(summary.income)} · Wydatki ${formatMoney(summary.expense)} · Bilans ${formatMoney(summary.balance)} · wygenerowano ${new Date().toLocaleString('pl-PL')}</div>${isYear ? '' : '<div class="calendar-weekdays"><span>Pon</span><span>Wt</span><span>Śr</span><span>Czw</span><span>Pt</span><span>Sob</span><span>Nd</span></div>'}<main class="${isYear ? 'year-calendar-grid' : 'calendar-grid'}">${body}</main><section>${extra}</section><button class="no-print" onclick="window.print()">Drukuj / Zapisz jako PDF</button><script>window.addEventListener('load',()=>setTimeout(()=>window.print(),300));<\/script></body></html>`;
+  </style></head><body><h1>${escapeHtml(title)}</h1><div class="meta">Wpisy: ${printEntries.length} · Przychody ${formatMoney(summary.income)} · Wydatki ${formatMoney(summary.expense)} · Bilans ${formatMoney(summary.balance)} · Wypłata ${formatMoney(payout.balance)} · wygenerowano ${new Date().toLocaleString('pl-PL')}</div>${isYear ? '' : '<div class="calendar-weekdays"><span>Pon</span><span>Wt</span><span>Śr</span><span>Czw</span><span>Pt</span><span>Sob</span><span>Nd</span></div>'}<main class="${isYear ? 'year-calendar-grid' : 'calendar-grid'}">${body}</main><section>${extra}</section><button class="no-print" onclick="window.print()">Drukuj / Zapisz jako PDF</button><script>window.addEventListener('load',()=>setTimeout(()=>window.print(),300));<\/script></body></html>`;
 }
 
 function printCalendarPdf(mode) {
@@ -4620,6 +4908,8 @@ function bindEvents() {
   if (el.learningRulesList) el.learningRulesList.addEventListener('click', handleLearningRulesClick);
   if (el.learningClearButton) el.learningClearButton.addEventListener('click', () => clearAllLearningRules().catch(error => showMessage(error.message, 'error')));
   if (el.mainReportSettings) el.mainReportSettings.addEventListener('change', handleMainReportSettingsChange);
+  if (el.categoryForm) el.categoryForm.addEventListener('submit', event => handleCategoryFormSubmit(event).catch(error => showMessage(error.message, 'error')));
+  if (el.customCategoriesList) el.customCategoriesList.addEventListener('click', handleCustomCategoryClick);
   if (el.mainReportResetButton) el.mainReportResetButton.addEventListener('click', resetMainReportSettings);
   if (el.walletMonth) el.walletMonth.addEventListener('change', renderWalletReport);
   if (el.walletSaveButton) el.walletSaveButton.addEventListener('click', saveWalletFormValues);
@@ -4818,16 +5108,14 @@ function bindEvents() {
 async function init() {
   const today = todayISO();
   document.title = 'Portfel PRO';
-  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.1 / 115';
+  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.1 / 116';
   setTodayHeader('wczytywanie...');
   if (isFileProtocol()) {
     showMessage('Program został otwarty bezpośrednio z index.html. Do importu JSON, PWA i cache użyj serwera lokalnego albo GitHub Pages.', 'error');
   }
   if (el.syncInfo) el.syncInfo.textContent = `Tryb „Połącz” dopisuje nowe wpisy i aktualizuje starsze wersje tych samych wpisów. ID urządzenia: ${getDeviceId()}.`;
-  fillSelect(el.category, CATEGORIES);
-  fillSelect(el.filterCategory, CATEGORIES, true);
-  fillSelect(el.tagRuleCategory, CATEGORIES);
-  if (el.tagRuleCategory.options.length === 0) fillSelect(el.tagRuleCategory, CATEGORIES);
+  refreshCategorySelects();
+  if (el.tagRuleCategory.options.length === 0) fillSelect(el.tagRuleCategory, getAllCategories());
   resetForm();
   renderParsePreview();
   setupInstallPrompt();
@@ -4843,9 +5131,12 @@ async function init() {
   await reloadLearningRules();
   await ensureEntrySyncIds();
   renderTagRules();
+  renderCustomCategoriesList();
   renderMainReportSettings();
   el.tagRuleCategory.value = 'Inne';
   await reloadEntries();
+  refreshCategorySelects();
+  renderCustomCategoriesList();
   renderMainReportSettings();
   bindEvents();
   setupTabs();

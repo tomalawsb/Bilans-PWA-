@@ -7,10 +7,10 @@
   <meta name="description" content="Portfel PRO — lokalny rejestr przychodów, wydatków, raportów i kalendarza.">
   <title>Dodaj głosem — Portfel PRO</title>
   <base href="../">
-  <link id="appManifest" rel="manifest" href="./manifest-voice.webmanifest?v=115">
-  <link rel="icon" href="./icons/icon-192.png?v=115">
-  <link rel="apple-touch-icon" href="./icons/icon-192.png?v=115">
-  <link rel="stylesheet" href="./src/styles.css?v=115">
+  <link id="appManifest" rel="manifest" href="./manifest-voice.webmanifest?v=116">
+  <link rel="icon" href="./icons/icon-192.png?v=116">
+  <link rel="apple-touch-icon" href="./icons/icon-192.png?v=116">
+  <link rel="stylesheet" href="./src/styles.css?v=116">
 </head>
 <body data-theme="classic">
   <script>
@@ -21,9 +21,9 @@
   <main class="app-shell">
     <header class="app-header">
       <div class="brand-block">
-        <img class="app-logo" src="./icons/logo-portfel-pro.png?v=115" alt="Portfel PRO">
+        <img class="app-logo" src="./icons/logo-portfel-pro.png?v=116" alt="Portfel PRO">
         <div>
-          <h1>Portfel PRO <span id="appVersionBadge" class="version-badge">v. 1.1 / 115</span></h1>
+          <h1>Portfel PRO <span id="appVersionBadge" class="version-badge">v. 1.1 / 116</span></h1>
           <p id="todayLabel">Lokalna aplikacja webowa</p>
         </div>
       </div>
@@ -481,7 +481,7 @@
         <div class="panel-title-row">
           <div>
             <h2>Pomoc i instrukcja obsługi</h2>
-            <p>Krótka instrukcja dla pierwszej wersji testowej Portfel PRO v. 1.1 / 115.</p>
+            <p>Krótka instrukcja dla pierwszej wersji testowej Portfel PRO v. 1.1 / 116.</p>
           </div>
         </div>
 
@@ -583,7 +583,7 @@
             <ol>
               <li>Kliknij <strong>Odśwież program</strong>.</li>
               <li>Odśwież stronę w przeglądarce.</li>
-              <li>Jeżeli dalej widzisz starą wersję, otwórz adres z dopiskiem <code>?v=115</code>.</li>
+              <li>Jeżeli dalej widzisz starą wersję, otwórz adres z dopiskiem <code>?v=116</code>.</li>
             </ol>
           </article>
         </div>
@@ -638,6 +638,25 @@
         <div id="mainReportSettings" class="main-report-settings"></div>
       </section>
 
+      <section class="panel category-settings-panel">
+        <div class="panel-title-row">
+          <div>
+            <h2>Kategorie</h2>
+            <p>Dodajesz tutaj pełnoprawne kategorie wpisów. Potem w sekcji Raport główny zaznaczasz, które mają być widoczne na stronie startowej.</p>
+          </div>
+        </div>
+        <form id="categoryForm" class="tag-rule-form category-form" autocomplete="off">
+          <label>
+            Nowa kategoria
+            <input id="newCategoryName" type="text" placeholder="np. Części samochodowe" required>
+          </label>
+          <div class="form-actions">
+            <button type="submit">Dodaj kategorię</button>
+          </div>
+        </form>
+        <div id="customCategoriesList" class="tag-rules-list custom-categories-list"></div>
+      </section>
+
       <section class="panel tag-rules-panel">
         <div class="panel-title-row">
           <div>
@@ -688,7 +707,7 @@
     </section>
   </main>
 
-  <script src="./src/config.js?v=115"></script>
-  <script src="./src/app.js?v=115" type="module"></script>
+  <script src="./src/config.js?v=116"></script>
+  <script src="./src/app.js?v=116" type="module"></script>
 </body>
 </html>
