@@ -1,6 +1,6 @@
 const DB_NAME = 'bilans-pwa-etap1';
 const DB_VERSION = 4;
-const APP_VERSION = '1.1-116';
+const APP_VERSION = '1.1-117';
 const RAW_DROPBOX_DEFAULT_APP_KEY = String(window.PORTFEL_PRO_CONFIG?.dropboxAppKey || '').trim();
 const DROPBOX_DEFAULT_APP_KEY = /^WSTAW_TUTAJ/i.test(RAW_DROPBOX_DEFAULT_APP_KEY) ? '' : RAW_DROPBOX_DEFAULT_APP_KEY; // Ustaw w src/config.js, wtedy użytkownik klika tylko Połącz z Dropbox.
 const MAIN_INSTALL_KEY = 'portfel-pro-main-installed';
@@ -1391,18 +1391,29 @@ const CATEGORY_RULES = [
   { category: 'Usługi', words: ['zarobek', 'przychod', 'wyplata', 'zaplata za', 'klient', 'fucha'] }
 ];
 
-function detectCategory(text) {
+function detectCategoryFromRules(text) {
   const normalized = normalizeText(text);
   for (const rule of CATEGORY_RULES) {
     if (rule.words.some(word => normalized.includes(word))) return rule.category;
   }
-  return el.category.value || 'Inne';
+  return '';
+}
+
+function detectCategory(text) {
+  return detectCategoryFromRules(text) || el.category.value || 'Inne';
+}
+
+function detectCategoryForParsedEntry(text, scope = 'nieokreślone') {
+  const detected = detectCategoryFromRules(text);
+  if (detected) return detected;
+  if (normalizeScope(scope) === 'domowe') return 'Dom';
+  return 'Inne';
 }
 
 function detectEntryType(text) {
   const normalized = normalizeText(text);
   const incomeWords = ['zarobek', 'zarobilem', 'przychod', 'wplyw', 'wplata', 'dostalem', 'otrzymalem', 'wyplata', 'faktura sprzedaz', 'usluga dla'];
-  const expenseWords = ['kupilem', 'kupilam', 'zakup', 'zaplacilem', 'zaplacilam', 'wydalem', 'wydalam', 'koszt', 'kosztowalo', 'paragon'];
+  const expenseWords = ['wydatek', 'wydatki', 'wydatkowe', 'kupilem', 'kupilam', 'zakup', 'zaplacilem', 'zaplacilam', 'wydalem', 'wydalam', 'koszt', 'kosztowalo', 'paragon'];
 
   if (incomeWords.some(word => normalized.includes(word))) return 'przychód';
   if (expenseWords.some(word => normalized.includes(word))) return 'wydatek';
@@ -1483,7 +1494,7 @@ function cleanDescription(raw) {
     .replace(/\b\d{1,2}[-/.]\d{1,2}(?:[-/.]\d{2,4})?\b/g, ' ')
     .replace(/\b\d{1,2}\s+(stycznia|styczen|lutego|marca|kwietnia|maja|czerwca|lipca|sierpnia|wrzesnia|października|pazdziernika|listopada|grudnia)(?:\s+\d{2,4})?\b/gi, ' ')
     .replace(/\b(dzisiaj|dziś|dzis|wczoraj|jutro|przedwczoraj)\b/gi, ' ')
-    .replace(/\b(kupiłem|kupilem|kupiłam|kupilam|zakup|zakupy|zapłaciłem|zaplacilem|zapłaciłam|zaplacilam|wydałem|wydalem|wydałam|wydalam|koszt|kosztowało|kosztowalo|zarobek|zarobiłem|zarobilem|przychód|przychod|wpływ|wplyw|dostałem|dostalem|otrzymałem|otrzymalem|wpłata|wplata|paragon)\b/gi, ' ')
+    .replace(/\b(kupiłem|kupilem|kupiłam|kupilam|zakup|zakupy|wydatek|wydatki|wydatkowe|zapłaciłem|zaplacilem|zapłaciłam|zaplacilam|wydałem|wydalem|wydałam|wydalam|koszt|kosztowało|kosztowalo|zarobek|zarobiłem|zarobilem|przychód|przychod|wpływ|wplyw|dostałem|dostalem|otrzymałem|otrzymalem|wpłata|wplata|paragon)\b/gi, ' ')
     .replace(/\b(gotówka|gotowka|kartą|karta|blik|bank|przelew|konto|firmowe|firmowy|firmowa|firma|na firmę|na firme|domowe|domowy|domowa|prywatne|prywatny|prywatna)\b/gi, ' ')
     .replace(/[=:+;|]/g, ' ')
     .replace(/\b(za|po|i|oraz|plus)\s*$/gi, ' ')
@@ -1560,6 +1571,25 @@ function takeAfterDescription(text, from, to) {
   return cleanDescription(part);
 }
 
+function takeBeforeContext(text, from, to) {
+  let part = text.slice(from, to);
+  const lastSeparator = Math.max(part.lastIndexOf('\n'), part.lastIndexOf(';'), part.lastIndexOf(','));
+  if (lastSeparator >= 0) part = part.slice(lastSeparator + 1);
+  return part.replace(/^[\s,.;:–—-]+|[\s,.;:–—-]+$/g, '').trim();
+}
+
+function takeAfterContext(text, from, to) {
+  let part = text.slice(from, to);
+  const firstSeparator = part.search(/[;\n,]/);
+  if (firstSeparator >= 0) part = part.slice(0, firstSeparator);
+
+  // Jeżeli po kwocie jest tylko znacznik następnej pozycji, np. „wydatek domowy”,
+  // nie dopinamy go do bieżącej pozycji, bo psuje rodzaj i kategorię.
+  if (!cleanDescription(part)) return '';
+
+  return part.replace(/^[\s,.;:–—-]+|[\s,.;:–—-]+$/g, '').trim();
+}
+
 function parseNaturalText(rawText) {
   const source = String(rawText ?? '')
     .replace(/\r\n/g, '\n')
@@ -1573,22 +1603,25 @@ function parseNaturalText(rawText) {
   if (!matches.length) throw new Error('Nie znalazłem kwoty. Podaj np. „120 zł” albo „12,50 zł”.');
 
   const entryDate = parseDateFromText(source);
-  const entryType = detectEntryType(source);
-  const paymentMethod = detectPaymentMethod(source);
 
   const drafts = matches.map((match, index) => {
     const prevEnd = index === 0 ? 0 : matches[index - 1].end;
     const nextIndex = index + 1 < matches.length ? matches[index + 1].index : source.length;
     const before = takeBeforeDescription(source, prevEnd, match.index);
     const after = takeAfterDescription(source, match.end, nextIndex);
+    const beforeContext = takeBeforeContext(source, prevEnd, match.index);
+    const afterContext = takeAfterContext(source, match.end, nextIndex);
     const amountBeforeDescription = !before || before.length < 3 || /^(za|po)$/i.test(before);
     const description = amountBeforeDescription && after ? after : before || after || 'Wpis z tekstu';
-    const context = `${before} ${match.raw} ${after}`;
+    const context = [beforeContext, match.raw, afterContext].filter(Boolean).join(' ');
+    const entryType = detectEntryType(context || description);
+    const paymentMethod = detectPaymentMethod(context || description);
     const quantity = extractQuantity(description || context);
     const multiplier = shouldMultiplyByQuantity(context, amountBeforeDescription) ? quantity : 1;
     const amount = Math.round(match.value * multiplier * 100) / 100;
-    const category = detectCategory(`${description} ${context}`);
-    const scope = detectScope(`${source} ${description} ${context}`, entryType, category);
+    const preliminaryCategory = detectCategoryFromRules(`${description} ${context}`) || 'Inne';
+    const scope = detectScope(`${context} ${description}`, entryType, preliminaryCategory);
+    const category = detectCategoryForParsedEntry(`${description} ${context}`, scope);
 
     const baseEntry = enrichEntryWithTagRules({
       entryDate,
@@ -1601,13 +1634,13 @@ function parseNaturalText(rawText) {
       quantity,
       paymentMethod,
       description,
-      originalText: source,
+      originalText: context || description,
       tags: makeTagsFromDescription(description, category),
       syncId: makeSyncId('entry'),
       sourceDeviceId: getDeviceId(),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
-    }, { overrideCategory: true, overrideType: true });
+    }, { overrideCategory: true });
 
     return applyLearningToEntry(baseEntry, {
       originalCategory: baseEntry.category,
@@ -5108,7 +5141,7 @@ function bindEvents() {
 async function init() {
   const today = todayISO();
   document.title = 'Portfel PRO';
-  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.1 / 116';
+  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.1 / 117';
   setTodayHeader('wczytywanie...');
   if (isFileProtocol()) {
     showMessage('Program został otwarty bezpośrednio z index.html. Do importu JSON, PWA i cache użyj serwera lokalnego albo GitHub Pages.', 'error');
