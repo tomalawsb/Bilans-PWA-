@@ -1693,3 +1693,29 @@ body[data-theme="dark"] .learning-tag {
     flex-direction: column;
   }
 }
+
+/* v1.1-118: mapa cieplna z osobnym tonem dla przychodów i wydatków */
+.year-day.heat-tone-income.heat-level-0,
+.heat-tone-income.heat-level-0 { background-color: #ffffff !important; color: #1f2933 !important; }
+.year-day.heat-tone-income.heat-level-1,
+.heat-tone-income.heat-level-1 { background-color: #edf7ef !important; color: #1f2933 !important; }
+.year-day.heat-tone-income.heat-level-2,
+.heat-tone-income.heat-level-2 { background-color: #cfe9d4 !important; color: #1f2933 !important; }
+.year-day.heat-tone-income.heat-level-3,
+.heat-tone-income.heat-level-3 { background-color: #9fd0ab !important; color: #1f2933 !important; }
+.year-day.heat-tone-income.heat-level-4,
+.heat-tone-income.heat-level-4 { background-color: #69ad7b !important; color: #102a1b !important; }
+.year-day.heat-tone-income.heat-level-5,
+.heat-tone-income.heat-level-5 { background-color: #34794a !important; color: #ffffff !important; }
+.year-day.heat-tone-expense.heat-level-0,
+.heat-tone-expense.heat-level-0 { background-color: #ffffff !important; color: #1f2933 !important; }
+.year-day.heat-tone-expense.heat-level-1,
+.heat-tone-expense.heat-level-1 { background-color: #fff1f0 !important; color: #1f2933 !important; }
+.year-day.heat-tone-expense.heat-level-2,
+.heat-tone-expense.heat-level-2 { background-color: #ffd8d2 !important; color: #1f2933 !important; }
+.year-day.heat-tone-expense.heat-level-3,
+.heat-tone-expense.heat-level-3 { background-color: #fda29b !important; color: #1f2933 !important; }
+.year-day.heat-tone-expense.heat-level-4,
+.heat-tone-expense.heat-level-4 { background-color: #f97066 !important; color: #3f0b08 !important; }
+.year-day.heat-tone-expense.heat-level-5,
+.heat-tone-expense.heat-level-5 { background-color: #b42318 !important; color: #ffffff !important; }

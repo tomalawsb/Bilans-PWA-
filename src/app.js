@@ -1,6 +1,6 @@
 const DB_NAME = 'bilans-pwa-etap1';
 const DB_VERSION = 4;
-const APP_VERSION = '1.1-117';
+const APP_VERSION = '1.1-118';
 const RAW_DROPBOX_DEFAULT_APP_KEY = String(window.PORTFEL_PRO_CONFIG?.dropboxAppKey || '').trim();
 const DROPBOX_DEFAULT_APP_KEY = /^WSTAW_TUTAJ/i.test(RAW_DROPBOX_DEFAULT_APP_KEY) ? '' : RAW_DROPBOX_DEFAULT_APP_KEY; // Ustaw w src/config.js, wtedy użytkownik klika tylko Połącz z Dropbox.
 const MAIN_INSTALL_KEY = 'portfel-pro-main-installed';
@@ -1340,7 +1340,7 @@ const MONTHS_PL = {
   grudnia: 12, grudzien: 12, grudniu: 12
 };
 
-function parseDateFromText(text) {
+function parseExplicitDateFromText(text) {
   const source = String(text ?? '');
   const normalized = normalizeText(source);
   const today = todayISO();
@@ -1371,10 +1371,35 @@ function parseDateFromText(text) {
     if (!year) year = today.slice(0, 4);
     if (year.length === 2) year = `20${year}`;
     const month = MONTHS_PL[monthName];
-    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    if (month) return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
   }
 
-  return el.entryDate.value || today;
+  return null;
+}
+
+function parseDateFromText(text) {
+  return parseExplicitDateFromText(text) || el.entryDate.value || todayISO();
+}
+
+function parseDateForAmount(source, amountIndex) {
+  const text = String(source ?? '');
+  const index = Math.max(0, Number(amountIndex) || 0);
+  const lineStart = Math.max(text.lastIndexOf('\n', index), text.lastIndexOf(';', index));
+  const nextLineBreak = text.indexOf('\n', index);
+  const nextSemicolon = text.indexOf(';', index);
+  const lineEndCandidates = [nextLineBreak, nextSemicolon].filter(pos => pos >= 0);
+  const lineEnd = lineEndCandidates.length ? Math.min(...lineEndCandidates) : text.length;
+  const sameLine = text.slice(lineStart + 1, lineEnd);
+  const sameLineDate = parseExplicitDateFromText(sameLine);
+  if (sameLineDate) return sameLineDate;
+
+  const previousParts = text.slice(0, index).split(/[;\n]/).reverse();
+  for (const part of previousParts) {
+    const date = parseExplicitDateFromText(part);
+    if (date) return date;
+  }
+
+  return parseDateFromText(sameLine || text);
 }
 
 const CATEGORY_RULES = [
@@ -1602,8 +1627,6 @@ function parseNaturalText(rawText) {
   const matches = findAmountMatches(source);
   if (!matches.length) throw new Error('Nie znalazłem kwoty. Podaj np. „120 zł” albo „12,50 zł”.');
 
-  const entryDate = parseDateFromText(source);
-
   const drafts = matches.map((match, index) => {
     const prevEnd = index === 0 ? 0 : matches[index - 1].end;
     const nextIndex = index + 1 < matches.length ? matches[index + 1].index : source.length;
@@ -1614,6 +1637,7 @@ function parseNaturalText(rawText) {
     const amountBeforeDescription = !before || before.length < 3 || /^(za|po)$/i.test(before);
     const description = amountBeforeDescription && after ? after : before || after || 'Wpis z tekstu';
     const context = [beforeContext, match.raw, afterContext].filter(Boolean).join(' ');
+    const entryDate = parseDateForAmount(source, match.index);
     const entryType = detectEntryType(context || description);
     const paymentMethod = detectPaymentMethod(context || description);
     const quantity = extractQuantity(description || context);
@@ -3095,6 +3119,21 @@ function getHeatLevel(activity, maxActivity) {
   return 1;
 }
 
+function getHeatTone(dayData) {
+  const income = Number(dayData?.income || 0);
+  const expense = Number(dayData?.expense || 0);
+  if (!dayData?.count || (!income && !expense)) return 'neutral';
+  if (income > 0 && expense <= 0) return 'income';
+  if (expense > 0 && income <= 0) return 'expense';
+  return income >= expense ? 'income' : 'expense';
+}
+
+function getHeatValueForTone(dayData, tone) {
+  if (tone === 'income') return Number(dayData?.income || 0);
+  if (tone === 'expense') return Number(dayData?.expense || 0);
+  return Number(dayData?.activity || 0);
+}
+
 function renderCalendarDayDetails(dayEntries) {
   if (!el.calendarDayDetails) return;
 
@@ -3205,10 +3244,14 @@ function renderYearCalendar() {
   });
 
   let maxActivity = 0;
+  let maxIncome = 0;
+  let maxExpense = 0;
   entriesByDate.forEach((items, dateKey) => {
     const dayActivity = summarizeDayActivity(items);
     activityByDate.set(dateKey, dayActivity);
     if (dayActivity.activity > maxActivity) maxActivity = dayActivity.activity;
+    if (dayActivity.income > maxIncome) maxIncome = dayActivity.income;
+    if (dayActivity.expense > maxExpense) maxExpense = dayActivity.expense;
   });
 
   el.yearCalendarLabel.textContent = `Rok ${year}`;
@@ -3232,13 +3275,17 @@ function renderYearCalendar() {
     for (let day = 1; day <= daysInMonth; day += 1) {
       const dateISO = `${monthPrefix}-${String(day).padStart(2, '0')}`;
       const dayData = activityByDate.get(dateISO) || { income: 0, expense: 0, balance: 0, count: 0, activity: 0 };
-      const heatLevel = getHeatLevel(dayData.activity, maxActivity);
+      const heatTone = getHeatTone(dayData);
+      const heatValue = getHeatValueForTone(dayData, heatTone);
+      const heatMax = heatTone === 'income' ? maxIncome : heatTone === 'expense' ? maxExpense : maxActivity;
+      const heatLevel = getHeatLevel(heatValue, heatMax);
       const isToday = dateISO === today;
       const isSelected = dateISO === selectedCalendarDate;
       const title = `${dateISO}\nWpisy: ${dayData.count}\nPrzychody: ${formatMoney(dayData.income)}\nWydatki: ${formatMoney(dayData.expense)}\nBilans: ${formatMoney(dayData.balance)}`;
       const classes = [
         'year-day',
         `heat-level-${heatLevel}`,
+        `heat-tone-${heatTone}`,
         dayData.count ? 'has-entries' : '',
         isToday ? 'is-today' : '',
         isSelected ? 'is-selected' : ''
@@ -4519,11 +4566,15 @@ function drawYearCalendarCanvas(ctx, width, height) {
   });
 
   let maxActivity = 0;
+  let maxIncome = 0;
+  let maxExpense = 0;
   const activityByDate = new Map();
   entriesByDate.forEach((items, dateKey) => {
     const data = summarizeDayActivity(items);
     activityByDate.set(dateKey, data);
     if (data.activity > maxActivity) maxActivity = data.activity;
+    if (data.income > maxIncome) maxIncome = data.income;
+    if (data.expense > maxExpense) maxExpense = data.expense;
   });
 
   drawText(ctx, 'Portfel PRO — kalendarz roczny', 70, 70, { size: 30, weight: 800, color: '#7c4d00' });
@@ -4536,7 +4587,8 @@ function drawYearCalendarCanvas(ctx, width, height) {
   const cardH = 430;
   const gapX = 28;
   const gapY = 36;
-  const heatColors = ['#ffffff', '#fff4cf', '#fedf89', '#fdb022', '#dc6803', '#93370d'];
+  const heatColorsIncome = ['#ffffff', '#edf7ef', '#cfe9d4', '#9fd0ab', '#69ad7b', '#34794a'];
+  const heatColorsExpense = ['#ffffff', '#fff1f0', '#ffd8d2', '#fda29b', '#f97066', '#b42318'];
 
   for (let monthIndex = 0; monthIndex < 12; monthIndex += 1) {
     const col = monthIndex % 3;
@@ -4574,10 +4626,14 @@ function drawYearCalendarCanvas(ctx, width, height) {
       const dx = daysStartX + dCol * (daySize + dayGap);
       const dy = daysStartY + dRow * (daySize + dayGap);
       const dateISO = `${monthPrefix}-${String(day).padStart(2, '0')}`;
-      const data = activityByDate.get(dateISO) || { activity: 0, count: 0 };
-      const level = getHeatLevel(data.activity, maxActivity);
+      const data = activityByDate.get(dateISO) || { income: 0, expense: 0, balance: 0, activity: 0, count: 0 };
+      const tone = getHeatTone(data);
+      const value = getHeatValueForTone(data, tone);
+      const maxValue = tone === 'income' ? maxIncome : tone === 'expense' ? maxExpense : maxActivity;
+      const level = getHeatLevel(value, maxValue);
+      const palette = tone === 'expense' ? heatColorsExpense : heatColorsIncome;
 
-      ctx.fillStyle = heatColors[level] || heatColors[0];
+      ctx.fillStyle = palette[level] || palette[0];
       ctx.strokeStyle = dateISO === todayISO() ? '#7c4d00' : '#e6ddcc';
       ctx.lineWidth = dateISO === todayISO() ? 3 : 1;
       drawRoundedRect(ctx, dx, dy, daySize, daySize, 9);
@@ -4599,29 +4655,125 @@ async function exportCalendarPng(mode) {
   showMessage(`Wyeksportowano kalendarz do PNG: ${namePart}.`);
 }
 
+function getCalendarPrintEntries(mode = 'month') {
+  const isYear = mode === 'year';
+  const entries = isYear
+    ? entriesForYear(calendarYear)
+    : allEntries.filter(entry => entry.entryDate?.startsWith(calendarMonth));
+  return [...entries].sort((a, b) => {
+    const dateCompare = String(a.entryDate || '').localeCompare(String(b.entryDate || ''));
+    if (dateCompare) return dateCompare;
+    const typeCompare = String(b.entryType || '').localeCompare(String(a.entryType || ''));
+    if (typeCompare) return typeCompare;
+    return String(a.description || '').localeCompare(String(b.description || ''), 'pl');
+  });
+}
+
+function buildPrintableEntriesTable(entries) {
+  if (!entries.length) return '<section class="print-details"><h2>Szczegółowe wpisy</h2><p>Brak wpisów w wybranym zakresie.</p></section>';
+
+  const rows = entries.map(entry => {
+    const amountClass = entry.entryType === 'przychód' ? 'amount-income' : 'amount-expense';
+    const sign = entry.entryType === 'przychód' ? '+' : '-';
+    const amount = `${sign}${formatMoney(Math.abs(Number(entry.amount || 0)))}`;
+    return `
+      <tr>
+        <td>${escapeHtml(entry.entryDate || '')}</td>
+        <td>${escapeHtml(getWeekday(entry.entryDate || '') || '')}</td>
+        <td>${escapeHtml(entry.entryType || '')}</td>
+        <td>${escapeHtml(formatScope(entry.scope || ''))}</td>
+        <td>${escapeHtml(entry.category || '')}</td>
+        <td>${escapeHtml(entry.description || '')}</td>
+        <td class="${amountClass}">${escapeHtml(amount)}</td>
+        <td>${escapeHtml(entry.paymentMethod || '')}</td>
+        <td>${escapeHtml(Array.isArray(entry.tags) ? entry.tags.join(', ') : String(entry.tags || ''))}</td>
+      </tr>`;
+  }).join('');
+
+  return `
+    <section class="print-details">
+      <h2>Szczegółowe wpisy</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Data</th><th>Dzień</th><th>Typ</th><th>Rodzaj</th><th>Kategoria</th><th>Opis</th><th>Kwota</th><th>Płatność</th><th>Tagi</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </section>`;
+}
+
 function buildPrintableCalendarHtml(mode = 'month') {
   const isYear = mode === 'year';
   const title = isYear ? `Kalendarz roczny ${calendarYear}` : `Kalendarz miesięczny ${calendarMonth}`;
-  const printEntries = isYear ? entriesForYear(calendarYear) : allEntries.filter(entry => entry.entryDate?.startsWith(calendarMonth));
+  const printEntries = getCalendarPrintEntries(mode);
   const summary = summarize(printEntries);
   const payout = summarizePayout(printEntries);
   const body = isYear ? el.yearCalendarGrid.innerHTML : el.calendarGrid.innerHTML;
   const extra = isYear ? el.yearTopDays.innerHTML : el.calendarDayDetails.innerHTML;
+  const detailsTable = buildPrintableEntriesTable(printEntries);
+
   return `<!doctype html><html lang="pl"><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>
-    body{font-family:Arial,sans-serif;color:#1f2933;margin:24px;background:#fff} h1{margin:0 0 8px;font-size:28px} .meta{color:#667085;margin-bottom:18px} .calendar-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}.calendar-day,.year-day{border:1px solid #ddd;border-radius:8px;background:#fff;padding:8px;min-height:82px;text-align:left}.calendar-day-number{font-weight:700}.calendar-weekdays{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;font-weight:700;color:#667085;margin-bottom:8px}.year-calendar-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.year-month-card{border:1px solid #ddd;border-radius:12px;padding:10px;break-inside:avoid}.year-month-days,.mini-weekdays{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}.year-day{min-height:26px;padding:4px;text-align:center}.heat-level-0{background:#fff}.heat-level-1{background:#fff4cf}.heat-level-2{background:#fedf89}.heat-level-3{background:#fdb022}.heat-level-4{background:#dc6803}.heat-level-5{background:#93370d;color:#fff}.amount-income{color:#067647}.amount-expense{color:#b42318}button{font:inherit;color:inherit}.is-empty{visibility:hidden}@page{size:${isYear ? 'A4 landscape' : 'A4 portrait'};margin:12mm}@media print{body{margin:0}.no-print{display:none!important}}
-  </style></head><body><h1>${escapeHtml(title)}</h1><div class="meta">Wpisy: ${printEntries.length} · Przychody ${formatMoney(summary.income)} · Wydatki ${formatMoney(summary.expense)} · Bilans ${formatMoney(summary.balance)} · Wypłata ${formatMoney(payout.balance)} · wygenerowano ${new Date().toLocaleString('pl-PL')}</div>${isYear ? '' : '<div class="calendar-weekdays"><span>Pon</span><span>Wt</span><span>Śr</span><span>Czw</span><span>Pt</span><span>Sob</span><span>Nd</span></div>'}<main class="${isYear ? 'year-calendar-grid' : 'calendar-grid'}">${body}</main><section>${extra}</section><button class="no-print" onclick="window.print()">Drukuj / Zapisz jako PDF</button><script>window.addEventListener('load',()=>setTimeout(()=>window.print(),300));<\/script></body></html>`;
+    body{font-family:Arial,sans-serif;color:#1f2933;margin:24px;background:#fff;font-size:12px} h1{margin:0 0 8px;font-size:28px} h2{margin:22px 0 10px;font-size:20px}.meta{color:#667085;margin-bottom:18px}.calendar-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}.calendar-day,.year-day{border:1px solid #ddd;border-radius:8px;background:#fff;padding:8px;min-height:82px;text-align:left}.calendar-day-number{font-weight:700}.calendar-weekdays{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;font-weight:700;color:#667085;margin-bottom:8px}.year-calendar-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.year-month-card{border:1px solid #ddd;border-radius:12px;padding:10px;break-inside:avoid}.year-month-days,.mini-weekdays{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}.year-day{min-height:26px;padding:4px;text-align:center}.heat-level-0{background:#fff}.heat-tone-income.heat-level-1{background:#edf7ef}.heat-tone-income.heat-level-2{background:#cfe9d4}.heat-tone-income.heat-level-3{background:#9fd0ab}.heat-tone-income.heat-level-4{background:#69ad7b}.heat-tone-income.heat-level-5{background:#34794a;color:#fff}.heat-tone-expense.heat-level-1{background:#fff1f0}.heat-tone-expense.heat-level-2{background:#ffd8d2}.heat-tone-expense.heat-level-3{background:#fda29b}.heat-tone-expense.heat-level-4{background:#f97066}.heat-tone-expense.heat-level-5{background:#b42318;color:#fff}.amount-income{color:#067647;font-weight:700}.amount-expense{color:#b42318;font-weight:700}button{font:inherit;color:inherit}.is-empty{visibility:hidden}.print-details{margin-top:20px;break-before:auto}.print-details table{width:100%;border-collapse:collapse}.print-details th,.print-details td{border:1px solid #ddd;padding:5px 6px;vertical-align:top}.print-details th{background:#f8fafc;text-align:left}.print-details td:nth-child(6){min-width:160px}.no-print{margin-top:18px;padding:10px 14px;border:1px solid #999;border-radius:8px;background:#fff;cursor:pointer}@page{size:${isYear ? 'A4 landscape' : 'A4 portrait'};margin:10mm}@media print{body{margin:0}.no-print{display:none!important}.print-details{break-before:page}.year-month-card,.calendar-day,tr{break-inside:avoid}}
+  </style></head><body><h1>${escapeHtml(title)}</h1><div class="meta">Wpisy: ${printEntries.length} · Przychody ${formatMoney(summary.income)} · Wydatki ${formatMoney(summary.expense)} · Bilans ${formatMoney(summary.balance)} · Wypłata ${formatMoney(payout.balance)} · wygenerowano ${new Date().toLocaleString('pl-PL')}</div>${isYear ? '' : '<div class="calendar-weekdays"><span>Pon</span><span>Wt</span><span>Śr</span><span>Czw</span><span>Pt</span><span>Sob</span><span>Nd</span></div>'}<main class="${isYear ? 'year-calendar-grid' : 'calendar-grid'}">${body}</main><section>${extra}</section>${detailsTable}<button class="no-print" onclick="window.print()">Drukuj / Zapisz jako PDF</button><script>window.addEventListener('load',()=>setTimeout(()=>window.print(),500));<\/script></body></html>`;
+}
+
+function printCalendarHtmlInIframe(html) {
+  const iframe = document.createElement('iframe');
+  iframe.style.position = 'fixed';
+  iframe.style.right = '0';
+  iframe.style.bottom = '0';
+  iframe.style.width = '0';
+  iframe.style.height = '0';
+  iframe.style.border = '0';
+  document.body.appendChild(iframe);
+  const frameWindow = iframe.contentWindow;
+  const frameDocument = frameWindow?.document;
+  if (!frameWindow || !frameDocument) throw new Error('Nie udało się utworzyć awaryjnego widoku PDF.');
+  frameDocument.open();
+  frameDocument.write(html);
+  frameDocument.close();
+  window.setTimeout(() => {
+    try {
+      frameWindow.focus();
+      frameWindow.print();
+    } finally {
+      window.setTimeout(() => iframe.remove(), 1500);
+    }
+  }, 500);
 }
 
 function printCalendarPdf(mode) {
-  const printWindow = window.open('', '_blank', 'noopener,noreferrer,width=1200,height=900');
+  const html = buildPrintableCalendarHtml(mode);
+  const printWindow = window.open('', '_blank', 'width=1200,height=900');
   if (!printWindow) {
-    showMessage('Przeglądarka zablokowała okno wydruku. Zezwól na wyskakujące okna dla tej aplikacji.', 'error');
+    try {
+      printCalendarHtmlInIframe(html);
+      showMessage('Otworzono awaryjny widok PDF. Wybierz „Zapisz jako PDF”.');
+    } catch (error) {
+      showMessage(error.message || 'Przeglądarka zablokowała eksport PDF. Zezwól na wyskakujące okna dla tej aplikacji.', 'error');
+    }
     return;
   }
-  printWindow.document.open();
-  printWindow.document.write(buildPrintableCalendarHtml(mode));
-  printWindow.document.close();
-  showMessage('Otworzono widok PDF/drukowania. Wybierz „Zapisz jako PDF”.');
+
+  try {
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    showMessage('Otworzono szczegółowy widok PDF/drukowania. Wybierz „Zapisz jako PDF”.');
+  } catch (error) {
+    try {
+      printWindow.close();
+    } catch (_) {}
+    try {
+      printCalendarHtmlInIframe(html);
+      showMessage('Otworzono awaryjny widok PDF. Wybierz „Zapisz jako PDF”.');
+    } catch (fallbackError) {
+      showMessage(fallbackError.message || error.message || 'Nie udało się otworzyć eksportu PDF.', 'error');
+    }
+  }
 }
 
 function deleteIndexedDatabase() {
@@ -5141,7 +5293,7 @@ function bindEvents() {
 async function init() {
   const today = todayISO();
   document.title = 'Portfel PRO';
-  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.1 / 117';
+  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.1 / 118';
   setTodayHeader('wczytywanie...');
   if (isFileProtocol()) {
     showMessage('Program został otwarty bezpośrednio z index.html. Do importu JSON, PWA i cache użyj serwera lokalnego albo GitHub Pages.', 'error');
