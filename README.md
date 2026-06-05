@@ -1,4 +1,4 @@
-# Portfel PRO v. 1.1 / 119 — daty parsera, PDF i mapa cieplna
+# Portfel PRO v. 1.1 / 124 — jednorazowy zapis Dropbox po imporcie JSON
 
 Ta paczka jest poprawką wersji v. 1.1 / 117.
 
@@ -12,7 +12,7 @@ Naprawione i dodane:
 - dodano awaryjny eksport PDF przez ukryty iframe, gdy przeglądarka zablokuje nowe okno;
 - mapa cieplna rozróżnia teraz przychody i wydatki innym tonem koloru;
 - eksport PNG kalendarza rocznego również używa osobnych kolorów dla przychodów i wydatków;
-- cache PWA podbite do `v119`.
+- cache PWA podbite do `v124`.
 
 Test wykonany na podanym tekście z 2–7 marca 2026:
 
@@ -20,12 +20,22 @@ Test wykonany na podanym tekście z 2–7 marca 2026:
 - daty zostały przypisane jako: 2026-03-02, 2026-03-03, 2026-03-04, 2026-03-05, 2026-03-06, 2026-03-07;
 - nie wykryto błędu składni JavaScript w `src/app.js`.
 
-Po wrzuceniu na GitHub Pages uruchom adres z dopiskiem `?v=119` albo użyj przycisku „Odśwież program”.
+Po wrzuceniu na GitHub Pages uruchom adres z dopiskiem `?v=124` albo użyj przycisku „Odśwież program”.
 
 
-## Zmiany v. 1.1 / 119
+## Zmiany v. 1.1 / 124
 - Portfel gotówkowy przeniesiony na górę raportów.
 - Stan portfela dodany na ekran Start nad podsumowaniem dzisiejszych wydatków.
 - Korekta ręczna działa jako dopisywana zmiana: dodatnia kwota zwiększa portfel, ujemna zmniejsza, a pole po zapisie jest czyszczone.
 - Inteligentne wnioski liczą zawsze bieżący miesiąc.
 - Import JSON/scalanie jest odporniejsze: ręczny import nie stosuje tombstone usunięć, lepiej rozpoznaje wpisy w zagnieżdżonych strukturach i skuteczniej pomija duplikaty.
+
+
+## 1.1-124 — poprawka synchronizacji Dropbox/import JSON
+- Usunięto 30-minutową blokadę pobierania z Dropboxa.
+- Po imporcie JSON program wykonuje tylko jednorazowy zapis lokalnej bazy do Dropboxa jako aktualnego źródła danych.
+- Po tym jednorazowym zapisie synchronizacja wraca od razu do normalnej pracy między telefonem i komputerem.
+- Jeżeli Dropbox wykonuje poprzednią operację, zapis lokalnej bazy po imporcie trafia do kolejki i wykonuje się po zakończeniu synchronizacji.
+- Import lokalny usuwa z listy `deletedEntries` znaczniki usunięcia dla wpisów, które są właśnie przywracane z pliku.
+- W zakładce Synchronizacja przyciski Połącz/Odłącz/Synchronizuj są aktywne tylko wtedy, gdy dana operacja ma sens.
+- Dodano widoczne komunikaty po imporcie, eksporcie, połączeniu, odłączeniu i synchronizacji Dropbox.
