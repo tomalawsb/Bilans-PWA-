@@ -1,6 +1,6 @@
 const DB_NAME = 'bilans-pwa-etap1';
 const DB_VERSION = 4;
-const APP_VERSION = '1.1-118';
+const APP_VERSION = '1.1-119';
 const RAW_DROPBOX_DEFAULT_APP_KEY = String(window.PORTFEL_PRO_CONFIG?.dropboxAppKey || '').trim();
 const DROPBOX_DEFAULT_APP_KEY = /^WSTAW_TUTAJ/i.test(RAW_DROPBOX_DEFAULT_APP_KEY) ? '' : RAW_DROPBOX_DEFAULT_APP_KEY; // Ustaw w src/config.js, wtedy użytkownik klika tylko Połącz z Dropbox.
 const MAIN_INSTALL_KEY = 'portfel-pro-main-installed';
@@ -351,6 +351,8 @@ const el = {
   monthDetails: document.querySelector('#monthDetails'),
   allBalance: document.querySelector('#allBalance'),
   allDetails: document.querySelector('#allDetails'),
+  startWalletBalance: document.querySelector('#startWalletBalance'),
+  startWalletDetails: document.querySelector('#startWalletDetails'),
   mainReport: document.querySelector('#mainReport'),
   mainReportSettings: document.querySelector('#mainReportSettings'),
   mainReportResetButton: document.querySelector('#mainReportResetButton'),
@@ -2730,7 +2732,6 @@ function summarizeWalletMonth(month) {
 }
 
 function renderWalletReport() {
-  if (!el.walletReport) return;
   const months = walletMonthsFromEntries();
   const currentMonth = monthKey(todayISO());
   const selectedMonth = el.walletMonth?.value || currentMonth;
@@ -2744,8 +2745,20 @@ function renderWalletReport() {
 
   const month = el.walletMonth?.value || safeMonth;
   const summary = summarizeWalletMonth(month);
+
+  if (el.startWalletBalance) {
+    const currentSummary = summarizeWalletMonth(currentMonth);
+    el.startWalletBalance.textContent = formatMoney(currentSummary.balance);
+    el.startWalletBalance.classList.toggle('amount-income', currentSummary.balance >= 0);
+    el.startWalletBalance.classList.toggle('amount-expense', currentSummary.balance < 0);
+  }
+  if (el.startWalletDetails) {
+    const currentSummary = summarizeWalletMonth(currentMonth);
+    el.startWalletDetails.textContent = `${currentMonth} · gotówka: +${formatMoney(currentSummary.cashIncome)} / -${formatMoney(currentSummary.cashExpense)}`;
+  }
+
+  if (!el.walletReport) return;
   if (el.walletInitialBalance && document.activeElement !== el.walletInitialBalance) el.walletInitialBalance.value = String(summary.initialBalance).replace('.', ',');
-  if (el.walletAdjustment && document.activeElement !== el.walletAdjustment) el.walletAdjustment.value = String(summary.adjustment).replace('.', ',');
 
   const lastCashEntries = summary.entries
     .slice()
@@ -2780,13 +2793,16 @@ function renderWalletReport() {
 
 function saveWalletFormValues() {
   const month = el.walletMonth?.value || monthKey(todayISO());
+  const current = getWalletMonthRecord(month);
+  const correction = parseMoneyInputValue(el.walletAdjustment?.value || '0');
   saveWalletMonthRecord(month, {
     initialBalance: parseMoneyInputValue(el.walletInitialBalance?.value || '0'),
-    adjustment: parseMoneyInputValue(el.walletAdjustment?.value || '0')
+    adjustment: Math.round((current.adjustment + correction) * 100) / 100
   });
+  if (el.walletAdjustment) el.walletAdjustment.value = '';
   renderWalletReport();
   scheduleDropboxAutoSync();
-  showMessage('Zapisano ustawienia portfela gotówkowego.');
+  showMessage(correction ? `Zapisano portfel. Korekta: ${correction >= 0 ? '+' : ''}${formatMoney(correction)}.` : 'Zapisano ustawienia portfela gotówkowego.');
 }
 
 function topGroupBy(entries, keyGetter) {
@@ -2803,9 +2819,10 @@ function topGroupBy(entries, keyGetter) {
 
 function renderSmartReports() {
   if (!el.smartReport) return;
-  const entries = filteredEntries || [];
+  const currentMonth = monthKey(todayISO());
+  const entries = (allEntries || []).filter(entry => String(entry.entryDate || '').startsWith(currentMonth));
   if (!entries.length) {
-    el.smartReport.innerHTML = '<div class="empty-state">Brak danych do inteligentnych wniosków.</div>';
+    el.smartReport.innerHTML = `<div class="empty-state">Brak danych z bieżącego miesiąca (${escapeHtml(currentMonth)}).</div>`;
     return;
   }
 
@@ -2822,7 +2839,7 @@ function renderSmartReports() {
   const companyExpenseShare = company.income > 0 ? Math.round((company.expense / company.income) * 100) : 0;
 
   const rows = [
-    ['Wynik z widocznych wpisów', `Przychody ${formatMoney(summary.income)} · wydatki ${formatMoney(summary.expense)}`, summary.balance],
+    ['Inteligentne wnioski — bieżący miesiąc', `${currentMonth} · przychody ${formatMoney(summary.income)} · wydatki ${formatMoney(summary.expense)}`, summary.balance],
     ['Wynik firmy / wypłata', `Bez wydatków domowych · udział kosztów firmowych: ${companyExpenseShare}%`, company.balance],
     ['Średni wydatek dzienny', `Liczony z dni, w których były wydatki: ${uniqueExpenseDays}`, -avgDailyExpense]
   ];
@@ -3699,11 +3716,11 @@ function entrySignature(entry) {
     entry.entryDate,
     entry.entryType,
     normalizeScope(entry.scope),
-    entry.category,
+    normalizeKnownCategory(entry.category || 'Inne'),
     Number(entry.amount || 0).toFixed(2),
+    normalizeText(entry.paymentMethod || ''),
     normalizeText(entry.description || ''),
-    normalizeText(entry.originalText || ''),
-    entry.createdAt || ''
+    normalizeText(entry.originalText || '')
   ].join('|');
 }
 
@@ -3788,13 +3805,26 @@ function normalizeImportedCategory(value, fallbackText = '') {
   return raw && raw.length <= 40 ? raw : 'Inne';
 }
 
+function looksLikeImportedEntry(item) {
+  if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+  const keys = Object.keys(item);
+  const hasAmount = keys.some(key => ['amount', 'kwota', 'value', 'wartosc', 'suma', 'total', 'price', 'cena'].includes(key));
+  const hasDate = keys.some(key => ['entryDate', 'entry_date', 'date', 'data', 'createdDate', 'created_date'].includes(key));
+  const hasText = keys.some(key => ['description', 'opis', 'name', 'nazwa', 'title', 'tytul', 'text', 'tekst', 'originalText', 'original_text'].includes(key));
+  const hasType = keys.some(key => ['entryType', 'entry_type', 'type', 'typ', 'rodzajWpisu', 'rodzaj_wpisu'].includes(key));
+  return hasAmount && (hasDate || hasText || hasType);
+}
+
 function collectImportedEntries(payload) {
-  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload)) return payload.filter(looksLikeImportedEntry);
   if (!payload || typeof payload !== 'object') return [];
 
   const directKeys = ['entries', 'items', 'data', 'records', 'rows', 'transactions', 'wpisy', 'lista'];
   for (const key of directKeys) {
-    if (Array.isArray(payload[key])) return payload[key];
+    if (Array.isArray(payload[key])) {
+      const entries = payload[key].filter(looksLikeImportedEntry);
+      if (entries.length) return entries;
+    }
   }
 
   for (const key of directKeys) {
@@ -3804,8 +3834,24 @@ function collectImportedEntries(payload) {
     }
   }
 
-  const firstArray = Object.values(payload).find(value => Array.isArray(value) && value.some(item => item && typeof item === 'object'));
-  return firstArray || [];
+  const ignoredKeys = new Set(['tagRules', 'learningRules', 'deletedEntries', 'walletMonths', 'customCategories', 'mainReportSettings']);
+  for (const [key, value] of Object.entries(payload)) {
+    if (ignoredKeys.has(key)) continue;
+    if (Array.isArray(value)) {
+      const entries = value.filter(looksLikeImportedEntry);
+      if (entries.length) return entries;
+    }
+  }
+
+  for (const [key, value] of Object.entries(payload)) {
+    if (ignoredKeys.has(key)) continue;
+    if (value && typeof value === 'object') {
+      const nested = collectImportedEntries(value);
+      if (nested.length) return nested;
+    }
+  }
+
+  return [];
 }
 
 function normalizeImportedEntry(item, now = new Date().toISOString()) {
@@ -4102,8 +4148,8 @@ async function dropboxUploadPayload(payload) {
 }
 
 async function importPayload(payload, options = {}) {
-  const { replace = false, silent = false } = options;
-  const deletionResult = await applyImportedDeletions(payload);
+  const { replace = false, silent = false, applyDeletions = true } = options;
+  const deletionResult = applyDeletions ? await applyImportedDeletions(payload) : { deleted: 0 };
   importCustomCategoriesFromPayload(payload, replace);
   await importLearningRulesFromPayload(payload, replace);
   importWalletMonthsFromPayload(payload, replace);
@@ -4111,8 +4157,14 @@ async function importPayload(payload, options = {}) {
 
   if (!Array.isArray(imported) || !imported.length) {
     await reloadEntries();
-    if (deletionResult.deleted) {
-      if (!silent) showMessage(`Import zakończony. Usunięto: ${deletionResult.deleted}.`);
+    const importedSettingsOnly = Boolean(
+      payload?.walletMonths || payload?.wallet_months ||
+      payload?.customCategories || payload?.custom_categories ||
+      payload?.mainReportSettings || payload?.main_report_settings ||
+      payload?.tagRules || payload?.learningRules
+    );
+    if (deletionResult.deleted || importedSettingsOnly) {
+      if (!silent) showMessage(`Import zakończony. Dodano wpisy: 0, zaktualizowano: 0, usunięto: ${deletionResult.deleted}.`);
       return { added: 0, updated: 0, skipped: 0, deleted: deletionResult.deleted };
     }
     throw new Error('Plik JSON nie zawiera listy wpisów. Obsługiwane pola: entries, items, data, records, rows, transactions, wpisy, lista.');
@@ -4123,13 +4175,13 @@ async function importPayload(payload, options = {}) {
     .map(item => normalizeImportedEntry(item, now))
     .filter(item => item.amount > 0 && ['przychód', 'wydatek'].includes(item.entryType));
 
-  if (!cleaned.length) throw new Error('Nie znaleziono poprawnych wpisów do importu.');
+  if (!cleaned.length) throw new Error('Nie znaleziono poprawnych wpisów do importu. Sprawdź, czy rekordy mają kwotę oraz datę/opis.');
 
   if (replace) {
     const confirmReplace = window.confirm('Zastąpić wszystkie lokalne wpisy danymi z importowanego pliku?');
     if (!confirmReplace) return { added: 0, updated: 0, skipped: 0, deleted: deletionResult.deleted };
     await clearEntries();
-    saveDeletedEntries(collectDeletedEntries(payload));
+    if (applyDeletions) saveDeletedEntries(collectDeletedEntries(payload));
   }
 
   allEntries = await getAllEntries();
@@ -4140,36 +4192,38 @@ async function importPayload(payload, options = {}) {
   }
 
   const existingBySyncId = new Map(allEntries.filter(entry => entry.syncId).map(entry => [entry.syncId, entry]));
-  const existingSignatures = new Set(allEntries.map(entrySignature));
+  const existingBySignature = new Map(allEntries.map(entry => [entrySignature(entry), entry]));
   const localDeletedBySyncId = deletedEntriesMap();
   let added = 0;
   let updated = 0;
   let skipped = 0;
 
   for (const incoming of cleaned) {
-    if (!replace && isEntryBlockedByDeletion(incoming, localDeletedBySyncId)) {
+    if (!replace && applyDeletions && isEntryBlockedByDeletion(incoming, localDeletedBySyncId)) {
       skipped += 1;
       continue;
     }
 
-    const current = incoming.syncId ? existingBySyncId.get(incoming.syncId) : null;
+    const currentBySyncId = incoming.syncId ? existingBySyncId.get(incoming.syncId) : null;
+    const currentBySignature = existingBySignature.get(entrySignature(incoming));
+    const current = currentBySyncId || currentBySignature || null;
 
     if (current && !replace) {
       const incomingTime = Date.parse(incoming.updatedAt || incoming.createdAt || '') || 0;
       const currentTime = Date.parse(current.updatedAt || current.createdAt || '') || 0;
-      if (incomingTime > currentTime) {
-        await saveEntry({ ...incoming, id: current.id });
+      if (currentBySyncId && incomingTime > currentTime) {
+        const saved = { ...incoming, id: current.id, syncId: current.syncId || incoming.syncId };
+        await saveEntry(saved);
+        existingBySignature.set(entrySignature(saved), saved);
         updated += 1;
-      } else skipped += 1;
-      continue;
-    }
-
-    if (!replace && existingSignatures.has(entrySignature(incoming))) {
-      skipped += 1;
+      } else {
+        skipped += 1;
+      }
       continue;
     }
 
     await saveEntry(replace ? sanitizeEntryKey(incoming) : stripLocalId(incoming));
+    existingBySignature.set(entrySignature(incoming), incoming);
     added += 1;
   }
 
@@ -4237,8 +4291,15 @@ function exportJson() {
 }
 
 async function importJson(file, options = {}) {
-  const text = await file.text();
-  const payload = JSON.parse(text);
+  const rawText = await file.text();
+  const text = rawText.replace(/^\uFEFF/, '').trim();
+  if (!text) throw new Error('Wybrany plik JSON jest pusty.');
+  let payload;
+  try {
+    payload = JSON.parse(text);
+  } catch (error) {
+    throw new Error(`Nie udało się odczytać JSON: ${error.message}`);
+  }
   await importPayload(payload, options);
   scheduleDropboxAutoSync();
 }
@@ -5096,7 +5157,10 @@ function bindEvents() {
   if (el.categoryForm) el.categoryForm.addEventListener('submit', event => handleCategoryFormSubmit(event).catch(error => showMessage(error.message, 'error')));
   if (el.customCategoriesList) el.customCategoriesList.addEventListener('click', handleCustomCategoryClick);
   if (el.mainReportResetButton) el.mainReportResetButton.addEventListener('click', resetMainReportSettings);
-  if (el.walletMonth) el.walletMonth.addEventListener('change', renderWalletReport);
+  if (el.walletMonth) el.walletMonth.addEventListener('change', () => {
+    if (el.walletAdjustment) el.walletAdjustment.value = '';
+    renderWalletReport();
+  });
   if (el.walletSaveButton) el.walletSaveButton.addEventListener('click', saveWalletFormValues);
   el.parseButton.addEventListener('click', handleParseText);
   el.addParsedButton.addEventListener('click', () => handleAddParsedEntries().catch(error => showMessage(error.message, 'error')));
@@ -5240,7 +5304,7 @@ function bindEvents() {
       event.stopPropagation();
       openFilePicker(el.importInput);
     });
-    el.importInput.addEventListener('change', event => handleImportChange(event, { replace: false }));
+    el.importInput.addEventListener('change', event => handleImportChange(event, { replace: false, applyDeletions: false }));
   }
 
   if (el.syncImportButton && el.syncImportInput) {
@@ -5249,7 +5313,7 @@ function bindEvents() {
       event.stopPropagation();
       openFilePicker(el.syncImportInput);
     });
-    el.syncImportInput.addEventListener('change', event => handleImportChange(event, { replace: false }));
+    el.syncImportInput.addEventListener('change', event => handleImportChange(event, { replace: false, applyDeletions: false }));
   }
 
   if (el.replaceImportButton && el.replaceImportInput) {
@@ -5258,7 +5322,7 @@ function bindEvents() {
       event.stopPropagation();
       openFilePicker(el.replaceImportInput);
     });
-    el.replaceImportInput.addEventListener('change', event => handleImportChange(event, { replace: true }));
+    el.replaceImportInput.addEventListener('change', event => handleImportChange(event, { replace: true, applyDeletions: false }));
   }
 
   if (el.chooseLocalModeButton) el.chooseLocalModeButton.addEventListener('click', () => {
@@ -5293,7 +5357,7 @@ function bindEvents() {
 async function init() {
   const today = todayISO();
   document.title = 'Portfel PRO';
-  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.1 / 118';
+  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.1 / 119';
   setTodayHeader('wczytywanie...');
   if (isFileProtocol()) {
     showMessage('Program został otwarty bezpośrednio z index.html. Do importu JSON, PWA i cache użyj serwera lokalnego albo GitHub Pages.', 'error');

@@ -239,7 +239,7 @@ input:focus, select:focus, textarea:focus {
 
 .summary-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
   margin-bottom: 12px;
 }
@@ -248,6 +248,7 @@ input:focus, select:focus, textarea:focus {
 .summary-card strong { display:block; font-size: 22px; margin-bottom: 2px; }
 .summary-card small { color: var(--muted); }
 .primary-summary { border-color: #c5d9cf; background: #f7fff9; }
+.wallet-start-card { border-color: #f3c37a; background: #fff8ea; }
 
 .start-grid {
   display: grid;
@@ -296,6 +297,7 @@ input:focus, select:focus, textarea:focus {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
+.report-layout .wallet-panel { grid-column: 1 / -1; }
 
 .export-sync-grid {
   display: grid;
@@ -1642,10 +1644,19 @@ body[data-theme="dark"] .learning-tag {
 
 .wallet-controls {
   display: grid;
-  grid-template-columns: repeat(3, minmax(150px, 1fr)) auto;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
   align-items: end;
   margin: 10px 0 12px;
+}
+.wallet-controls label,
+.wallet-controls button,
+.wallet-controls input,
+.wallet-controls select {
+  width: 100%;
+}
+.wallet-controls button {
+  min-height: var(--field-h);
 }
 .wallet-mini-grid {
   display: grid;
@@ -1694,7 +1705,7 @@ body[data-theme="dark"] .learning-tag {
   }
 }
 
-/* v1.1-118: mapa cieplna z osobnym tonem dla przychodów i wydatków */
+/* v1.1-119: mapa cieplna z osobnym tonem dla przychodów i wydatków */
 .year-day.heat-tone-income.heat-level-0,
 .heat-tone-income.heat-level-0 { background-color: #ffffff !important; color: #1f2933 !important; }
 .year-day.heat-tone-income.heat-level-1,
