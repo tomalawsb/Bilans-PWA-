@@ -1813,19 +1813,21 @@ function parseDateFromText(text) {
   return parseExplicitDateFromText(text) || el.entryDate.value || todayISO();
 }
 
-function parseDateForAmount(source, amountIndex) {
+function parseDateForAmount(source, amountIndex, segmentStart = 0) {
   const text = String(source ?? '');
   const index = Math.max(0, Number(amountIndex) || 0);
+  const segmentStartIndex = Math.max(0, Number(segmentStart) || 0);
   const lineStart = Math.max(text.lastIndexOf('\n', index), text.lastIndexOf(';', index));
   const nextLineBreak = text.indexOf('\n', index);
   const nextSemicolon = text.indexOf(';', index);
   const lineEndCandidates = [nextLineBreak, nextSemicolon].filter(pos => pos >= 0);
   const lineEnd = lineEndCandidates.length ? Math.min(...lineEndCandidates) : text.length;
-  const sameLine = text.slice(lineStart + 1, lineEnd);
+  const localStart = Math.max(lineStart + 1, segmentStartIndex);
+  const sameLine = text.slice(localStart, lineEnd);
   const sameLineDate = parseExplicitDateFromText(sameLine);
   if (sameLineDate) return sameLineDate;
 
-  const previousParts = text.slice(0, index).split(/[;\n]/).reverse();
+  const previousParts = text.slice(0, index).split(/[;,\n]/).reverse();
   for (const part of previousParts) {
     const date = parseExplicitDateFromText(part);
     if (date) return date;
@@ -1842,6 +1844,7 @@ const CATEGORY_RULES = [
   { category: 'Paliwo', words: ['paliwo', 'benzyna', 'diesel', 'ropa', 'lpg', 'orlen', 'bp', 'shell'] },
   { category: 'Mechanik', words: ['mechanik', 'olej', 'opona', 'opony', 'czesci auto', 'naprawa auta', 'samochod'] },
   { category: 'Jedzenie', words: ['hotdog', 'hot dog', 'hot-dog', 'jedzenie', 'obiad', 'kolacja', 'sniadanie', 'kebab', 'pizza', 'zabka', 'biedronka'] },
+  { category: 'Dom', words: ['dom', 'czynsz', 'rachunek domowy', 'prad', 'gaz', 'woda', 'internet domowy', 'mieszkanie'] },
   { category: 'Bank', words: ['bank', 'konto', 'przelew', 'prowizja', 'odsetki', 'rata', 'kredyt'] },
   { category: 'Podatki/ZUS', words: ['zus', 'podatek', 'pit', 'vat', 'skarbowy'] },
   { category: 'Hurtownia', words: ['hurtownia', 'faktura', 'magazyn', 'towar'] },
@@ -1885,7 +1888,7 @@ function detectScope(text, entryType = 'wydatek', category = '') {
     'montaz', 'monitoring', 'kamera', 'antena', 'router', 'dojazd do klienta'
   ];
   const homeWords = [
-    'domowe', 'domowy', 'domowa', 'do domu', 'dla domu', 'prywatne', 'prywatny', 'prywatna',
+    'dom', 'domowe', 'domowy', 'domowa', 'do domu', 'dla domu', 'prywatne', 'prywatny', 'prywatna',
     'rodzinne', 'zakupy domowe', 'jedzenie do domu', 'rachunek domowy'
   ];
 
@@ -1945,17 +1948,41 @@ function shouldMultiplyByQuantity(text, amountBeforeDescription) {
     || /\bjednostk/.test(normalized);
 }
 
+function replacePolishWords(value, words) {
+  const escaped = words.map(word => word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  return String(value ?? '').replace(new RegExp(`(^|[^\\p{L}\\p{N}_])(?:${escaped.join('|')})(?=$|[^\\p{L}\\p{N}_])`, 'giu'), '$1 ');
+}
+
 function cleanDescription(raw) {
+  const dateWords = [
+    'dzisiaj', 'dziś', 'dzis', 'wczoraj', 'jutro', 'przedwczoraj'
+  ];
+  const actionWords = [
+    'kupiłem', 'kupilem', 'kupiłam', 'kupilam', 'zakup', 'zakupy', 'wydatek', 'wydatki',
+    'wydatkowe', 'zapłaciłem', 'zaplacilem', 'zapłaciłam', 'zaplacilam', 'wydałem',
+    'wydalem', 'wydałam', 'wydalam', 'koszt', 'kosztowało', 'kosztowalo', 'zarobek',
+    'zarobiłem', 'zarobilem', 'przychód', 'przychod', 'wpływ', 'wplyw', 'dostałem',
+    'dostalem', 'otrzymałem', 'otrzymalem', 'wpłata', 'wplata', 'paragon'
+  ];
+  const metaWords = [
+    'gotówka', 'gotowka', 'kartą', 'karta', 'blik', 'bank', 'przelew', 'konto', 'firmowe',
+    'firmowy', 'firmowa', 'firma', 'na firmę', 'na firme', 'domowe', 'domowy', 'domowa',
+    'prywatne', 'prywatny', 'prywatna'
+  ];
+
   let value = String(raw ?? '')
     .replace(/\b\d{4}[-/.]\d{1,2}[-/.]\d{1,2}\b/g, ' ')
     .replace(/\b\d{1,2}[-/.]\d{1,2}(?:[-/.]\d{2,4})?\b/g, ' ')
-    .replace(/\b\d{1,2}\s+(stycznia|styczen|lutego|marca|kwietnia|maja|czerwca|lipca|sierpnia|wrzesnia|października|pazdziernika|listopada|grudnia)(?:\s+\d{2,4})?\b/gi, ' ')
-    .replace(/\b(dzisiaj|dziś|dzis|wczoraj|jutro|przedwczoraj)\b/gi, ' ')
-    .replace(/\b(kupiłem|kupilem|kupiłam|kupilam|zakup|zakupy|wydatek|wydatki|wydatkowe|zapłaciłem|zaplacilem|zapłaciłam|zaplacilam|wydałem|wydalem|wydałam|wydalam|koszt|kosztowało|kosztowalo|zarobek|zarobiłem|zarobilem|przychód|przychod|wpływ|wplyw|dostałem|dostalem|otrzymałem|otrzymalem|wpłata|wplata|paragon)\b/gi, ' ')
-    .replace(/\b(gotówka|gotowka|kartą|karta|blik|bank|przelew|konto|firmowe|firmowy|firmowa|firma|na firmę|na firme|domowe|domowy|domowa|prywatne|prywatny|prywatna)\b/gi, ' ')
+    .replace(/(?:^|[^\p{L}\p{N}_])\d{1,2}\s+(stycznia|styczen|lutego|marca|kwietnia|maja|czerwca|lipca|sierpnia|wrzesnia|października|pazdziernika|listopada|grudnia)(?:\s+\d{2,4})?(?=$|[^\p{L}\p{N}_])/giu, ' ');
+
+  value = replacePolishWords(value, dateWords);
+  value = replacePolishWords(value, actionWords);
+  value = replacePolishWords(value, metaWords);
+
+  value = value
     .replace(/[=:+;|]/g, ' ')
-    .replace(/\b(za|po|i|oraz|plus)\s*$/gi, ' ')
-    .replace(/^\s*(za|po|i|oraz|plus)\b/gi, ' ')
+    .replace(/(^|\s)(za|po|na|i|oraz|plus)\s*$/giu, ' ')
+    .replace(/^\s*(za|po|na|i|oraz|plus)(?=\s|$)/giu, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 
@@ -2016,8 +2043,9 @@ function findAmountMatches(text) {
 
 function takeBeforeDescription(text, from, to) {
   let part = text.slice(from, to);
-  const lastSeparator = Math.max(part.lastIndexOf('\n'), part.lastIndexOf(';'), part.lastIndexOf(','));
-  if (lastSeparator >= 0) part = part.slice(lastSeparator + 1);
+  const separatorMatches = [...part.matchAll(/(?:[;\n,]|\s+(?:i|oraz|plus)\s+)/giu)];
+  const lastSeparator = separatorMatches.at(-1);
+  if (lastSeparator) part = part.slice(lastSeparator.index + lastSeparator[0].length);
   return cleanDescription(part);
 }
 
@@ -2030,8 +2058,9 @@ function takeAfterDescription(text, from, to) {
 
 function takeBeforeContext(text, from, to) {
   let part = text.slice(from, to);
-  const lastSeparator = Math.max(part.lastIndexOf('\n'), part.lastIndexOf(';'), part.lastIndexOf(','));
-  if (lastSeparator >= 0) part = part.slice(lastSeparator + 1);
+  const separatorMatches = [...part.matchAll(/(?:[;\n,]|\s+(?:i|oraz|plus)\s+)/giu)];
+  const lastSeparator = separatorMatches.at(-1);
+  if (lastSeparator) part = part.slice(lastSeparator.index + lastSeparator[0].length);
   return part.replace(/^[\s,.;:–—-]+|[\s,.;:–—-]+$/g, '').trim();
 }
 
@@ -2069,7 +2098,7 @@ function parseNaturalText(rawText) {
     const amountBeforeDescription = !before || before.length < 3 || /^(za|po)$/i.test(before);
     const description = amountBeforeDescription && after ? after : before || after || 'Wpis z tekstu';
     const context = [beforeContext, match.raw, afterContext].filter(Boolean).join(' ');
-    const entryDate = parseDateForAmount(source, match.index);
+    const entryDate = parseDateForAmount(source, match.index, prevEnd);
     const entryType = detectEntryType(context || description);
     const paymentMethod = detectPaymentMethod(context || description);
     const quantity = extractQuantity(description || context);
@@ -4550,19 +4579,82 @@ async function handleDropboxOAuthReturn() {
   url.searchParams.delete('code');
   url.searchParams.delete('state');
   window.history.replaceState({}, document.title, url.pathname + url.search + url.hash);
-  const localEntries = await getAllEntries();
-  if (localEntries.length) {
-    markDropboxForceLocalUpload('dropbox-connected-with-local-data');
-    updateCloudUi('Dropbox połączony. Wykryto lokalne dane, więc zapisuję je do Dropbox jako aktualną bazę...');
-    await uploadLocalStateToDropbox('Dropbox połączony. Lokalna baza została zapisana do Dropbox.');
-    showMessage('Dropbox połączony. Lokalna baza została wysłana do chmury.');
-  } else {
-    updateCloudUi('Dropbox połączony. Pobieram dane z chmury...');
-    await syncDropboxNow();
-    showMessage('Dropbox połączony i zsynchronizowany.');
-  }
+  await handleDropboxInitialSync();
   updateCloudUi();
   return true;
+}
+
+function chooseDropboxInitialSyncAction() {
+  const answer = window.prompt([
+    'Dropbox jest połączony. Wykryto lokalne wpisy oraz istniejący plik danych w Dropbox.',
+    '',
+    'Wpisz numer operacji:',
+    '1 — Scal dane lokalne z Dropbox (zalecane)',
+    '2 — Zastąp Dropbox danymi lokalnymi',
+    '3 — Pobierz dane z Dropbox i zastąp lokalne',
+    '',
+    'Domyślnie zostanie wykonane scalenie.'
+  ].join('\n'), '1');
+
+  const choice = String(answer ?? '1').trim();
+  if (choice === '2') return 'upload-local';
+  if (choice === '3') return 'download-remote';
+  return 'merge';
+}
+
+async function handleDropboxInitialSync() {
+  const localEntries = await getAllEntries();
+  updateCloudUi('Dropbox połączony. Sprawdzam dane w chmurze...');
+  const remotePayload = await dropboxDownloadPayload();
+
+  if (localEntries.length && remotePayload) {
+    const action = chooseDropboxInitialSyncAction();
+
+    if (action === 'upload-local') {
+      updateCloudUi('Zastępuję plik w Dropbox aktualną lokalną bazą...');
+      await uploadLocalStateToDropbox('Dropbox połączony. Plik w chmurze został zastąpiony lokalną bazą.');
+      return;
+    }
+
+    if (action === 'download-remote') {
+      updateCloudUi('Zastępuję lokalną bazę danymi z Dropbox...');
+      await importPayload(remotePayload, { replace: true, silent: true, confirmReplace: false });
+      await dropboxUploadPayload(makeExportPayload());
+      const message = 'Dropbox połączony. Lokalna baza została zastąpiona danymi z chmury.';
+      updateCloudUi(message);
+      showMessage(message);
+      return;
+    }
+
+    updateCloudUi('Scalam lokalne dane z plikiem w Dropbox...');
+    await importPayload(remotePayload, { replace: false, silent: true });
+    await dropboxUploadPayload(makeExportPayload());
+    const message = 'Dropbox połączony. Dane lokalne i dane z chmury zostały scalone.';
+    updateCloudUi(message);
+    showMessage(message);
+    return;
+  }
+
+  if (localEntries.length) {
+    updateCloudUi('Dropbox połączony. Nie znaleziono pliku w chmurze, więc zapisuję lokalną bazę jako pierwszy plik Dropbox...');
+    await uploadLocalStateToDropbox('Dropbox połączony. Lokalna baza została zapisana jako pierwszy plik w Dropbox.');
+    return;
+  }
+
+  if (remotePayload) {
+    updateCloudUi('Dropbox połączony. Pobieram dane z chmury...');
+    await importPayload(remotePayload, { replace: true, silent: true, confirmReplace: false });
+    await dropboxUploadPayload(makeExportPayload());
+    const message = 'Dropbox połączony. Pobrano dane z chmury.';
+    updateCloudUi(message);
+    showMessage(message);
+    return;
+  }
+
+  await dropboxUploadPayload(makeExportPayload());
+  const message = 'Dropbox połączony. Utworzono pusty plik danych w chmurze.';
+  updateCloudUi(message);
+  showMessage(message);
 }
 
 async function getDropboxAccessToken() {
@@ -4664,7 +4756,7 @@ async function uploadLocalStateToDropbox(successMessage = '') {
 }
 
 async function importPayload(payload, options = {}) {
-  const { replace = false, silent = false, applyDeletions = true } = options;
+  const { replace = false, silent = false, applyDeletions = true, confirmReplace = true } = options;
   const deletionResult = applyDeletions ? await applyImportedDeletions(payload) : { deleted: 0 };
   importCustomCategoriesFromPayload(payload, replace);
   await importLearningRulesFromPayload(payload, replace);
@@ -4681,6 +4773,12 @@ async function importPayload(payload, options = {}) {
   }
 
   if (!Array.isArray(imported) || !imported.length) {
+    if (replace) {
+      const shouldReplace = !confirmReplace || window.confirm('Zastąpić wszystkie lokalne wpisy danymi z importowanego pliku?');
+      if (!shouldReplace) return { added: 0, updated: 0, skipped: 0, deleted: deletionResult.deleted };
+      await clearEntries();
+    }
+
     await reloadEntries();
     const importedSettingsOnly = Boolean(
       payload?.walletMonths || payload?.wallet_months ||
@@ -4688,7 +4786,7 @@ async function importPayload(payload, options = {}) {
       payload?.mainReportSettings || payload?.main_report_settings ||
       payload?.tagRules || payload?.learningRules
     );
-    if (deletionResult.deleted || importedSettingsOnly) {
+    if (replace || deletionResult.deleted || importedSettingsOnly) {
       if (!silent) showMessage(`Import zakończony. Dodano wpisy: 0, zaktualizowano: 0, usunięto: ${deletionResult.deleted}.`);
       return { added: 0, updated: 0, skipped: 0, deleted: deletionResult.deleted };
     }
@@ -4707,8 +4805,8 @@ async function importPayload(payload, options = {}) {
   }
 
   if (replace) {
-    const confirmReplace = window.confirm('Zastąpić wszystkie lokalne wpisy danymi z importowanego pliku?');
-    if (!confirmReplace) return { added: 0, updated: 0, skipped: 0, deleted: deletionResult.deleted };
+    const shouldReplace = !confirmReplace || window.confirm('Zastąpić wszystkie lokalne wpisy danymi z importowanego pliku?');
+    if (!shouldReplace) return { added: 0, updated: 0, skipped: 0, deleted: deletionResult.deleted };
     await clearEntries();
   }
 
@@ -5428,8 +5526,28 @@ async function clearAppCachesAndWorkers() {
   }
 
   if ('serviceWorker' in navigator && !isFileProtocol()) {
+    const appBaseUrl = new URL('./', document.baseURI || window.location.href);
+    const appWorkerUrl = new URL('service-worker.js', appBaseUrl);
+    const isThisAppWorker = scriptUrl => {
+      if (!scriptUrl) return false;
+      try {
+        const url = new URL(scriptUrl);
+        return url.origin === appWorkerUrl.origin && url.pathname === appWorkerUrl.pathname;
+      } catch (_) {
+        return false;
+      }
+    };
+
     const registrations = await navigator.serviceWorker.getRegistrations();
-    await Promise.all(registrations.map(registration => registration.unregister()));
+    const appRegistrations = registrations.filter(registration => {
+      const workerUrls = [
+        registration.active?.scriptURL,
+        registration.waiting?.scriptURL,
+        registration.installing?.scriptURL
+      ];
+      return registration.scope === appBaseUrl.href || workerUrls.some(isThisAppWorker);
+    });
+    await Promise.all(appRegistrations.map(registration => registration.unregister()));
   }
 }
 
