@@ -1,6 +1,6 @@
 const DB_NAME = 'bilans-pwa-etap1';
 const DB_VERSION = 4;
-const APP_VERSION = '1.1-124';
+const APP_VERSION = '1.1-125';
 const RAW_DROPBOX_DEFAULT_APP_KEY = String(window.PORTFEL_PRO_CONFIG?.dropboxAppKey || '').trim();
 const DROPBOX_DEFAULT_APP_KEY = /^WSTAW_TUTAJ/i.test(RAW_DROPBOX_DEFAULT_APP_KEY) ? '' : RAW_DROPBOX_DEFAULT_APP_KEY; // Ustaw w src/config.js, wtedy użytkownik klika tylko Połącz z Dropbox.
 const MAIN_INSTALL_KEY = 'portfel-pro-main-installed';
@@ -133,9 +133,9 @@ const WEEKDAYS = [
 ];
 
 const NAME_DAY_API_URLS = [
-  'https://nameday.abalin.net/api/V1/today?country=pl',
+  'https://nameday.abalin.net/api/V2/today?timezone=Europe/Warsaw',
   'https://nameday.abalin.net/api/V1/today?country=pl&timezone=Europe/Warsaw',
-  'https://nameday.abalin.net/api/V2/today/Europe%2FWarsaw'
+  'https://nameday.abalin.net/api/V1/today?country=pl'
 ];
 
 function formatPolishDate(date = new Date()) {
@@ -201,12 +201,372 @@ function extractPolishNamedays(payload) {
 }
 
 const LOCAL_NAME_DAYS = {
-  '05-10': 'Antonina, Beatrycze, Izydor, Jan, Job, Sylwester',
-  '05-11': 'Iga, Ignacy, Mamert, Mirand, Franciszek',
-  '05-12': 'Dominik, Imelda, Pankracy, German',
-  '05-13': 'Robert, Serwacy, Maria, Andrzej',
-  '05-14': 'Bonifacy, Maciej, Dobiesław',
-  '05-15': 'Zofia, Izydor, Nadzieja, Dionizy'
+  "01-01": "Mieszko, Fulgenty, Miecisław, Walenty, Mojsław, Odys, Maria, Odylon, Fulgencjusz, Walentyn, Odyseusz, Józef, Mieczysława, Wilhelm, Miesław, Wincenty, Eufrozyna, Masław, Mieczysław, Konkordiusz",
+  "01-02": "Makary, Argea, Grzegorz, Narcyz, Achacjusz, Abel, Strzeżysław, Marcelin, Telesfora, Adelard, Aspazja, Stefania, Bazyliusz, Sylwester, Martynian, Izydor, Achacy, Telesfor, Teodor, Dobiemir, Sylwestra, Bazyla, Aspazy, Aspazjusz, Argeus, Bazyli, Jakubina",
+  "01-03": "Prymus, Arleta, Teogenes, Danuta, Anter, Cyryna, Zdzisława, Pryma, Daniel, Piotr, Enoch, Włościsława, Teonas, Gordiusz, Teona, Cyryn, Cyriak, Genowefa",
+  "01-04": "Aniela, Grzegorz, Doroteusz, Angelika, Dobromir, Benedykta, Tytus, Eugeniusz, Rygobert, Elżbieta, Fereol, Dafroza, Krystiana, Suligost",
+  "01-05": "Jan Nepomucen, Amelia, Edward, Szymon, Emiliana, Roger, Piotr, Marcelina, Edwarda, Włościbor, Amata",
+  "01-06": "Fotyna, Kasper, Bolemir, Rafaela, Melaniusz, Jędrzej, Miłowit, Melchior, Andrzej, Epifania, Kacper, Karol, Manomir, Norman, Fotyn, Baltazar",
+  "01-07": "Walenty, Kanut, Lucjan, Walentyn, Izydor, Wirginia, Chociesław, Teodor, Mateusz, Kryspin, Julian, Rajnold, Nicetas, Rajmund, Rajmunda, Łucjan",
+  "01-08": "Mścisław, Heladia, Heladiusz, Mroczysław, Laurencjusz, Laurenty, Seweryn, Teofil, Maksym, Albert, Wawrzyniec, Apolinary, Erhard",
+  "01-09": "Marcjanna, Przemir, Marcelin, Adrian, Bracsław, Piotr, Mścisława, Marcelina, Adrianna, Julian, Alicja, Antoni",
+  "01-10": "Nikanora, Grzegorz, Marcjan, Anna, Mojmir, Nikanor, Paweł, Leonia, Idzi, Jan, Piotr, Kolumba, Wilhelm, Egidia, Dobrosław, Agaton",
+  "01-11": "Paulin, Hygin, Odon, Hortensjusz, Palemona, Tezeusz, Hortensja, Tomasz, Małomir, Anastazy, Honorata, Melchiades, Teodozy, Mechtylda, Matylda, Hilary, Feliks, Teodozjusz, Palemon, Salwiusz, Krzesimir",
+  "01-12": "Czesława, Greta, Ernest, Tacjana, Czasława, Eutropiusz, Wiktorian, Bernard, Jan, Aelred, Benedykt, Małgorzata, Bonitus, Tygriusz, Tatiana, Arkadiusz, Cezaria, Arkady, Arkadia, Bonita, Wiktoriana, Bonet, Antoni, Stomir",
+  "01-13": "Remigiusz, Judyta, Bogusława, Remigia, Bogusąd, Kinga, Godfryd, Gotfryd, Bogumiła, Bogumił, Falisław, Bogusław, Beata, Hilary, Melania, Weronika, Glafira, Leoncjusz",
+  "01-14": "Radogost, Odoryk, Helga, Piotr, Nina, Dacjusz, Makryna, Mściwuj, Rajner, Saba, Amadea, Hilary, Krystiana, Feliks, Malachiasz",
+  "01-15": "Maur, Makary, Eligia, Domosław, Aleksander, Dobrawa, Paweł, Maksym, Jan, Ida, Izydor, Domasław, Micheasz, Dąbrówka, Franciszek, Arnold, Dalemir, Eligiusz",
+  "01-16": "Treweriusz, Otto, Waleriusz, Piotr, Furzeusz, Włodzimir, Gonsalwy, Otton, Trzebowit, Marceli, Włodzimira, Tycjan, Hilary, Tycjana, Włodzimierz, Honorat",
+  "01-17": "Sulpicja, Roselina, Rosława, Rozalinda, Rosław, Jan, Merul, Przemił, Alba, Rościsław, Teodor, Julian, Sulpicjusz, Antoni",
+  "01-18": "Liberata, Sędziwoj, Pryska, Beatrycze, Ammoniusz, Ammonia, Wenerand, Małgorzata, Piotr, Krystyna, Bogumił, Zuzanna, Monika, Woluzjan, Lubart, Regina, Atenogenes",
+  "01-19": "Eufemia, Marta, Germana, Sara, Wulstan, Kanut, Poncjan, Paweł, Januariusz, Bernard, Jan, January, Kaliksta, Mariusz, Juliusz, Andrzej, Geroncjusz, Germanik, Józef, Basjan, Henryk, Racimir, Marceli, Erwina, Erwin, Matylda, Basjana, Alderyk, Saturnin, Pia, Kalista, Adalryk",
+  "01-20": "Maur, Dobiegniew, Dobrzegniew, Sebastian, Eutymiusz, Fabiana, Dobroniega, Dobrożyźń, Fabian, Euzebiusz",
+  "01-21": "Jarosław, Jarosława, Epifaniusz, Eulogia, Publiusz, Awit, Patrokles, Inez, Epifani, Jan Chrzciciel, Meinrad, Józef, Sobiesława, Eulogiusz, Jerosława, Długomił, Józefa, Krystiana, Agnieszka, Awita",
+  "01-22": "Gaudenty, Dominik, Dobromysł, Gaudencjusz, Laura, Sulisław, Dorian, Uriel, Anastazy, Kasandra, Mateusz, Wincenty, Jutrogost",
+  "01-23": "Uniemir, Michał, Sewerian, Łukasz, Akwila, Maria, Bernard, Klemens, Maksym, Anicet, Jan, Daniel, Onufry, Aniceta, Henryk, Bartłomiej, Agatangel, Wincenty, Wrocsława, Ildefons, Filip, Rajmund, Konstanty, Emerencja, Rajmunda",
+  "01-24": "Mirogniew, Chwalibog, Ksenia, Rafał, Franciszek Salezy, Tymoteusz, Milena, Teodor, Babilas, Wera, Felicjan, Urban",
+  "01-25": "Pęcisława, Miłowan, Tacjana, Ananiasz, Paweł, Miłosz, Artemia, Maksym, Barcław, Apollon, Tatiana, Emanuel, Miłobor, Juwentyn, Emanuela",
+  "01-26": "Ksenofont, Teogenes, Żeligniew, Tymoteusz, Leon, Andrzej, Leona, Tytus, Paula, Skarbimir",
+  "01-27": "Jerzy, Teodoryk, Przybyrad, Przybysław, Witalian, Rozalia, Leander, Natalis, Lotar, Angelika, Chryzostom, Jan, Datyw, Alruna, Henryk, Dacjusz, Adalruna, Przemysław, Elwira, Ninomysł, Julian",
+  "01-28": "Leonid, Jakub, Walery, Olimpia, Tyrs, Maria, Tomasz, Roger, Blizbor, Waleriusz, Piotr, Świedarg, Flawian, Manfred, Karol, Manfreda, Radomir, Krzesąd, Julian, Boguwola, Agnieszka, Kalinik, Augustyn",
+  "01-29": "Maur, Ewangelina, Aniela, Gildas, Sulpicja, Żelisław, Konstancjusz, Waleriusz, Sabrina, Józef, Papiasz, Bona, Wielisława, Zdziesław, Franciszek, Zdzisław, Sulpicjusz, Ismena, Bolesława",
+  "01-30": "Dobrogniewa, Dobiegniew, Sebastian, Maciej, Aleksander, Gerarda, Teofil, Adelajda, Marcin, Bronisław, Syntia, Hiacynta, Martyna, Cyntia, Batylda, Aldegunda, Gerard, Adalgunda, Feliks",
+  "01-31": "Geminian, Ludwika, Emma, Smysława, Ksawery, Spycigniew, Marcela, Melaniusz, Jan, Cyrus, Franciszek Ksawery, Piotr, Rościgniew, Euzebiusz",
+  "02-01": "Siemirad, Zygbert, Wirydiana, Brygida, Emil, Zybracht, Żegota, Paweł, Winand, Zybart, Weridiana, Andrzej, Prosimir, Dziadumiła, Pioniusz, Cecyliusz, Sewer, Winanda, Zybert",
+  "02-02": "Markwart, Stefan, Teodoryk, Katarzyna, Mikołaj, Korneli, Teofan, Laurencjusz, Laurenty, Maria, Kornel, Miłosława, Jan, Wawrzyniec, Marcin, Andrzej, Piotr, Gonsalwy, Mirosław, Joanna, Ermentruda, Filip, Korneliusz, Franciszek, Werner, Miłosław",
+  "02-03": "Ansgar, Stefan, Celeryn, Ignacy, Maksym, Jan, Celeryna, Wawrzyniec, Ofelia, Uniemysł, Błażej, Telimena, Hipolit, Błażeja, Hipolita, Ansgary, Uniesława, Klaudyna, Oskar",
+  "02-04": "Gilbert, Witosława, Eustachiusz, Jan, Izydor, Eustachy, Mariusz, Andrzej, Józef, Żanna, Jarmila, Eustachia, Joanna, Nataniel, Izyda, Jarmiła, Awentyn, Weronika, Częstogoj",
+  "02-05": "Strzeżysława, Jakub, Modest, Awit, Adelajda, Izydor, Albwin, Rodomił, Agata, Lubodrog, Dobiemir, Indracht, Elpin, Przybygniew, Saba, Awita",
+  "02-06": "Bohdana, Dorota, Szymon, Paweł, Bogdana, Leon, Wedast, Leona, Tytus, Amanda, Bogdan, Amand, Bohdan, Joachim, Gaston, Antoni",
+  "02-07": "Alfons, Jakub, Rozalia, Partenia, Idzi, Sulisław, Jan, Ryszard, Sulimir, Romeusz, Wilhelm, Egidia, Teodor, Parteniusz, Mojżesz, Eugenia, Egidiusz, Antoni, Romuald",
+  "02-08": "Stefan, Gniewosądka, Polikarp, Sebastian, Salomon, Mirogniew, Łucjusz, Juwencja, Paweł, Jan, Hieronim, Józefina, Irena, Lucjusz, Izajasz, Ampeliusz, Piotr, Gniewomir, Gabriela, Juwencjusz, Honorat",
+  "02-09": "Prymus, Jakub, Ansbert, Sabin, Pelagia, Gorzysław, Nikifor, Pryma, Reginald, Bernard, Pola, Mariusz, Cyryl, Apolonia, Marian, Felicjan, Donat, Sulisława",
+  "02-10": "Tomisława, Michał, Tomił, Sotera, Jacenty, Apollon, Scholastyka, Gabriel, Wilhelm, Elwira, Jacek, Trojan",
+  "02-11": "Dezydery, Grzegorz, Łucjusz, Olgierd, Paschalis, Cedmon, Bernadeta, Seweryn, Maria, Świętomira, Lucjusz, Teodora, Benedykt, Heloiza, Adolfa, Dezyderia, Adolf, Jonasz, Łazarz, Bertrada, Dezyderiusz, Sekundyn, Wiktoria",
+  "02-12": "Humbelina, Hilariona, Grzegorz, Gaudenty, Mikołaj, Jakub, Modest, Bonfiliusz, Ewa, Etelwold, Ammoniusz, Laurenty, Paweł, Ammonia, Jan, Tomasz, Datyw, Melecjusz, Benedykt, Ampeliusz, Hilarion, Damian, Bonfilia, Trzebiesława, Saturnina, Bartłomiej, Norma, Maryna, Ampelia, Aleksy, Julian, Eulalia, Gerard, Ludan, Feliks, Ludwik, Saturnin, Juwencjusz, Antoni",
+  "02-13": "Gilbert, Humbelina, Stefan, Benigny, Grzegorz, Katarzyna, Jordan, Jakub, Licyniusz, Beatrycze, Paweł, Jan, Martynian, Krystyna, Benignus, Eulogiusz, Kastor, Maura, Emnilda, Polieukt, Julian, Toligniew, Jordana",
+  "02-14": "Witalis, Jerzy, Jordan, Mikołaj, Modest, Walenty, Konrada, Nostrian, Dionizy, Niedomira, Eleukadiusz, Auksencjusz, Walentyn, Antonin, Niedamir, Liliana, Maron, Abraham, Cyryl, Jan Chrzciciel, Auksenty, Dobiesława, Krystyna, Józef, Auksencja, Eleukadia, Adolfa, Flawian, Teodozy, Maro, Florentyn, Teodozja, Metody, Zenon, Wincenty, Adolf, Dionizja, Konrad, Niemir, Teodozjusz",
+  "02-15": "Glicery, Faustyn, Gliceriusz, Teogenes, Pakosław, Przybyrad, Jordan, Zygfryda, Dalmacjusz, Galfryd, Pakosława, Onezym, Wirginia, Jowita, Faust, Andrzej, Józef, Dalmacy, Żywila, Zygfryd, Jordana, Joachim, Klaudiusz, Sewer, Saturnin, Julia",
+  "02-16": "Gilbert, Dominik, Pamfil, Mikołaj, Danuta, Marcjan, Wirydiana, Szymon, Maria, Bernard, Julianna, Juliana, Marut, Symeon, Onezym, Eliasz, Teobald, Daniel, Filipa, Izajasz, Samuel, Piotr, Józef, Jarema, Flawian, Porfiriusz, Marian, Pamela, Czcisław, Porfiry, Maruta, Julian, Przedsława, Ludan, Jeremiasz, Marutas, Jeremi",
+  "02-17": "Michał, Faustyn, Sylwin, Romulus, Łukasz, Bonfiliusz, Polichroniusz, Aleksja, Hugo, Reginald, Niegowoj, Klemens, Jan, Teodulf, Izydor, Sylwina, Anastazy, Benedykt, Hermogenes, Piotr, Marianna, Bonfilia, Flawian, Wilhelm, Bartłomiej, Sylwan, Aleksy, Donat, Zbigniew, Julian, Gerard, Fintan, Franciszek, Konstanty",
+  "02-18": "Konstantyna, Heladia, Heladiusz, Aleksander, Haralampiusz, Łucjusz, Bernadeta, Flawiusz, Maksym, Albert, Jan, Symeon, Lucjusz, Marcin, Flawia, Andrzej, Agapit, Gertruda, Flawian, Wilhelm, Sylwan, Wespazjan, Mojżesz, Klaudiusz, Franciszek, Kosma, Więcesława, Konstancja, Agnieszka, Antoni",
+  "02-19": "Tuliusz, Jerzy, Alwar, Walery, Konrada, Łucja, Publiusz, Manswet, Bonifacy, Józef, Gawin, Henryk, Barbacy, Czcisław, Biecsława, Marceli, Julian, Beat, Konrad, Arnold, Leoncjusz",
+  "02-20": "Eustachiusz, Ludomił, Nilus, Walery, Euchariusz, Zenobiusz, Ludomiła, Euchary, Lubomir, Jan, Nila, Aulus, Eustachy, Leon, Leona, Sylwan, Peleusz, Hiacynta, Elżbieta, Eleuteriusz, Falkon, Ludomir, Ulryk, Eleuteria, Franciszek, Amata, Siestrzewit, Eleutery, Julia, Serapion",
+  "02-21": "Lena, Eleonora, Sewerian, Natalis, Henryka, Piotr, Wyszeniega, Gumbert, Robert, Wyszetrop, Kiejstut, Feliks, Fortunat",
+  "02-22": "Marta, Jakub, Nikifor, Wiktor, Marwald, Małgorzata, Piotr, Papiasz, Chociebąd, Wrocisław, Marold, Paschazy, Maksymian, Konkordia",
+  "02-23": "Stefan, Milburga, Marta, Polikarp, Romana, Prymian, Piotr, Damian, Florentyn, Izabela, Będzimir, Feliks, Damiana, Łazarz",
+  "02-24": "Ermegarda, Modest, Maciej, Łucjusz, Wieledrog, Jan, Sergiusz, Bogurad, Lucjusz, Piotr, Jaśmina, Marek, Flawian, Montan, Julian, Irmegarda, Bogusz, Józefa, Borzygniew",
+  "02-25": "Tarazjusz, Tolisław, Modest, Adam, Tolisława, Walburga, Dioskur, Wiktoryn, Wiktor, Konstancjusz, Just, Romeusz, Antonina, Gromisław, Papiasz, Cezary, Donat, Zygfryd, Herena, Lubart, Cezariusz, Nicefor, Bolebor, Serapion",
+  "02-26": "Nikolina, Lutmiar, Aleksander, Otokar, Gerlinda, Dionizy, Porfiriusz, Bogumił, Klaudian, Mirosław, Nestor, Mirosława, Porfiry, Faustynian, Lutosława",
+  "02-27": "Prokop, Achacjusz, Leander, Aleksander, Anna, Sirosława, Auksencjusz, Wiktor, Gabriel, Auksenty, Sierosława, Auksencja, Achacy, Orfeusz, Honoryna, Leandra, Julian, Bazyli, Baldomer, Baldomera",
+  "02-28": "Makary, Antonia, August, Roman, Tymoteusz, Bogurad, Nadbor, Gajusz, Józef, Sylwana, Oswald, Gaja, Ludomir, Kaja, Hilary, Lech, Falibog",
+  "02-29": "Dobrosiodł, Antonia, August, Roman, Oswald",
+  "03-01": "Eudoksja, Antonia, Dawid, Albin, Switbert, Herkulan, Leon, Józef, Herakles, Aldona, Leona, Herkules, Budzisław, Joanna, Eudokia, Feliks, Radosław, Antoni",
+  "03-02": "Michał, Januaria, Krzysztof, Łukasz, Paweł, Prosper, Piotr, Henryk, Absalon, Karol, Franciszek, Helena, Radosław, Halszka",
+  "03-03": "Teresa, Kleonika, Maryniusz, Jakub, Wirzchosława, Eutropiusz, Maryn, Gerwina, Innocenty, Hieronim, Samuel, Kolumba, Kleonik, Teodor, Asteriusz, Agrypin, Tycjan, Gerwin, Marcjusz, Kunegunda, Tycjana",
+  "03-04": "Łucjusz, Gerarda, Adrian, Kazimierz, Leonard, Witosław, Lucjusz, Placyda, Nestor, Arkadiusz, Adrianna, Humbert, Arkady, Arkadia, Gerard, Jakubina",
+  "03-05": "Pakosław, Wergilia, Wergiliusz, Krzysztof, Adrian, Wolimir, Gerazym, Teofil, Wirgilia, Jan, Fokas, Wacław, Marek, Oliwia, Adrianna, Wirgiliusz, Konon, Fryderyk, Jeremiasz",
+  "03-06": "Cymbarka, Jordan, Wiktor, Cyryl, Koleta, Będzimysł, Róża, Frydolin, Konon, Eugenia, Jordana, Agnieszka",
+  "03-07": "Teresa, Efrem, German, Nadmir, Teofilakt, Eubul, Elpidiusz, Paweł, Tomasz, Felicyta, Elpidia, Eugeniusz, Perpetua, Morzysław, Bazyli",
+  "03-08": "Poncjusz, Filemon, Stefan, Arian, Szymon, Miłogost, Apoloniusz, Jan, Filemona, Teotyk, Herenia, Beata, Elwira, Wincenty, Julian, Franciszek, Feliks, Antoni",
+  "03-09": "Grzegorz, Dominik, Katarzyna, Franciszka, Kandyd, Samanta, Mścisława, Przemyślibor",
+  "03-10": "Makary, Aleksander, Cyprian, Porfirion, Symplicjusz, Piotr, Symplicy, Gajusz, Gaja, Zwnisława, Eugenia",
+  "03-11": "Teresa, Talus, Dominik, Świetlana, Sylwia, Angelika, Eutymiusz, Balbina, Jan, Nawoj, Benedykt, Kandyd, Eulogiusz, Drogosława, Konstantyn, Sofroniusz, Konstanty, Trofim, Tala",
+  "03-12": "Grzegorz, Teofan, Maksymilian, Bernard, Alojzy, Innocenty, Blizbor, Józefina, Piotr, Justyna",
+  "03-13": "Rodryg, Cieszymysł, Ernest, Salomon, Bożena, Sabin, Trzebiesław, Trzebisław, Anioł, Krystyna, Marek, Rodryk, Roderyk, Kasjan, Bratomir, Letycja, Patrycja, Ernestyn",
+  "03-14": "Jakub, Eutychiusz, Ewa, Fawila, Afrodyzy, Afrodyzjusz, Bożeciecha, Leon, Piotr, Leona, Pamela, Afrodyzja, Matylda, Łazarz",
+  "03-15": "Placyd, Ludwika, Nikander, Zachary, Krzysztof, Leokrycja, Matrona, Probus, Klemens, Zachariasz, Longina, Heloiza, Longin, Nikandra, Gościmir, Luiza",
+  "03-16": "Dzirżyterg, Budzimir, Haralampia, Natalis, Walenty, Herybert, Artemia, Walentyn, Gabriel, Hiacynt, Abraham, Patrycy, Agapit, Longin, Miłostryj, Patryk, Karol, Izabela, Herbert, Patrycjusz, Julian, Hilary, Przybymir, Cyriak, Antoni",
+  "03-17": "Cieszysław, Zbygniew, Paweł, Agrykola, Patrycy, Józef, Gertruda, Patryk, Zbygniewa, Zbigniew, Patrycjusz, Witburga, Ambroży, Regina",
+  "03-18": "Marta, Celestyna, Narcyz, Edward, Aleksander, Krystian, Salwator, Cyryl, Edwarda, Boguchwał, Anzelm, Feliks, Trofim, Boguchwała",
+  "03-19": "Jan, Józef, Marek, Bogdan, Marceli, Leoncjusz",
+  "03-20": "Eufemia, Fotyna, Klaudia, Ermegarda, Aleksandra, Matrona, Rafał, Aleksander, Wulfram, Klemens, Cyriaka, Hipolit, Ruprecht, Bogusław, Wincenty, Irmegarda, Maurycy, Kutbert, Józefa, Nicetas, Anatol, Ambroży, Patrycja",
+  "03-21": "Filemon, Klemencja, Mikołaj, Pafnucy, Lubomir, Filemona, Benedykta, Ludomira, Marzanna, Ludomir, Serapion",
+  "03-22": "Godzisław, Katarzyna, Zachary, Bogusława, August, Lea, Kazimierz, Paweł, Baldwin, Benwenut, Baldwina, Zachariasz, Oktawian, Bogusław, Boguchwał, Bazyli",
+  "03-23": "Pelagia, Eberhard, Wiktorian, Benedykt, Zbysław, Oktawian, Józef, Turybiusz, Adrianna, Rebeka, Nikon, Wiktorianna, Piotra, Wiktoriana, Feliks",
+  "03-24": "Oldmir, Katarzyna, Romulus, Aleksander, Szymon, Agapiusz, Ademar, Dionizy, Jan, Dzierżysław, Gabriel, Józef, Marek, Aldmir, Dydak, Dzirżysława, Sofroniusz, Sewer, Dziesława, Bertrada, Dzierżysława",
+  "03-25": "Dezydery, Jozafata, Prokop, Łucja, Wolimir, Maria, Lucja, Dula, Pelagiusz, Lutomysł, Małgorzata, Lutogniew, Wieńczysław, Baroncjusz, Kwiryn, Wieńczysława, Anuncjata, Sławobora, Ireneusz, Dyzma, Nikodema, Dezyderiusz, Mariola",
+  "03-26": "Eutychiusz, Tworzymir, Olga, Ludger, Teodozy, Teodor, Larysa, Emanuel, Feliks, Nicefor, Dyzma, Teodozjusz, Bazyli, Emanuela, Manuela",
+  "03-27": "Narzes, Gelazja, Ernest, Marotas, Aleksander, Lidia, Jan, Benedykt, Augusta, Robert, Gelazy, Rupert, Marot, Rzędzimir, Archibald, Macedoniusz, Franciszek, Łazarz",
+  "03-28": "Aniela, Malkolm, Aleksander, Doroteusz, Jan, Renata, Krzesisław, Krzysław, Kastor, Rogat, Pryskus, Gedeon, Joanna, Rogacjusz, Guntram, Malachiasz, Ingbert",
+  "03-29": "Stefan, Eustacjusz, Eustazy, Eustazja, Wiktoryn, Eustachy, Bertold, Cyryl, Marek, Ludolfina, Teodor, Ludolf, Satur, Satura, Eustazjusz",
+  "03-30": "Litobor, Aniela, Kwiryna, Amelia, Mamertyna, Mamertyn, Leonard, Zozym, Jan, Piotr, Dobromier, Amadeusz, Kwiryn, Częstobor, Amadea, Joachim",
+  "03-31": "Achacjusz, Amos, Nela, Dobromira, Gwido, Balbina, Gwidon, Myślidar, Achacy, Joanna, Bonawentura, Dobromiera, Beniamin, Kornelia",
+  "04-01": "Makary, Katarzyna, Celzjusz, Hugo, Miłość, Tomasz, Grażyna, Irena, Tomisław, Chionia, Florentyn, Zbigniew, Wenancjusz, Wenanty, Jakubina, Hugon",
+  "04-02": "Aaron, Laurencja, Leopold, Maria, Samosąd, Wiktor, Miłobąd, Leopolda, Teodozja, Franciszek, Urban",
+  "04-03": "Eutychia, Cieszygor, Jakub, Jan, Gandolf, Ryszard, Benedykt, Józef, Winicjusz, Izbygniew, Izbygniewa, Gandulf, Nicetas, Sykstus, Pankracy, Antoni",
+  "04-04": "Zdziemir, Adelajda, Teodulf, Izydor, Benedykt, Wacław, Wyszeniega, Józef, Platon, Zdzimir, Ambroży",
+  "04-05": "Katarzyna, Borzywoj, Maria, Julianna, Tristan, Izbor, Irena, Krescencja, Wincenty, Jeremiasz, Jeremi",
+  "04-06": "Filaret, Michał, Notger, Celestyna, Katarzyna, Notker, Prudencjusz, Zachary, Marcelin, Adam, Platonida, Zefiryn, Tymoteusz, Zachariasz, Ada, Piotr, Diogenes, Wilhelm, Izolda, Świętobor, Piotra, Ireneusz, Sieciesława",
+  "04-07": "Asumpta, Epifaniusz, Krystian, Maria, Jan Chrzciciel, Józef, Przecław, Herman, Hegezyp, Donat, Przedsław",
+  "04-08": "Perpet, Emma, Makaria, Walter, August, Dionizy, Asynkryt, January, Perpetuus, Apolinary, Amancjusz, Maksyma, Cezary, Ema, Julian, Cezaryna, Radosław, Julia",
+  "04-09": "Notger, Kasylda, Katarzyna, Achacjusz, Eupsychia, Walter, Hugo, Reginald, Maria, Tomasz, Innocenty, Maja, Heliodor, Dominika, Ubald, Wadim, Piotr, Demetriusz, Tankred, Achacy, Waldetruda, Matron, Prochor, Marceli, Hilaria, Dobrosława, Eupsychiusz, Demetria, Hilary, Franciszek, Konrad, Antoni",
+  "04-10": "Fulbert, Makary, Grodzisław, Michał, Notger, Pompejusz, Paladiusz, Apoloniusz, Afrykan, Daniel, Małgorzata, Marek, Terencjusz, Henryk, Michalina, Ezechiel, Magdalena, Antoni",
+  "04-11": "Arleta, Jaromir, Anioł, Antypater, Leon, Gemma, Antypas, Leona, Herman, Hildebrand, Rajner, Izaak, Filip, Helena, Hildebranda",
+  "04-12": "Teresa, Siemidrog, Wiktor, Juliusz, Andrzej, Damian, Józef, Zenon, Zenona, Konstantyn, Saba, Konstanty",
+  "04-13": "Przemysława, Hermenegild, Karp, Agatonika, Maksym, Jan, Ida, Marcin, Małgorzata, Ursus, Przemysł, Przemysław, Hermenegilda, Długomił, Marcjusz, Kunegunda, Kwintylian, Justyn",
+  "04-14": "Lambert, Jadwiga, Krzysztof, Myślimir, Tyburcy, Tomaida, Tyburcja, Maria, Ernestyna, Julianna, Maksym, Lawiniusz, Wszegniew, Ardalion, Symplicja, Izabela, Tyburcjusz, Walerian, Lamberta, Berenika, Justyna, Lawinia, Trofim",
+  "04-15": "Abel, Modest, Olimpia, Bazylisa, Wiktoryn, Maksym, Sylwester, Maron, Wszegniew, Piotr, Tytus, Eutyches, Teodor, Maro, Anastazja, Cezary, Sylwestra, Potencjana, Potencjanna, Cezariusz",
+  "04-16": "Cecylian, Lambert, Leonid, Ksenia, Marcjalis, Bernadeta, Publiusz, Benedykt, Kalikst, Turybiusz, Erwina, Erwin, Optat, Lamberta, Joachim, Kwintylian, Charyzjusz, Feliks, Urban, Saturnin, Julia",
+  "04-17": "Stefan, Katarzyna, Jakub, Izydora, Paweł, Roberta, Anicet, Innocenty, Eliasz, Izydor, Teodora, Salwator, Józef, Radociech, Aniceta, Robert, Klara",
+  "04-18": "Bogusława, Gosław, Sabina, Flawiusz, Maria, Apoloniusz, Ryszard, Bogumiła, Bogusław, Gościsław, Amedeusz, Gosława, Eleuteriusz, Eleuteria, Alicja, Eleutery",
+  "04-19": "Jerzy, Emma, Elfeg, Wigilia, Ekspedyta, Dionizjusz, Krescencjusz, Sokrates, Dionizy, Pafnucy, Leon, Włodzimir, Czesław, Leona, Irydion, Leontyna, Wincenty, Ema, Krescenty, Ekspedyt, Konrad, Wierzyn, Krescens, Cieszyrad, Tymon",
+  "04-20": "Jerzy, Emma, Elfeg, Wigilia, Ekspedyta, Dionizjusz, Krescencjusz, Sokrates, Dionizy, Pafnucy, Leon, Włodzimir, Czesław, Leona, Irydion, Leontyna, Wincenty, Ema, Krescenty, Ekspedyt, Konrad, Wierzyn, Krescens, Cieszyrad, Agnieszka, Tymon",
+  "04-21": "Apollina, Aleksandra, Żelisław, Bartosz, Konrada, Apoloniusz, Apollon, Anastazy, Bartłomiej, Dobrosułka, Drogomił, Anzelm, Konrad, Feliks",
+  "04-22": "Leonida, Leonid, Łukasz, Łucjusz, Lucjusz, Leon, Agapit, Gajusz, Leona, Soter, Wanesa, Teodor, Gaja, Kaja, Wirginiusz, Strzeżymir",
+  "04-23": "Wojciech, Wojciecha, Jerzy, Gerarda, Maria, Idzi, Nastazja, Adalbert, Egidia, Marol, Gerard, Achilles, Feliks, Helena, Fortunat, Gabriela, Ilona",
+  "04-24": "Jerzy, Grzegorz, Aleksander, Maria, Longina, Horacjusz, Zbywoj, Longin, Tyberiusz, Horacy, Bona, Aleksy, Honoriusz, Egbert, Fidelis, Erwina, Erwin, Saba, Euzebiusz, Leoncjusz, Gaston",
+  "04-25": "Stefan, Jarosław, Ewodia, Kaliksta, Franciszka, Ewodiusz, Hermogenes, Filona, Markusław, Marek, Radociech, Rustyk, Filon, Anian, Włodzimira, Kalista, Rustyka",
+  "04-26": "Grzegorz, Dominik, Marcelin, Klarencjusz, Klet, Lucydiusz, Ryszard, Spycimir, Mariusz, Piotr, Artemon, Erwina, Aureliusz, Marzena, Paschazy",
+  "04-27": "Zyta, Antym, Kanizjusz, Felicja, Ożanna, Jakub, Żelimysł, Tertuliana, Teofil, Jan, Marcin, Tertulian, Anastazy, Andrzej, Piotr, Józef, Teodor, Bożebor",
+  "04-28": "Witalis, Achacjusz, Pamfil, Afrodyzy, Arystarch, Paweł, Maria, Menander, Dydymus, Teodora, Afrodyzjusz, Piotr, Patrycy, Marek, Waleria, Achacy, Patryk, Joanna, Przybycześć, Patrycjusz, Afrodyzja, Ludwik, Dydym",
+  "04-29": "Paulin, Katarzyna, Tychik, Jakub, Antonia, Myślimir, Emilian, Hugo, Agapiusz, Roberta, Rita, Piotr, Tertulia, Krystyn, Robert, Angelina, Bogusław, Ermentruda, Sewer, Augustyn, Hugon",
+  "04-30": "Katarzyna, Rozamunda, Jakub, Afrodyzy, Chwalisława, Eutropiusz, Pius, Maria, Lilla, Maksym, Wawrzyniec, Afrodyzjusz, Benedykt, Piotr, Józef, Bartłomiej, Kwiryn, Marian, Donat, Andrea, Afrodyzja, Ludwik, Pomponiusz",
+  "05-01": "Briok, Aniela, Peregryn, Jakub, Izydora, Wiwald, Tamara, Berta, Lubomir, Maja, Petronela, Józef, Asaf, Floryna, Julian, Jeremiasz, Orencjusz, Jeremi",
+  "05-02": "Walter, Zygmunta, Walenty, Atanazy, Witomir, Zygmunt, Teodulf, Walentyn, Zoe, Eksuperiusz, Walbert, Waldebert, Częstowoj, Gwalbert, Borys, Anatol, Cyriak",
+  "05-03": "Diodora, Aleksander, Wirzchosława, Maria, Leonia, Tymoteusz, Teodulf, Piotr, Antonina, Anika, Maura, Wiola, Świętosława, Alodia, Juwenalis, Mariola, Diodor",
+  "05-04": "Florian, Tekla, Michał, Paulin, Leonida, Grzegorz, Strzedziwoj, Antonia, Pelagia, Gotard, January, Teodora, Damian, Antonina, Lucyla, Sylwan, Wespazjan, Monika, Kasjan, Gościwit, Damiana",
+  "05-05": "Penelopa, Peregryn, Zdziebor, Iryda, Gotard, Chociemir, Eulogia, Pius, Jowinian, Waldemar, Anioł, Maksym, Stanisława, Benwenut, Eutymiusz, Irena, Geroncjusz, Eulogiusz, Teodor, Stanisław, Ireneusz, Nicetas, Hilary, Zdzibor",
+  "05-06": "Placyd, Judyta, Jakub, Ewodia, Jurand, Jan, Domagniew, Ewodiusz, Benedykta, Teodot, Bartłomiej, Miłodrog, Filip, Franciszek",
+  "05-07": "Florian, Ludmiła, August, Ludomiła, Jan, Wirginia, Flawia, Bogdała, Piotr, Ludomira, Domicela, Wincenty, Róża, Gizela, Domicjana, Stanimir, Domicjan",
+  "05-08": "Michał, Heladia, Heladiusz, Achacjusz, Wiron, Dionizy, Stanisława, Wiktor, Ida, Benedykt, Ulryka, Arseniusz, Piotr, Bonifacy, Achacy, Amat, Stanisław, Dezyderia",
+  "05-09": "Stefan, Grzegorz, Katarzyna, Mikołaj, Otokar, Karolina, Maria, Pachomiusz, Geroncjusz, Bożydar, Przebor, Hiob, Hiacynta, Beat",
+  "05-10": "Nazary, Sofronia, Cyryna, Epimach, Celzjusz, Beatrycze, Symplicjusz, Jan, Sylwester, Innocenty, Gordian, Filadelfia, Blanda, Antonin, Samuel, Nazariusz, Symplicy, Antonina, Chociesław, Filadelf, Gordiana, Wiktoryna, Sylwestra, Chocsław, Feliks, Cyryn, Łazarz, Częstomir",
+  "05-11": "Antym, Majol, Stella, Tadea, Ignacy, Berta, Maksym, Albert, Alojzy, Benedykt, Syzyniusz, Adalbert, Walbert, Tadeusz, Iga, Waldebert, Mamerta, Lutogniew, Miranda, Zuzanna, Gwalbert, Mamert, Fabiusz, Filip, Majola, Franciszek",
+  "05-12": "Dominik, German, Imelda, Plautylla, Epifaniusz, Jan, Teodora, Nereusz, Flawia, Wszemił, Domicela, Joanna, Domicjana, Jazon, Achilles, Pankracy, Domicjan, Nawoja",
+  "05-13": "Cieszmir, Mucjusz, Aaron, Natalis, Serwacy, Gerarda, Maria, Gliceria, Roberta, Jan, Andrzej, Piotr, Dobiesława, Robert, Magdalena, Gerard, Ciechosław",
+  "05-14": "Michał, Koryna, Maciej, Maria, Idzi, Wiktor, Dominika, Fenenna, Ampeliusz, Bonifacy, Dobiesław, Egidia, Ampelia, Jeremiasz, Jeremi, Tina",
+  "05-15": "Zofia, Strzeżysław, Nadzieja, Atanazy, Stanibor, Miłość, Paweł, Symplicjusz, Retyk, Wiktoryn, Kasjusz, Maksym, Jan, Czcibora, Izydor, Andrzej, Piotr, Retycja, Symplicja, Florencjusz, Cecyliusz, Florenty, Dionizja, Retycjusz",
+  "05-16": "Jan Nepomucen, Peregryn, Adamina, Trzebiemysł, Brendan, Adam, Szymon, Jędrzej, Wiktorian, Fidol, Ubald, Andrzej, Germeriusz, Wiktorianna, Wiktoriana, Honorat",
+  "05-17": "Antonia, Paschalis, Sławomir, Wiktor, Herakliusz, Andrzej, Bruno, Falimir, Wilhelm, Brunon, Chwalimir, Wrocsława, Weronika",
+  "05-18": "Faina, Myślibor, Eryk, Julita, Klaudia, Aleksandra, Matrona, Eufrazja, Jan, Teodot, Eryka, Feliks, Liberiusz, Sandra",
+  "05-19": "Mikołaj, Pękosław, Iwon, Pudencjanna, Pękosława, Iwo, Pudencjana, Teofil, Jan, Cyriaka, Bernarda, Celestyn, Piotr, Dunstan, Kryspin, Iwona, Potencjana, Potencjanna, Urban, Augustyn",
+  "05-20": "Bronisąd, Rymwid, Aleksander, Dawid, Elfryda, Anastazy, Bronimir, Saturnina, Kolumba, Teodor, Karol, Asteriusz, Bromir, Józefa, Taleleusz, Bernardyn, Wiktoria",
+  "05-21": "Lena, Jan Nepomucen, Krzysztof, Tymoteusz, Antioch, Wiktor, Teobald, Rycheza, Przecława, Synezjusz, Wszemir, Polieukt, Donat, Ryksa, Serapion",
+  "05-22": "Fulko, Wiesław, Ryta, Marcjan, Emil, Krzesisława, Roman, Dorian, Jan, Piotr, Wiesława, Helena, Julia, Wisława",
+  "05-23": "Michał, Dezydery, Budziwoj, Eutychiusz, Łucjusz, Emilia, Wibert, Jan, Symeon, Lucjusz, Bolelut, Iwona, Dezyderia, Julian, Eufrozyna, Gwibert, Dezyderiusz",
+  "05-24": "Donacjan, Tomira, Dawid, Maria, Jan, Orion, Amalia, Dagmara, Milena, Wanesa, Wincenty, Joanna, Zuzanna, Ubysława, Franciszek, Ludwik",
+  "05-25": "Grzegorz, Heladia, Marcjanna, Borzysław, Heladiusz, Aldhelm, Beda, Zenobiusz, Dionizy, Mariusz, Wenerand, Leon, Magda, Leona, Imisława",
+  "05-26": "Alwina, Adalwin, Lambert, Zachary, Karp, Alwin, Paulina, Emil, Angelika, Zachariasz, Kwadrat, Teodor, Filip Neriusz, Eleuteriusz, Więcemił, Filip, Lamberta, Adalwina, Eleuteria, Eleutery, Ewelina",
+  "05-27": "Oliwier, Eutropiusz, Lucjan, Radowit, Jan, Izydor, Małgorzata, Oliwer, Fryderyka, Świętobor, Magdalena, Julian, Fryderyk, Augustyn",
+  "05-28": "Heladia, Heladiusz, Jaromir, German, Łucjusz, Emil, Wolrad, Ignacy, Wiktor, Bogurad, Lucjusz, Herkulan, Just, Wilhelm, Balladyna, Justyna, Augustyn",
+  "05-29": "Stefan, Izbylut, Urszula, Maksymin, Aleksander, Maksymina, Maria, Syzyniusz, Andrzej, Wilhelm, Bogusław, Ermentruda, Magdalena, Rajmund, Rajmunda",
+  "05-30": "Mirogniew, Ferdynand, Zyndram, Jan, Sulimir, Anastazy, Eksuperancjusz, Andrzej, Gawin, Żanna, Brodzisław, Joanna, Bolemysł, Andronik, Sulirad, Feliks, Bazyli, Suligniewa",
+  "05-31": "Witalis, Aniela, Kamila, Petronela, Kancjusz, Kancjanela, Sylwiusz, Noe, Marietta, Paschazy, Kancjan, Feliks",
+  "06-01": "Tespezjusz, Teodul, Alfons, Pamfil, Jakub, Firmus, Juwencja, Konrada, Paweł, Felina, Bernard, Eunika, Felin, Nikodem, Tespezy, Porfiriusz, Pamela, Świętopełk, Prokul, Magdalena, Julian, Seleukos, Konrad, Ischyrion, Fortunat, Juwencjusz, Justyn",
+  "06-02": "Efrem, Mikołaj, Marcelin, Jarmil, Blandyna, Erazm, Maria, Sadok, Domna, Florianna, Piotr, Jaczemir, Materna, Marianna, Trofima, Marzanna, Eugeniusz, Fotyn, Mszczuja, Nicefor, Racisław",
+  "06-03": "Klotylda, Maciej, Kewin, Laurencjusz, Tamara, Ferdynand, Owidiusz, Jan, Wawrzyniec, Andrzej, Piotr, Bratumiła, Karol, Paula, Cecyliusz, Owidia, Izaak, Laurentyn, Joachim, Leszek, Franciszek",
+  "06-04": "Pacyfik, Kwiryna, Gostmił, Niepełka, Karp, Skarbisław, Saturnina, Braturad, Kwiryn, Karol, Dacjan, Optat, Franciszek, Metrofan",
+  "06-05": "Nikanora, Jakub, Walter, Nikanor, Doroteusz, Ferdynand, Genadiusz, Zenaida, Bonifacy, Dobrociech, Waleria, Igor, Hildebrand, Hildebranda",
+  "06-06": "Artemiusz, Norberta, Sydonia, Aleksander, Paulina, Gerarda, Laurenty, Maria, Norbert, Wawrzyniec, Dominika, Więcerad, Benignus, Marceli, Gerard, Filip, Klaudiusz, Kandyda",
+  "06-07": "Teresa, Meriadok, Jarosław, Wiesław, Anna, Wisław, Paweł, Roberta, Piotr, Lukrecja, Meriadek, Robert, Wiesława, Jeremiasz, Sabinian, Antoni, Jeremi",
+  "06-08": "Maksymin, Jakub, Maksymina, Seweryn, Maria, Medarda, Herakliusz, Dobrociech, Wilhelm, Medard, Wyszesław",
+  "06-09": "Efrem, Anna, Pelagia, Sylwester, Ryszard, Józef, Prosimir, Felicjan, Sylwestra, Kolumb, Bertrand, Maksymian, Kanimir",
+  "06-10": "Cecylia, Apollo, Edgar, Wiktorian, Mauryn, Tymoteusz, Maksym, Jan, Małgorzata, Onufry, Amancjusz, Bogumiła, Bogumił, Henryk, Asteriusz, Ingolf, Diana, Wiktorianna, Aureliusz, Wiktoriana, Amata",
+  "06-11": "Radomiła, Paryzjusz, Witomysł, Radomił, Flora, Jan, Anastazy, Teodozja, Barnaba, Paula, Feliks, Fortunat",
+  "06-12": "Placyd, Czesława, Stefan, Nazary, Celestyna, Przybyrad, Olimpiusz, Narcyz, Nabor, Kasper, Cyryna, Tadea, Kazimierz, Bernard, Zygmunt, Gwido, Jan, Gwidon, Nazariusz, Onufry, Leon, Janina, Jarogniewa, Antonina, Mieczysława, Bazylides, Czesław, Leona, Bolesław, Kacper, Władysław, Władysława, Nabur, Wyszemir, Cyryn, Włodzimierz, Jarogniew, Antoni, Mieczysław",
+  "06-13": "Grzegorz, Peregryn, Chociemir, Gerarda, Lucjan, Lubowid, Olga, Herman, Gracja, Tobiasz, Gerard, Akwilina, Antoni, Tryfiliusz",
+  "06-14": "Eliza, Michał, Myślibor, Marcjan, Walery, Alojzy, Ryszard, Anastazy, Elizeusz, Metody, Digna, Ninogniew, Rufin, Feliks, Konstancja, Justyn",
+  "06-15": "Leonida, Germana, Lotar, Wisław, Bernard, Albertyna, Adelajda, Witosław, Wit, Dula, Jolanta, Abraham, Edburga, Placyda, Eutropia, Oliwia, Witold, Izolda, Hezychiusz, Angelina, Benilda, Witolda, Liba, Wisława",
+  "06-16": "Aureusz, Judyta, Aurelian, Tychon, Jan, Alina, Aneta, Ludgarda, Benon, Benona, Justyna, Aubert, Cyryk",
+  "06-17": "Nikander, Gundolf, Marcjan, Laura, Radomił, Awit, Herweusz, Albert, Drogomysł, Izaura, Nikandra, Adolfa, Adolf, Hipacy, Waleriana, Franciszek, Agnieszka, Awita, Izaur",
+  "06-18": "Teodul, Efrem, Drogoradz, Ożanna, Emil, Drogomysł, Przeborka, Marek, Maryna, Eufemiusz, Elżbieta, Amanda, Dzirżysława, Paula, Hipacy, Amand, Miłobor, Leoncjusz, Drohobysz",
+  "06-19": "Gaudenty, Borzysław, Gaudencjusz, Odon, Julianna, Otto, Bonifacy, Michalina, Romualda, Gerwazy, Protazy, Romuald",
+  "06-20": "Makary, Michał, Bogna, Bożena, Rafał, Sylweriusz, Rafaela, Dina, Jan, Tomasz, Florentyna, Gemma, Edburga, Jan Chrzciciel, Adalbert, Bogumiła, Benigna, Baltazar, Hektor, Franciszek, Bratomir",
+  "06-21": "Alban, Rudolfa, Marta, Rudolfina, Albana, Alojzy, Terencja, Lutfryd, Terencjusz, Domamir, Alojza, Demetria, Alicja, Rajmund, Marcja, Euzebiusz, Chloe, Rudolf",
+  "06-22": "Alban, Paulin, Achacjusz, Paulina, Flawiusz, Będzieciech, Eberhard, Albana, Jan, Tomasz, Innocenty, Achacy, Agenor",
+  "06-23": "Agrypina, Sydonia, Anna, Atanazy, Arystokles, Maria, Albin, Jan, Piotr, Józef, Zenon, Zenona, Wanda, Edeltruda",
+  "06-24": "Janusz, Danuta, Emilia, Symplicjusz, Jan, Teodulf, Longina, Janisław, Janina, Jan Chrzciciel, Symplicy, Longin, Wilhelm, Romualda, Romuald",
+  "06-25": "Kineburga, Dorota, Tolisława, Febronia, Łucja, Febron, Prospera, Maksym, Prosper, Eulogiusz, Wilhelm, Adelbert, Fiebrosław, Antyd, Sozypater",
+  "06-26": "Maksanty, Pelagia, Dawid, Paweł, Jan, Zdziwoj, Pelagiusz, Andrzej, Edburga, Maksencjusz, Wigiliusz, Mirogod, Jeremiasz, Salwia, Salwiusz, Jeremi",
+  "06-27": "Teresa, Włodzisława, Bogodar, Samson, Maryla, Maria, Benwenut, Jan, Bożdar, Bogudar, Bożydar, Cyryl, Włodzisław, Joanna, Władysław",
+  "06-28": "Wincentam, Seren, Argymir, Marcela, Paweł, Lubomir, Plutarch, Leon, Józef, Heraklides, Leona, Wincencja, Heron, Zbrosław, Ireneusz, Ekhard, Serena, Wincentyna",
+  "06-29": "Emma, Dalebor, Paweł, Maria, Kasjusz, Benedykta, Piotr, Beata, Kasja, Ema, Iweta",
+  "06-30": "Marcjalis, Emilia, Teobalda, Jan, Teobald, Leon, Lucyna, Bazylides, Ciechosława, Milena, Leona, Ermentruda, Władysław, Władysława, Bazyli, Trofim",
+  "07-01": "Teodoryk, Estera, Aaron, Szymon, Karolina, Otto, Teobald, Marcin, Otton, Gaweł, Bogusław, Namir, Marian, Klarysa, Julian, Domicjana, Halina, Ekhard, Domicjan",
+  "07-02": "Niegosława, Bogodar, Eutychiusz, Maria, Switun, Bożdar, Martynian, Bogudar, Piotr, Bożydar, Jagoda, Eutyches, Bernardyn, Urban, Juwenalis",
+  "07-03": "Haralampia, Racigniew, Tomasz, Longina, Heliodor, Leon, Józef, Longin, Teodot, Leona, Mirosław, Jacek, Radomir, Kamelia, Tryfon, Anatol, Miłosław",
+  "07-04": "Aurelian, Atanazy, Berta, Odo, Jacenty, Alfred, Ozeasz, Innocenty, Hiacynt, Andrzej, Piotr, Patrycy, Józef, Malwina, Wielisław, Teodor, Elżbieta, Jacek, Aggeusz, Patrycjusz, Julian, Udalryk",
+  "07-05": "Michał, Marta, Cyryla, Jakub, Atanazy, Karolina, Maria, Eliasz, Zoe, Telimena, Trofima, Wilhelm, Przybywoj, Bartłomiej, Filomena, Antoni",
+  "07-06": "Chociebor, Teresa, Dominik, Gotard, Łucja, Maria, Lucja, Ignacja, Dominika, Piotr, Niegosław, Nazaria, Zuzanna",
+  "07-07": "German, Ilidia, Peregryn, Wilibald, Pompejusz, Lucjan, Odo, Sędzisław, Antonin, Benedykt, Metoda, Piotr, Józef, Papiasz, Hezychiusz, Metody, Ilidiusz, Sędzisława, Gościwit, Saturnin, Edelburga",
+  "07-08": "Odeta, Edgar, Prokop, Akwila, Adrian, Teobalda, Kiliana, Jan, Teobald, Hadrian, Falibor, Piotr, Adolfa, Eugeniusz, Chwalimir, Adrianna, Elżbieta, Adolf, Kilian, Adriana, Hadriana",
+  "07-09": "Wszebąd, Anatola, Brykcjusz, Teodoryk, Mikołaj, Ifigenia, Korneli, Aleksander, Sylwia, Adrian, Łucja, Kornel, Lucja, Florianna, Jan, Hadrian, Cyryl, Heloiza, Adrianna, Zenon, Joanna, Róża, Zenona, Korneliusz, Adolfina, Weronika, Antoni, Hadriana, Augustyn, Anatolia",
+  "07-10": "Witalis, Aniela, Maurycja, Nasława, Samson, Engelbert, Sekunda, Amelia, Zacheusz, Aleksander, Rufina, January, Amalberga, Daniel, Alma, Sylwan, Racimir, Emanuel, Askaniusz, Maurycy, Filip, Leoncjusz, Rzędziwoj, Antoni, Bianor",
+  "07-11": "Placyd, Zygbert, Kalina, Sabin, Pelagia, Pius, Zybracht, Zybart, Jan, Pelagiusz, Benedykt, Wyszesława, Olga, Siepraw, Zybert",
+  "07-12": "Paulin, Jan Gwalbert, Hilariona, Marcjanna, Himisław, Świętożyźń, Natan, Leon, Andrzej, Hilarion, Piotr, Bruno, Janina, Bonifacy, Leona, Brunon, Epifania, Wera, Tatomir, Prokul, Imisława, Jazon, Weronika, Feliks, Prokles, Euzebiusz",
+  "07-13": "Radomiła, Ernest, Sara, Sylas, Joel, Benedykt, Małgorzata, Andrzej, Trofima, Henryk, Eugeniusz, Mildreda, Świerad, Justyna, Ezdrasz, Serapion",
+  "07-14": "Jakub, Marcelin, Stella, Dawid, Kamila, Dobrogost, Angelika, Fokas, Damian, Iga, Herakles, Marcel, Henryk, Kamil, Brunon, Angelina, Donald, Marcelina, Izabela, Bonawentura, Ulryk, Bohdan, Franciszek, Feliks, Kosma, Włodzimierz, Tuskana",
+  "07-15": "Roksana, Anna, Atanazy, Dawid, Ignacy, Antioch, Cyriaka, Lubomysł, Daniel, Włodzimir, Henryk, Dawida, Bonawentura, Pompiliusz, Włodzimierz, Egon, Cyriak",
+  "07-16": "Kanmił, Stefan, Ryta, Ermegarda, Eustacjusz, Walenty, Eustazy, Maria, Eustazja, Carmen, Walentyn, Dzierżysław, Benedykt, Faust, Andrzej, Bartłomiej, Marika, Dzirżysława, Irmegarda, Atenogenes, Eustazjusz",
+  "07-17": "Januaria, Jadwiga, Sekunda, Aleksja, Sperat, Akwilin, Aneta, Leon, Andrzej, Leona, Teodozy, Donata, Marcelina, Teodota, Aleksy, Westyna, Bogdan, Dzierżykraj, Feliks, Teodozjusz, Konstancja",
+  "07-18": "Szymona, Drogoradz, Szymon, Nemezjusz, Krescencjusz, Symforoza, Emilian, Arnolf, Karolina, Drogomir, Roberta, Bruno, Fryderyka, Kamil, Prymityw, Brunon, Robert, Nemezy, Maryna, Eugeniusz, Teodozja, Dziwigor, Arnulf, Drogomił, Krescenty, Julian, Uniesław, Erwin, Matern, Fryderyk, Arnold, Krescens, Justyn",
+  "07-19": "Radomiła, Justa, Zdziesuł, Rufina, Lutobor, Marcin, Arseniusz, Epafras, Włodzisław, Teodor, Makryna, Symmach, Ambroży, Aurea",
+  "07-20": "Czesława, Ludwika, Remigiusz, Ansegiz, Heliasz, Stosław, Modest, Remigia, Paweł, Hieronim, Eliasz, Flawiana, Małgorzata, Leon, Flawian, Czesław, Leona, Hieronima, Aureliusz, Sewera",
+  "07-21": "Laurencjusz, Laurenty, Ignacy, Jan, Wiktor, Wawrzyniec, Daniel, Benedykt, Andrzej, Just, Prakseda, Zotyk, Arbogast, Klaudiusz, Julia",
+  "07-22": "Lena, Marisa, Stojsław, Albin, Teofil, Stojsława, Cyryl, Józef, Milena, Naczęsława, Magdalena, Platon, Benon, Benona, Menelaus, Nicefor",
+  "07-23": "Jan Kasjan, Romula, Liboriusz, Olimpiusz, Bogna, Sławosz, Żelisław, Brygida, Jan, Apolinary, Bolesław, Krystyn, Joanna, Apolinaria, Kasjan",
+  "07-24": "Wojciecha, Segolena, Kinga, Wiktor, Krystyna, Olga, Gleb, Kunegunda, Augustyn, Krzesimir",
+  "07-25": "Rudolfa, Alfons, Jakub, Krzysztof, Rudolfina, Nieznamir, Olimpia, Krzysztofa, Paweł, Walentyna, Sławosław, Piotr, Dariusz, Franciszek, Antoni, Rudolf",
+  "07-26": "Erast, Anna, Walenty, Hanna, Jacenty, Symeon, Grażyna, Walentyn, Hiacynt, Wilhelm, Sancja, Tytus, Teodor, Mirosława, Jacek, Bartłomieja, Joachim, Krystiana",
+  "07-27": "Tomisława, Maur, Wszebor, Celiusz, Jerzy, Stojsław, Celia, Lilla, Innocenty, Sergiusz, Nowellon, Bertold, Antuza, Celestyn, Lilioza, Teodor, Pantaleon, Magdalena, Aureliusz, Laurentyn, Feliks, Julia, Natalia",
+  "07-28": "Nazary, Samson, Tymona, Achacjusz, Macieja, Celzjusz, Świętomir, Wiktor, Nazariusz, Melchior, Alfonsa, Achacja, Achacy, Urban, Antoni, Tymon, Tina",
+  "07-29": "Faustyn, Marta, Serapia, Cirzpibog, Beatrycze, Flora, Maria, Serafina, Symplicjusz, Prospera, Olaf, Antonin, Prosper, Symplicy, Wilhelm, Lucyla, Eugeniusz, Teodor, Lucyliusz, Konstantyn, Cirzpisława, Rufin, Feliks",
+  "07-30": "Ubysław, Julita, Sekunda, Ingeborga, Leopold, Swojsław, Ursus, Piotr, Rościsław, Zdobysław, Maksyma, Abdon",
+  "07-31": "German, Adam, Emilian, Ignacy, Lubomir, Jan, Ernesta, Fabia, Iga, Alfonsa, Fabiusz, Demokryt, Beat, Helena, Justyn",
+  "08-01": "Eleazar, Rudolfa, Alfons, Rudolfina, Wiara, Aleksander, Nemezjusz, Nadzieja, Etelwold, Konrada, Antonin, Akcjusz, Nemezy, Brodzisław, Marceli, Salomea, Konrad, Leoncjusz, Wiercisław, Rudolf, Justyn",
+  "08-02": "Alfreda, Stefan, Rutyliusz, Karina, Gustaw, Świętosław, Maria, Maksym, Eliasz, Piotr, Teodota, Euzebiusz",
+  "08-03": "Marana, Dalmacjusz, Szczepan, Lidia, Symeon, Nikodem, Piotr, Dalmacy, Eufroniusz, Cyra, Kamelia, Nikodema, Miłosław, Augustyn",
+  "08-04": "Pęcisława, Dominik, Prokop, Pękosław, Krescencjusz, Arystarch, Maria, Tertuliana, Jan, Tertulian, Andrzej, Pęcisław, Krescenty, Perpetua, Rajner, Mironieg, Fryderyk, Protazy, Franciszek, Krescens, Justyn",
+  "08-05": "Kasjana, Parys, Abel, Oswalda, Nonna, Maria, Wirginia, Afra, Memiusz, Oswald, Wenancja, Kasjan, Wenancjusz, Wenanty, Cyriak",
+  "08-06": "Stefan, Jakub, Walburga, Maria, January, Felicysym, Sława, Oktawian, Just, Piotr, Namir, Wincenty, Nasław",
+  "08-07": "Klaudia, Dorota, Licyniusz, Jagna, Konrada, Albert, Andromeda, Edmunda, Kajetan, Licynia, Agatangel, Wincenty, Donat, Dobiemiar, Konrad, Sykstus, Doryda, Edmund",
+  "08-08": "Smaragd, Maryniusz, Esmeralda, Largus, Bonifacja, Dominik, Miron, Emilian, Maryn, Szmaragd, Jan, Wiktor, Cyryl, Sylwiusz, Niegosław, Niezamysł, Joanna, Mirona, Sewer, Cyriak",
+  "08-09": "Teresa, Roland, Marcjan, Marcelin, Doroteusz, Roman, Miłorad, Jan, Ryszard, Irena, Klarysa, Edyta, Julian, Domicjana, Falkon, Domicjan, Romuald",
+  "08-10": "Bohdana, Bogodar, Hugona, Laurencjusz, Hugo, Laurenty, Bernard, Bogdana, Bożdar, Wawrzyniec, Bogudar, Bożydar, Wirzchosław, Amadeusz, Prochor, Bogdan, Asteria, Bohdan, Amadea, Borys, Hugon",
+  "08-11": "Aleksander, Lilia, Tyburcy, Tyburcja, Telimena, Piotr, Włodzimir, Włościwoj, Herman, Zuzanna, Filomena, Tyburcjusz, Rufin, Ligia, Włodzimierz, Klara",
+  "08-12": "Makary, Leonida, Largus, Eunomia, Łukasz, Julianna, Anicet, Innocenty, Bądzsław, Herkulan, Aniceta, Joanna, Digna, Hilaria, Fotyn, Julian, Euzebiusz, Cyriak, Lech, Klara, Wiktoria",
+  "08-13": "Radomiła, Kasjana, Radegunda, Wolebor, Poncjan, Maksym, Jan, Hipolit, Hipolita, Benild, Diana, Kasjan, Wigbert, Helena, Konkordia, Sekundyn",
+  "08-14": "Machabeusz, Dobrowoj, Ursycyn, Majnard, Maksymilian, Alfred, Dobrowoja, Kalikst, Elżbieta, Marceli, Atanazja, Euzebiusz",
+  "08-15": "Napoleon, Stefan, Alipiusz, Miriam, Arnolf, Maria, Armida, Julianna, Trzebiemir, Arnulf, Tarsycjusz",
+  "08-16": "Stefan, Domasuł, Arsacjusz, Roch, Domarad, Laurencjusz, Emil, Laurenty, Anioł, Symplicjusz, Wawrzyniec, Symplicy, Tytus, Diomedes, Eleuteriusz, Piotra, Ciechosław, Saba, Eleuteria, Ambroży, Eleutery",
+  "08-17": "Eliza, Straton, Zawisza, Anita, Septymiusz, Miron, Liberat, Angelika, Maria, Julianna, Maksym, Jacenty, Septym, Nastazja, Anastazy, Hiacynt, Bonifacy, Rustyk, Rogat, Żanna, Serwiusz, Jacek, Joanna, Bertram, Magdalena, Jaczewoj, Mirona, Euzebiusz, Klara, Rustyka",
+  "08-18": "Firmin, Lena, Eryk, Laura, Agapita, Nela, Jan, Bronisław, Piotr, Agapit, Włodzimir, Żyrosława, Sancja, Tworzysława, Bogusław, Paula, Eryka, Helena, Ludwik, Klara, Ilona",
+  "08-19": "Emilia, Agapiusz, Alfred, Jan, Sebald, Wiktor, Juliusz, Andrzej, Bolesław, Ezechiel, Marian, Donat, Julian, Luiza, Magnus, Ludwik",
+  "08-20": "Świelub, Stosław, Krzysztof, Sabin, Łucjusz, Filibert, Paweł, Samuela, Maria, Bernard, Filiberta, Sobiesław, Leowigild, Maksym, Hieronim, Eliasz, Lucjusz, Samuel, Małgorzata, Sieciech, Sewer",
+  "08-21": "Maksymilian, Paulina, Agapiusz, Pius, Baldwin, Bernard, Baldwina, Fidelisa, Cyriaka, Apolinary, Daniel, Anastazy, Andrzej, Męcimir, Joanna, Apolinaria, Fidelis, Franciszek, Wiktoria",
+  "08-22": "Symforiana, Sieciesław, Lambert, Zygfryda, Oswalda, Laurencjusz, Dalegor, Maria, Bernard, Albin, Tymoteusz, Jan, Wawrzyniec, Benicjusz, Symforian, Namysław, Hipolit, Bolesław, Teonas, Cezary, Fabrycjan, Oswald, Hipolita, Zygfryd, Teona, Magdalena, Filip, Lamberta, Joachim, Pankracy, Agatonik",
+  "08-23": "Archelaus, Jakub, Teonilla, Sydonia, Zacheusz, Żelisław, Brygida, Leoncja, Maksym, Wiktor, Apolinary, Filipa, Flawia, Lubomira, Feliksa, Flawian, Róża, Sulirad, Walerian, Piotra, Ireneusz, Klaudiusz, Cyriak, Kalinik",
+  "08-24": "Jerzy, Malina, Anita, Eutychiusz, Bartosz, Emilia, Natanael, Cieszymir, Patrycy, Patryk, Bartłomiej, Eutyches, Michalina, Joanna, Patrycjusz, Audoen, Halina",
+  "08-25": "Michał, Grzegorz, Teodoryk, Gaudenty, Peregryn, Hermina, Gaudencjusz, Poncjan, Tomasz, Józef, Elwira, Wincenty, Kalasanty, Julian, Luiza, Arediusz, Ludwik, Euzebiusz, Patrycja, Genezjusz",
+  "08-26": "Teresa, Aleksander, Maksymilian, Wirzchosława, Maria, Wiktorian, Symplicjusz, Konstancjusz, Hadrian, Symplicy, Wirzchosław, Dobroniega, Adrianna, Joanna, Wiktorianna, Wiktoriana, Ireneusz, Fortunat, Hadriana, Natalia, Sandra",
+  "08-27": "Dominik, Stosław, Marcelin, Jan, Liceriusz, Małgorzata, Piotr, Gebhard, Manea, Józef, Liceria, Amadeusz, Rufus, Cezary, Monika, Amadea, Sabinian, Cezariusz, Przybymir, Fortunat, Agnieszka, Serapion, Honorat",
+  "08-28": "Alfons, Wyszymir, Joachima, Aleksander, Wyszomir, Sobiesław, January, Pelagiusz, Adelinda, Hermes, Bonifacy, Aleksy, Mojżesz, Julian, Stronisław, Feliks, Fortunat, Patrycja, Augustyn, Bibian",
+  "08-29": "Michał, Mederyka, Krescencjusz, Sabina, Beatrycze, Świętosław, Flora, Eutymiusz, Jan, Andrzej, Piotr, Jan Chrzciciel, Mederyk, Racibor, Krescenty, Hipacy, Krescens, Sebbus",
+  "08-30": "Tekla, Miron, Ingeborga, Świetlana, Damroka, Jan, Swojsław, Małgorzata, Piotr, Rebeka, Częstowoj, Gaudencja, Latika, Adaukt, Feliks, Częstowojna",
+  "08-31": "Paulin, Aidan, Świętosław, Albertyna, Jan, Prymian, Nikodem, Arystydes, Józef, Teodot, Amat, Izabela, Arystyda, Optat, Bohdan, Solidariusz, Rajmund, Rajmunda",
+  "09-01": "Witalis, Michał, Ruta, Sator, August, Anna, Beatrycze, Idzi, Amon, Dzierżysław, Melecjusz, Bronisław, Egidia, Satora, Gedeon, Donat, Bronisława, Feliks, Sykstus, Miłodziad, Werena",
+  "09-02": "Eliza, Zofia, Stefan, Oliwier, Adelina, Salomon, Jakub, Aleksander, Walenty, Elpidiusz, Seweryn, Stefania, Dionizy, Jan, Ingryda, Walentyn, Apolinary, Antonin, Oktawian, Piotr, Wilhelm, Czesław, Elpidia, Sobiemysł, Teodor, Absalon, Dziesław, Zenon, Julian, Bohdan, Franciszek",
+  "09-03": "Maryniusz, Grzegorz, Feba, Serapia, Szymon, Natalis, Mojmir, Bartosz, Bazylisa, Erazma, Gerarda, Maryn, Jan, Bronisław, Przecław, Bartłomiej, Izabela, Przedsław, Gerard, Antoni",
+  "09-04": "Katarzyna, Imelda, Ermegarda, Rozalia, Stella, Heliodora, Boromea, Maria, Iwo, Ida, Hermiona, Liliana, Przemysł, Bonifacy, Felicyta, Teodor, Przemysław, Daniela, Iwona, Scypion, Kanuta, Mojżesz, Marceli, Julian, Irmegarda, Sergia, Rościgniew, Kanizja, Rajmunda, Gwidona, Kandyda",
+  "09-05": "Peregryn, Budziboj, Dorota, Wiktoryn, Wawrzyniec, Przyboj, Herkulan, Racława, Herakles, Teodor, Herkules, Wiktoryna, Fereol, Racław, Justyna, Rozwita, Urban, Stronisława, Racisław, Bertyn",
+  "09-06": "Michał, Donacjan, German, Gundolf, Zachary, Bolemir, Liberat, Aleksja, Onezyfor, Albin, Manswet, Bogdana, Tomasz, Zachariasz, Faust, Uniewit, Eugeniusz, Beata, Eugenia, Eleuteriusz, Eleuteria, Bertrand, Magnus, Eleutery",
+  "09-07": "Domasuł, Teodoryk, Pamfil, Eupsychia, Sozont, Ryszard, Domasława, Melchior, Gratus, Eupsychiusz, Dobrobąd, Regina",
+  "09-08": "Bratumił, Adam, Adrian, Radosława, Maria, Serafina, Teofil, Amon, Sergiusz, Marianna, Nestor, Adrianna, Zenon, Wiola, Alan, Euzebiusz, Radosław, Adriana",
+  "09-09": "Audomar, Aniela, Straton, Ożanna, Bolemira, Sewerian, Jakub, Bolemir, Otmar, Radosława, Doroteusz, Dionizy, Drogomir, Jan, Sergiusz, Sobiebor, Piotr, Świecław, Sobiesąd, Jacek, Gorgoniusz, Ścibora, Aureliusz, Franciszek, Augustyn",
+  "09-10": "Pulcheria, Sebastian, Mikołaj, Łukasz, Łucjusz, Agapiusz, Anioł, Bernard, Sobiesław, Klemens, Wiktor, Nimfodora, Lucjusz, Datyw, Leon, Piotr, Aldona, Leona, Teodor, Karol, Izabela, Poliana, Monika, Polianna, Franciszek, Feliks, Polian, Kandyda, Salwiusz, Antoni, Dydym, Mścibor",
+  "09-11": "Diodora, Naczęsław, Emilian, Ademar, Pafnucy, Dydymus, Jacenty, Jan, Teodora, Hiacynt, Krzesisław, Dagna, Diomedes, Jacek, Aisza, Wincenty, Bonawentura, Krzesława, Prot, Feliks, Dydym, Diodor",
+  "09-12": "Marlena, Sylwin, Maria, Gwido, Teodulf, Maja, Gwidon, Sylwina, Cyrus, Piotr, Amadeusz, Tacjan, Macedoniusz, Franciszek, Juwencjusz",
+  "09-13": "Genadia, Haralampia, Aleksander, Eulogia, Maria, Litoriusz, Apolinary, Jan Chryzostom, Makrobiusz, Eulogiusz, Mauryliusz, Amat, Dobielut, Julian, Aureliusz, Morzysław, Filip",
+  "09-14": "Salustia, Roksana, Szymon, Racigniew, Bernard, Albert, Jan, Wiktor, Siemomysł, Matern, Radomira",
+  "09-15": "Roland, Nikomedes, Katarzyna, Jakert, Filoteusz, Maria, Albin, Nikodem, Eutropia, Dolores, Kamil, Teodor, Filotea, Walerian, Nicetas, Lolita, Jeremiasz, Ekhard, Jeremi",
+  "09-16": "Geminian, Innocentyna, Antym, Innocencja, Eufemia, Edda, Korneli, Ludmiła, Abundancjusz, Cyprian, Kamila, Ariadna, Łucja, Ninian, Kornel, Sędzisław, Jan, Wiktor, Sebastiana, Abundancja, Edyta, Innocenta, Eugenia, Korneliusz, Franciszek",
+  "09-17": "Lambert, Narcyz, Dargosław, Dziebor, Zygmunta, Sokrates, Szczęsny, Zygmunt, Szczęsna, Gordian, Cherubin, Teodora, Piotr, Kolumba, Hildegarda, Drogosław, Robert, Makryn, Walerian, Lamberta, Franciszek, Justyna, Dezyderiusz, Justyn",
+  "09-18": "Zofia, Ariadna, Stefania, Zachariasz, Irena, Castiel, Ryszarda, Józef, Dobrowit, Tytus, Metody, Sobierad, Stanisław, Fereol, Baltazar, Aretas",
+  "09-19": "Paloma, Festus, Dezydery, Marta, Nilus, Alfons, Eutychiusz, Arnolf, Januariusz, Maria, January, Nila, Eliasz, Więcemir, Teodor, Peleusz, Arnulf, Zuzanna, Prokul, Wilhelmina, Prokles, Konstancja, Trofim, Dezyderiusz",
+  "09-20": "Glicery, Gliceriusz, Eustachiusz, Matea, Agapiusz, Sokrates, Paweł, Dionizy, Helmut, Miłowuj, Klemens, Jan, Teopista, Filipa, Eustachy, Andrzej, Fausta, Teodor, Perpetua, Euzebia, Franciszek, Teopist",
+  "09-21": "Pacyfik, Daria, Pamfil, Ifigenia, Bożeciech, Melisa, Aleksander, Melecjusz, Marek, Kastor, Hipolit, Maura, Mateusz, Hipolita, Bernardyna, Konon, Jonasz, Euzebiusz, Mira",
+  "09-22": "Witalis, Daria, Imbram, Emmeran, Tacjusz, Ignacy, Tomasz, Innocenty, Wiktor, Eksuperiusz, Kandyd, Emmeram, Prosimir, Bazyla, Digna, Emeryta, Jonasz, Maurycy, Józefa, Joachim, Feliks",
+  "09-23": "Tekla, Zofia, Adamnan, Krzysztof, Pius, Pola, Jan, Konstancjusz, Poliksena, Andrzej, Piotr, Bogufała, Bogusław, Liwiusz, Lina, Bernardyna, Linus, Wiercisław, Boguchwała, Antoni",
+  "09-24": "Pacyfik, Jaromir, Tomir, Gerarda, Seweryn, Twardomir, Maria, Uniegost, Pafnucy, Kolumba, Herman, Morzysława, Gerard, Amata",
+  "09-25": "Firmin, Ermenfryda, Gaspar, Kleofas, Ermenfryd, Galfryd, Wawrzyniec, Herkulan, Piotr, Włodzimir, Irmfryda, Kamil, Włodzisław, Rufus, Minigniew, Aurelia, Wincenty, Irmfryd, Świętopełk, Włodzimira, Władysław, Władysława, Franciszek",
+  "09-26": "Lena, Teresa, Nilus, Budziwoj, Kasper, Dalmacjusz, Kalistrat, Majnard, Cyprian, Łucja, Lucja, Nila, Damian, Amancjusz, Dalmacy, Łękomir, Justyna, Kosma, Nil, Euzebiusz",
+  "09-27": "Eleazar, Zygbert, Hiltruda, Zybracht, Mirela, Jan, Wawrzyniec, Przedbor, Gajusz, Adolfa, Mirabella, Amadeusz, Wincenty, Gaja, Adolf, Urban, Zybert",
+  "09-28": "Lena, Myślibor, Salomon, Sylwin, Laurencjusz, Wacława, Jan, Wawrzyniec, Amalia, Eksuperiusz, Sylwina, Wacław, Myślibora, Marek, Więcesław, Alodiusz, Bernardyn, Więcesława, Tymon",
+  "09-29": "Michał, Mikołaj, Rafał, Grimbald, Fraternus, Dadzbog, Ludwin, Gabriel, Gajana, Lutwin, Michalina, Dadzboga, Teodota, Dariusz, Franciszek, Cyriak, Rypsyma",
+  "09-30": "Zofia, Grzegorz, Felicja, Nadzieja, Znamir, Hieronim, Wiktor, Ursus, Imisław, Honoriusz, Hieronima, Franciszek",
+  "10-01": "Teresa, Remigiusz, Cieszysław, Danuta, Krescencjusz, Roman, Małobąd, Jan, Bawon, Maksyma, Krescenty, Krescens, Ariel, Julia",
+  "10-02": "Berengar, Aleksandra, Ursycyn, Teofil, Nasiębor, Berengaria, Leodegar, Eleuteriusz, Eleuteria, Stanimir, Eleutery, Antoni",
+  "10-03": "Teresa, Ewald, Ermegarda, Sirosław, Częstobrona, Cyprian, Gerarda, Romana, Eustachy, Sulibor, Ewalda, Augustyna, Irmegarda, Gerard, Maksymian, Kandyda",
+  "10-04": "Dobromiła, Konrada, Lucjan, Faust, Piotr, Dalwin, Petroniusz, Dalewin, Edwina, Franciszek, Konrad, Euzebiusz, Aurea, Łucjan",
+  "10-05": "Placyd, Maur, Eutychiusz, Wiktoryn, Apolinary, Konstancjusz, Flawia, Flawiana, Tulia, Faustyna, Bartłomiej, Igor, Donat, Galla, Charytyna, Rajmund, Justyn",
+  "10-06": "Wiara, Renat, Roman, Baldwin, Baldwina, Bronisław, Bruno, Fryderyka, Brunon, Askaniusz, Monika, Magnus, Artur, Alberta",
+  "10-07": "Bachus, Tekla, Stefan, Bakchus, Amelia, August, Rosława, Maria, Mirela, Blanka, Sergiusz, Amalia, Rościsława, Marek, Mateusz, Marceli, Rodsław, Apulejusz, Justyna",
+  "10-08": "Taida, Pelagia, Laurencja, Brygida, Ewodia, Symeon, Ewodiusz, Marcin, Gunter, Demetriusz, Waleria, Guncerz, Artemon, Gratus, Ginter, Marcjusz, Ludwik",
+  "10-09": "Bogodar, Aaron, Dionizjusz, Sara, Dionizy, Jan, Bożdar, Bogudar, Sybilla, Abraham, Bożydar, Gunter, Guncerz, Wincenty, Ginter, Atanazja, Arnold, Ludwik, Przedpełk",
+  "10-10": "Gereon, Tomił, German, Dionizjusz, Kalistrat, Twardostoj, Paulina, Maria, Dionizy, Kasjusz, Jan, Tomiła, Daniel, Samuel, Leon, Rustyk, Leona, Lutomir, Przemysław, Eleuteriusz, Eleuteria, Franciszek, Alderyk, Eleutery, Rustyka, Adalryk",
+  "10-11": "Firmin, Placyd, Dobromiła, Aleksander, Emilian, Emil, Probus, Maria, Zenaida, Domaczaja, Gromisław, Aldona, Brunon, Burchard, Marian, Emanuel, Andronik, Gardomir",
+  "10-12": "Grodzisław, Eustachiusz, Maksymilian, Maksymiliana, Marcin, Eustachy, Witold, Witolda, Wilfryd, Edwin, Grzymisław, Edwina, Feliks, Cyriak, Serafin",
+  "10-13": "Gerald, Mikołaj, Reginbald, Edward, Gerbert, Karp, Marcjalis, Wacława, Teofil, January, Daniel, Faust, Wacław, Geraldyna, Florencjusz, Magdalena, Siemisław, Maurycy, Florenty, Wenancjusz, Wenanty, Honorat",
+  "10-14": "Gwendalina, Donacjan, Gaudenty, Dominik, Paraskewa, Fortunata, Gaudencjusz, Bernard, Witalia, Małgorzata, Just, Kalikst, Gajusz, Rustyk, Burchard, Gaja, Alan, Fortunat, Rustyka",
+  "10-15": "Teresa, Tekla, Teodoryk, Jadwiga, Leonard, Eutymiusz, Antioch, Roger, Filipa, Gościsława, Bruno, Drogosław, Brunon, Drogosława, Sewer",
+  "10-16": "Elifiusz, Aurelian, Grzegorz, Jadwiga, Walenty, Emil, Gerarda, Dionizy, Martynian, Florentyna, Walentyn, Nereusz, Małgorzata, Iga, Maksyma, Gaweł, Florentyn, Gerard, Ambroży, Elifia, Lubgost",
+  "10-17": "Rudolfa, Laurentyna, Mamelta, Rudolfina, Ignacy, Wiktor, Małgorzata, Andrzej, Milawia, Lucyna, Heron, Florentyn, Marian, Sulisława, Seweryna, Zuzanna, Augustyna, Niceta, Rudolf",
+  "10-18": "Remigiusz, Siemowit, Łukasz, Remigia, Asklepiades, Just, Piotr, Julian, Miłobrat, Bratomił, Tryfonia",
+  "10-19": "Ptolemeusz, Fredeswinda, Laura, Pelagia, Łucjusz, Akwilin, Paweł, Ferdynand, Jan, Pelagiusz, Lucjusz, Piotr, Fryda, Skarbimir, Izaak, Kleopatra, Ziemowit",
+  "10-20": "Witalis, Jerzy, Artemiusz, Jan Kanty, Budzisława, Aurora, Maria, Apollon, Żywia, Irena, Andrzej, Felicjan, Aureliusz",
+  "10-21": "Wendelin, Urszula, Jakub, Celina, Pelagia, Malchus, Bernard, Pelagiusz, Samuel, Hilarion, Piotr, Dacjusz, Karol, Elżbieta, Dobromił, Klementyna, Zotyk, Hilary, Wszebora, Letycja",
+  "10-22": "Nunilona, Kordula, Melaniusz, Gliceria, Józefina, Marek, Donat, Salomea, Kordian, Filip, Sewer, Alodia, Euzebiusz, Abercjusz, Ingbert",
+  "10-23": "Klotylda, German, Małogost, Marlena, Seweryn, Ignacy, Roman, Giedymin, Jan, Domicjusz, Gracjana, Gracjanna, Bartłomiej, Honorat",
+  "10-24": "Boleczest, Areta, Rafał, Walentyna, Jan, January, Alojzy, Septym, Marcin, Aneta, Józef, Marek, Prokul, Filip, Timur, Aretas, Feliks, Prokles, Antoni, Pamfilia",
+  "10-25": "Maur, Gaudenty, Daria, Cyryna, Tadea, Kryspinian, January, Chryzant, Antonin, Chryzanta, Tadeusz, Inga, Wojmir, Sambor, Kryspin, Prot, Hilary, Cyryn, Teodozjusz",
+  "10-26": "Fulko, Lutosław, Ewaryst, Marcjan, Ludomiła, Lucjan, Dymitr, Bernard, Felicysym, Damian, Demetriusz, Lucyna, Rustyk, Amanda, Bonawentura, Amand, Łucjana, Leonarda, Łucjan, Rustyka",
+  "10-27": "Wielebor, Sabina, Kapitolina, Józef, Manfred, Siestrzemił, Iwona, Manfreda, Barnim, Frumencjusz",
+  "10-28": "Wielimir, Domabor, Cyryla, Szymon, Faro, Juda Tadeusz, Cyryl, Tadeusz, Anastazja, Wszeciech, Wincenty, Fidelis, Ksymena, Honorat",
+  "10-29": "Narcyz, Zenobiusz, Walenty, Maksymilian, Żelibor, Ida, Dalimir, Walentyn, Teodor, Felicjan, Donat, Wioletta, Euzebia, Dalia, Franciszek, Serafin, Ermelinda, Lubgost",
+  "10-30": "Makary, German, Amparo, Sęczygniew, Liberat, Zenobia, Anioł, Maksym, Sulimir, Eutropia, Przemysław, Marceli, Julian, Benwenuta, Gerard, Klaudiusz, Saturnin, Edmund, Serapion",
+  "10-31": "Kwintyn, Alfons, Narcyz, Krzysztof, Łukasz, Krzysztofa, Tomasz, Antonin, Saturnina, Augusta, Lucyla, Lucyliusz, Bega, Urban, Godzimir, Saturnin, Wolfgang",
+  "11-01": "Benigny, Konradyn, Jakub, Licyniusz, Seweryn, Maria, Konradyna, Julianna, Jan, Warcisław, Nikola, Andrzej, Cyrenia, Benignus, Robert, Teodor, Wiktoryna, Marceli, Rajner",
+  "11-02": "Bohdana, Jerzy, Marcjan, Agapiusz, Wiktoryn, Wojsława, Małgorzata, Teodot, Eudoksjusz, Tobiasz, Wojsław, Bohdan, Ambroży, Malachiasz, Stomir",
+  "11-03": "Witalis, German, Szymon, Walenty, Sylwia, Hubert, Teofil, Walentyn, Marcin, Piotr, Bogumił, Huberta, Ginewra, Cezary, Chwalisław, Wenefryda",
+  "11-04": "Witalis, Karol Boromeusz, Olgierd, Modesta, Emeryka, Emeryk, Franciszka, Sędomir, Agrykola, Amancjusz, Dżesika, Mścisława, Karol, Sędzimir, Mojżesz, Perpetua, Mszczujwoj, Helena, Mściwoj",
+  "11-05": "Florian, Dominik, Gerald, Blandyna, Filoteusz, Teotym, Sławomir, Blandyn, Trofima, Marek, Sylwan, Elżbieta, Dalmir, Filotea, Dalimiar, Magnus",
+  "11-06": "Anita, Wincenta, Walenty, Melaniusz, Leonard, Bogdana, Hieronim, Teobald, Walentyn, Krystyna, Nonnus, Daniela, Trzebowit, Feliks, Ziemowit, Gabriela, Kalinik",
+  "11-07": "Nikander, Engelbert, Karina, Wilibrord, Żelibrat, Amaranta, Longina, Herkulan, Melchior, Przemił, Longin, Nikandra, Florencjusz, Hezychiusz, Rufus, Wincenty, Ingarda, Gizbert, Florenty, Achilles, Antoni",
+  "11-08": "Maur, Symforiana, Sędziwoj, Bogodar, Sewerian, Wilehad, Paweł, Symplicjusz, Wiktoryn, Jan, Bożdar, Bogudar, Godfryd, Marcin, Gotfryd, Symforian, Bożydar, Symplicy, Józef, Klarus, Bogdan, Bohdan, Klaudiusz, Sewer",
+  "11-09": "Benigny, Aleksander, Ścibor, Gorzysław, Lilla, Ursyn, Benignus, Orestes, Świecław, Teodor, Nestor, Elżbieta, Dziwigor, Joanna, Agrypin, Bogdan, Ludwik, Genowefa",
+  "11-10": "Monitor, Lena, Stefan, Nela, Florencja, Probus, Nimfa, Leon, Andrzej, Just, Demetriusz, Tryfena, Leona, Anian, Ludomir, Uniebog",
+  "11-11": "Sobieżyr, Maciej, Menas, Pafnucy, Jan, Marcin, Spycisław, Bartłomiej, Maryna, Teodor, Anastazja, Prot, Jozafat, Alicja",
+  "11-12": "Arsacjusz, Nilus, Emilian, Renat, Czcibor, Publiusz, Jan, Nila, Renata, Gabriel, Witold, Kunibert, Witolda, Cibor, Aureliusz, Jonasz, Jozafat",
+  "11-13": "Brykcjusz, Liwia, Eutychian, German, Mikołaj, Walenty, Probus, Stanisława, Jan, Alojzy, Wiktor, Walentyn, Antonin, Benedykt, Kalikst, Krystyn, Włodzisław, Eugeniusz, Arkadiusz, Mateusz, Dydak, Stanisław, Arkady, Augustyna, Arkadia, Izaak, Paschazy, Nicefor",
+  "11-14": "Stefan, Lewin, Mikołaj, Ścibor, Laurenty, Agryppa, Jan, Wawrzyniec, Agata, Damian, Wszerad, Józef, Teodot, Świecław, Klementyn, Elżbieta, Ścibora, Jukund, Antyd, Agrypin, Hipacy, Filomen, Kosma, Serapion",
+  "11-15": "Alfons, Leopold, Idalia, Albert, Roger, Józef, Przybygniew, Leopoldyna, Artur",
+  "11-16": "Audomar, Otmar, Łucja, Dionizy, Patrokles, Niedamir, Małgorzata, Piotr, Gertruda, Marek, Aureliusz, Ariel, Eucheriusz, Edmund",
+  "11-17": "Grzegorz, Drogoradz, Arabella, Roch, Zacheusz, Hugo, Floryn, Dionizy, Drogomir, Jan, Zbysław, Sulibor, Elżbieta, Alfeusz, Salomea, Jozafat, Wiktoria, Hugon",
+  "11-18": "Aniela, Cieszymysł, Odon, Karolina, Leonard, Roman, Odo, Tomasz, Galezy, Hezychiusz, Noe, Józefa, Klaudyna, Gabriela, Filipina, Agnieszka",
+  "11-19": "Barlaam, Dargosław, Małowid, Jakub, Seweryn, Paweł, Dionizy, Maksym, Faust, Teodor, Elżbieta, Kryspin, Salomea, Matylda",
+  "11-20": "Narzes, Tespezjusz, Grzegorz, Fortunata, Rafał, Agapiusz, Maria, Symplicjusz, Lubomir, Oktawiusz, Sylwester, Eustachy, Ampeliusz, Symplicy, Tespezy, Ampelia, Sędzimir, Sylwestra, Maksencja, Feliks, Oktawia, Agnieszka, Edmund",
+  "11-21": "Gelazja, Janusz, Wiesław, Maria, Albert, Heliodor, Piotr, Gelazy, Elwira, Rufus, Kolumban, Twardosław, Konrad, Regina",
+  "11-22": "Maur, Filemon, Cecylia, Stefan, Ernestyna, Filemona, Salwator, Marek, Wszemił, Wszemiła",
+  "11-23": "Michał, Grzegorz, Adela, Fotyna, Klemens, Syzyniusz, Amfiloch, Orestes, Lukrecja, Felicyta, Przedwoj",
+  "11-24": "Chryzogon, Aleksander, Walenty, Emilia, Flora, Twardomir, Roman, Felicjanna, Jan, Walentyn, Andrzej, Piotr, Jaśmina, Dobrosław, Felicjana, Pęcisław, Biruta, Firmina, Joachim, Protazy, Franciszek, Dargorad",
+  "11-25": "Merkury, Katarzyna, Erazm, Beatrycze, Maria, Józef, Elżbieta, Mojżesz, Tęgomir, Godzimir",
+  "11-26": "Stylian, Delfin, Syrycjusz, Dobiemiest, Alipiusz, Ammoniusz, Konrada, Leonard, Pachomiusz, Ammonia, Jan, Sylwester, Faust, Piotr, Hezychiusz, Teodor, Sylwestra, Nikon, Marceli, Lechosław, Kajetana, Konrad, Lechosława",
+  "11-27": "Dominik, Wergilia, Jarosław, Zygfryda, Wergiliusz, Achacjusz, Jakub, Gustaw, Walery, Stojgniew, Maksym, Wirgilia, Małgorzata, Oda, Żaneta, Achacy, Prymityw, Astryda, Wirgiliusz, Zygfryd, Damazy, Irenarch, Walerian, Jozafat, Bernardyn, Franciszek, Radosław, Gustawa",
+  "11-28": "Stefan, Sostenes, Grzegorz, Jakub, Berta, Radowit, Manswet, Tristan, Teodora, Eustachy, Andrzej, Lesław, Piotr, Gunter, Guncerz, Lesława, Gościrad, Rufus, Kwieta, Ginter, Krescenty, Walerian, Zdziesław, Zdzisław, Feliks, Urban",
+  "11-29": "Paramon, Walter, Dionizy, Pafnucy, Błażej, Syzyniusz, Przemysł, Błażeja, Klementyna, Bolemysł, Siedlewit, Fryderyk, Filomen, Franciszek, Saturnin, Radbod",
+  "11-30": "Tadea, Zozym, Konstancjusz, Andrzej, Maura, Kutbert, Fryderyk, Justyna, Zbysława",
+  "12-01": "Rudolfa, Eligia, Godzisław, Gosław, Rudolfina, Aleksander, Ananiasz, Florencja, Blanka, Sobiesław, Jan, Sobiesława, Długomił, Prokul, Gosława, Antoni, Edmund, Rudolf, Natalia, Eligiusz",
+  "12-02": "Rafał, Walenty, Sylweriusz, Paulina, Bibiana, Budzisława, Maria, Wiktoryn, Sulisław, Balbina, Jan, Walentyn, Zbylut, Bibianna, Sylwan, Budzisław, Aurelia, Ludwina",
+  "12-03": "Uniemir, Emma, Mirokles, Ksawery, Łucjusz, Gerlinda, Atalia, Biryn, Lucjusz, Franciszek Ksawery, Kryspin, Ema, Hilaria, Kasjan, Franciszek",
+  "12-04": "Barbara, Cieszybor, Teofan, Osmund, Krystian, Bernard, Klemens, Jan, Marut, Hieronim, Melecjusz, Piotr, Ciechosława, Bratumiła, Bratomiła, Maruta, Benon, Ciechosław, Filip, Feliks, Marutas, Chrystian",
+  "12-05": "Pęcisława, Gerald, Mikołaj, Dalmacjusz, Sabina, Kryspina, Jan, Anastazy, Juliusz, Krystyna, Pelin, Dalmacy, Geraldyna, Bartłomiej, Kryspin, Saba, Feliks, Pelina",
+  "12-06": "Mikołaj, Polichroniusz, Emilian, Leoncja, Angelika, Nikola, Heliodor, Abraham, Piotr, Bonifacy, Morzysława, Dionizja, Jarogniew, Tercjusz",
+  "12-07": "Eutychian, Polikarp, Siemirad, Sabin, Atenodor, Marcin, Ninomysł, Zdziemił, Józefa, Ambrozja, Ambroży, Agaton, Urban, Marcisław",
+  "12-08": "Makary, Narcyza, Apollo, Hildemar, Potapiusz, Euchariusz, Euchary, Maria, Alojzy, Elfryda, Patapiusz, Świedarg, Marian, Edyta, Marika, Romaryk, Boguwola",
+  "12-09": "Liboriusz, Wiesław, Delfina, Chwalimira, Naczęmir, Jan, Aneta, Piotr, Waleria, Wrocisław, Wielisława, Prokul, Wiesława, Leokadia, Gorgonia",
+  "12-10": "Maur, Brajan, Judyta, Grzegorz, Bogdał, Polidor, Menas, Maria, Unirad, Switun, Tomasz, Unierad, Loreta, Daniel, Bogodał, Hermogenes, Andrzej, Melchiades, Donat, Bogdan, Eulalia, Julia",
+  "12-11": "Stefan, Sabin, Walenty, Waldemar, Poncjan, Maria, Hieronim, Walentyn, Daniel, Wilburga, Wojmir, Damazy, Gościwit, Artur",
+  "12-12": "Liberata, Paramon, Maksanty, Amonaria, Merkuria, Aleksander, Suliwuj, Bartosz, Epimach, Konrada, Adelajda, Franciszka, Konstancjusz, Dagmara, Przybysława, Edburga, Synezjusz, Spirydion, Maksencjusz, Gościwit, Dionizja, Konrad, Justyn",
+  "12-13": "Otylia, Samboja, Walenty, Jodok, Łucja, Antioch, Auksencjusz, Walentyn, Edburga, Auksenty, Auksencja, Orestes, Eugeniusz, Róża, Aubert, Antoni",
+  "12-14": "Wiator, Nikazjusz, Pompejusz, Gorzysław, Nikazy, Zozym, Jan, Izydor, Sławobor, Bertold, Arseniusz, Eutropia, Agnellus, Nahum, Teodor, Heron, Wenancjusz, Noemi, Druzus, Wenanty",
+  "12-15": "Bachus, Maryniusz, Maksymin, Bakchus, Celina, Maksymina, Wolimir, Maria, Maryn, Jan, Wiktor, Mścigniewa, Drogosław, Mścigniew, Teodor, Drogosława, Walerian, Ireneusz, Weronika, Euzebiusz, Saturnin, Antoni",
+  "12-16": "Wolisław, Sebastian, Walenty, Albina, Ananiasz, Maria, Adelajda, Tyter, Zdziesława, Alina, Walentyn, Agrykola, Deder, Dyter, Wolisława, Zdziesław, Euzebiusz, Konkordiusz",
+  "12-17": "Florian, Modest, Żyrosław, Jan, Żerosław, Wiwina, Bega, Łazarz",
+  "12-18": "Zofia, Winebald, Winibald, Nemezja, Wilibald, Zozym, Symplicjusz, Wunibald, Auksencjusz, Auksenty, Auksencja, Wszemir, Bogusław, Rufus, Gościmiar, Gracjan, Kwintus, Miłosław, Winibalda",
+  "12-19": "Eleonora, Grzegorz, Nemezjusz, Tymoteusz, Anastazy, Abraham, Mścigniew, Protazja, Nemezy, Dariusz, Beniamin, Kazimiera, Urban, Gabriela",
+  "12-20": "Makary, Ptolemeusz, Dominik, Ursycyn, Liberat, Krystian, Zefiryn, Teofil, Amon, Dagmara, Bogumiła, Bogumił, Dagna, Eugeniusz, Zenon, Wincenty",
+  "12-21": "Glicery, Tomisława, Festus, Gliceriusz, Temistokles, Balbin, Tomasz, Anastazy, Tomisław, Piotr, Honorat",
+  "12-22": "Judyta, Drogomir, Franciszka, Franciszka Ksawera, Honorata, Flawian, Luboradz, Beata, Dziwisław, Dobrosułka, Zenon, Zenona, Ischyrion, Gryzelda, Dziesława, Ksawera",
+  "12-23": "Anatola, Teodul, Ewaryst, Serwul, Dagobert, Iwo, Sławomir, Jan, Ewarysta, Mardoniusz, Torlak, Sławomira, Bazylides, Gelazy, Iwona, Saturnin, Anatolia, Wiktoria",
+  "12-24": "Grzegorz, Godzisław, Adela, Eryk, Delfin, Adamina, Hermina, Adam, Ewa, Zenobiusz, Hermana, Druzjan, Ada, Herminia, Grzymisława, Godzisława, Józef, Paula, Eryka, Tarsylia, Druzjanna, Ewelina, Irmina, Irma",
+  "12-25": "Maria, Piotr, Mateusz, Eugenia, Siemosław",
+  "12-26": "Wrociwoj, Wincenta, Szczepan, Dionizy, Zozym, Wincencja, Teodor, Zenon, Wincentyna",
+  "12-27": "Przybyrad, Przybysław, Gosław, Teofan, Sara, Maksym, Jan, Żaneta, Bartłomiej, Żanna, Teodor, Cezary, Mateusz, Fabiola",
+  "12-28": "Godzisław, Emma, Dobrowieść, Teofila, Domna, Troadiusz, Teonas, Cezary, Domniusz, Teona, Antoni",
+  "12-29": "Domaradz, Dominik, Gosław, Krescencjusz, Tadea, Dawid, Gerarda, Radowit, Prymian, Tomasz, Wiktor, Marcin, Jonatan, Ebrulf, Marceli, Krescenty, Gerard, Ekhard, Krescens, Saturnin, Trofim, Honorat",
+  "12-30": "Anizja, Uniedrog, Dionizy, Perpetuus, Egwin, Małgorzata, Eksuperancjusz, Eugeniusz, Marceli, Anizjusz, Rajner, Sewer, Łazarz, Liberiusz",
+  "12-31": "Tworzysław, Katarzyna, Sebastian, Barbacjan, Paulina, Sylwester, Mariusz, Saturnina, Kolumba, Donata, Sylwestra, Zotyk, Melania"
 };
 
 function getLocalNamedays(date = new Date()) {
@@ -214,13 +574,32 @@ function getLocalNamedays(date = new Date()) {
   return LOCAL_NAME_DAYS[key] || '';
 }
 
+function formatVisibleNamedays(names, limit = 8) {
+  const parts = cleanNamedayText(names)
+    .split(',')
+    .map(item => cleanNamedayText(item))
+    .filter(Boolean);
+  if (!parts.length) return '';
+  const visible = parts.slice(0, limit).join(', ');
+  return parts.length > limit ? `${visible} +${parts.length - limit}` : visible;
+}
+
 function setTodayHeader(namedays = '') {
   if (!el.todayLabel) return;
-  const dateText = formatPolishDate();
-  const names = cleanNamedayText(namedays) || getLocalNamedays();
-  el.todayLabel.textContent = names
-    ? `${dateText} · imieniny: ${names}`
-    : `${dateText} · imieniny: niedostępne`;
+  const now = new Date();
+  const dateText = formatPolishDate(now);
+  const weekday = WEEKDAYS[now.getDay()] || '';
+  const names = cleanNamedayText(namedays) || getLocalNamedays(now);
+
+  if (names) {
+    el.todayLabel.textContent = `Dzisiaj: ${dateText}${weekday ? ` (${weekday})` : ''} · Imieniny: ${formatVisibleNamedays(names)}`;
+    el.todayLabel.title = `Pełna lista imienin ${dateText}: ${names}`;
+    el.todayLabel.dataset.status = 'ready';
+  } else {
+    el.todayLabel.textContent = `Dzisiaj: ${dateText}${weekday ? ` (${weekday})` : ''} · Imieniny: brak danych`;
+    el.todayLabel.title = '';
+    el.todayLabel.dataset.status = 'missing';
+  }
 }
 
 async function updateTodayNamedays() {
@@ -2903,17 +3282,59 @@ function renderSmartReports() {
   el.smartReport.innerHTML = rows.map(([title, note, value]) => mainReportRow(title, note, value, 'smart-report-row')).join('');
 }
 
-function recurringTextKey(entry) {
-  const source = [entry.reportGroup, entry.description, entry.originalText, entry.category]
+const RECURRING_STOP_WORDS = new Set([
+  ...LEARNING_STOP_WORDS,
+  'styczen', 'stycznia', 'luty', 'lutego', 'marzec', 'marca', 'kwiecien', 'kwietnia',
+  'maj', 'maja', 'czerwiec', 'czerwca', 'lipiec', 'lipca', 'sierpien', 'sierpnia',
+  'wrzesien', 'wrzesnia', 'pazdziernik', 'pazdziernika', 'listopad', 'listopada', 'grudzien', 'grudnia',
+  'miesiac', 'miesieczny', 'miesieczna', 'miesieczne', 'tydzien', 'tygodniowy', 'tygodniowa',
+  'dom', 'jedzenie', 'inne', 'uslugi', 'usluga',
+  ...CATEGORIES.map(name => normalizeText(name))
+].map(learningStem));
+
+function recurringCleanWords(entry) {
+  const source = [entry.description, entry.originalText, resolveReportGroup(entry)]
     .filter(Boolean)
     .join(' ');
-  const normalized = normalizeText(source)
+
+  const words = normalizeText(cleanDescription(source))
     .replace(/\b\d+[,.]?\d*\b/g, ' ')
-    .replace(/\b(zl|pln|za|dla|u|w|na|do|od|i|oraz|kupilem|kupilam|zaplacilem|zaplacilam|wydatek|platnosc|gotowka|karta|blik|bank)\b/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  const tokens = normalized.split(' ').filter(token => token.length > 2).slice(0, 5);
-  return tokens.join(' ') || normalizeText(entry.category || 'inne');
+    .replace(/[^a-z0-9]+/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+
+  const unique = [];
+  const seen = new Set();
+  for (const word of words) {
+    const stem = learningStem(word);
+    if (stem.length < 3) continue;
+    if (RECURRING_STOP_WORDS.has(stem)) continue;
+    if (seen.has(stem)) continue;
+    seen.add(stem);
+    unique.push({ word, stem });
+  }
+  return unique;
+}
+
+function capitalizeFirst(value) {
+  const text = String(value || '').trim();
+  return text ? text.charAt(0).toLocaleUpperCase('pl-PL') + text.slice(1) : '';
+}
+
+function recurringExpenseInfo(entry) {
+  const category = normalizeKnownCategory(entry.category, entry.category || 'Inne');
+  const scope = normalizeScope(entry.scope);
+  const words = recurringCleanWords(entry);
+  const tokenKey = words.map(item => item.stem).slice(0, 4).join(' ') || 'ogolne';
+  const phrase = words.map(item => item.word).slice(0, 3).join(' ');
+  const title = phrase
+    ? `${capitalizeFirst(phrase)} · ${formatScope(scope)} · ${category}`
+    : `${category} · ${formatScope(scope)}`;
+
+  return {
+    key: [categoryKey(category), scope, tokenKey].join('|'),
+    title
+  };
 }
 
 function daysBetweenISO(a, b) {
@@ -2927,13 +3348,14 @@ function detectRecurringExpenses(entries) {
   const groups = new Map();
   for (const entry of entries || []) {
     if (entry.entryType !== 'wydatek' || !entry.entryDate) continue;
-    const key = recurringTextKey(entry);
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(entry);
+    const info = recurringExpenseInfo(entry);
+    if (!groups.has(info.key)) groups.set(info.key, { title: info.title, items: [] });
+    groups.get(info.key).items.push(entry);
   }
 
   const result = [];
-  for (const [key, items] of groups.entries()) {
+  for (const [key, group] of groups.entries()) {
+    const items = group.items;
     if (items.length < 2) continue;
     const sorted = items.slice().sort((a, b) => String(a.entryDate).localeCompare(String(b.entryDate)));
     const diffs = [];
@@ -2972,6 +3394,7 @@ function detectRecurringExpenses(entries) {
 
     result.push({
       key,
+      title: group.title,
       label,
       count: sorted.length,
       avgAmount,
@@ -2996,8 +3419,8 @@ function renderRecurringReport() {
   el.recurringReport.innerHTML = rows.map(row => `
     <div class="category-row recurring-row">
       <div>
-        <strong>${escapeHtml(row.key)}</strong><br>
-        <small>${escapeHtml(row.category)} · ${escapeHtml(row.label)} · wpisy: ${row.count} · ostatnio: ${escapeHtml(row.lastDate)} · następny: ${escapeHtml(row.nextDate)}</small>
+        <strong>${escapeHtml(row.title)}</strong><br>
+        <small>Cykl: ${escapeHtml(row.label)} · wpisy: ${row.count} · ostatnio: ${escapeHtml(row.lastDate)} · następny: ${escapeHtml(row.nextDate)}</small>
       </div>
       <b>${formatMoney(row.avgAmount)}<br><small>${row.confidence}%</small></b>
     </div>
@@ -5503,7 +5926,7 @@ function bindEvents() {
 async function init() {
   const today = todayISO();
   document.title = 'Portfel PRO';
-  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.1 / 124';
+  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.1 / 125';
   setTodayHeader('wczytywanie...');
   if (isFileProtocol()) {
     showMessage('Program został otwarty bezpośrednio z index.html. Do importu JSON, PWA i cache użyj serwera lokalnego albo GitHub Pages.', 'error');
