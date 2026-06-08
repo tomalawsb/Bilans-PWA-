@@ -1,6 +1,6 @@
 const DB_NAME = 'bilans-pwa-etap1';
 const DB_VERSION = 4;
-const APP_VERSION = '1.1-128';
+const APP_VERSION = '1.1-130';
 const RAW_DROPBOX_DEFAULT_APP_KEY = String(window.PORTFEL_PRO_CONFIG?.dropboxAppKey || '').trim();
 const DROPBOX_DEFAULT_APP_KEY = /^WSTAW_TUTAJ/i.test(RAW_DROPBOX_DEFAULT_APP_KEY) ? '' : RAW_DROPBOX_DEFAULT_APP_KEY; // Ustaw w src/config.js, wtedy użytkownik klika tylko Połącz z Dropbox.
 const MAIN_INSTALL_KEY = 'portfel-pro-main-installed';
@@ -4721,6 +4721,7 @@ function makeExportPayload() {
     inventoryItems: getInventoryItems(),
     inventoryMovements: getInventoryMovements(),
     inventoryAnalysis: getInventoryAnalysis(),
+    inventoryPending: getInventoryPending(),
     aiSettings: getAiSettingsForExport(),
     entries: allEntries.map(entry => ({
       ...entry,
@@ -4815,7 +4816,7 @@ async function importPayload(payload, options = {}) {
       payload?.walletMonths || payload?.wallet_months ||
       payload?.customCategories || payload?.custom_categories ||
       payload?.mainReportSettings || payload?.main_report_settings ||
-      payload?.tagRules || payload?.learningRules || payload?.inventoryItems || payload?.inventoryMovements || payload?.inventoryAnalysis
+      payload?.tagRules || payload?.learningRules || payload?.inventoryItems || payload?.inventoryMovements || payload?.inventoryAnalysis || payload?.inventoryPending
     );
     if (replace || deletionResult.deleted || importedSettingsOnly) {
       if (!silent) showMessage(`Import zakończony. Dodano wpisy: 0, zaktualizowano: 0, usunięto: ${deletionResult.deleted}.`);
@@ -5978,8 +5979,9 @@ function getInventoryItems() {
   return Array.isArray(items) ? items : [];
 }
 
-function saveInventoryItems(items) {
+function saveInventoryItems(items, options = {}) {
   setJsonLocalStorage(INVENTORY_ITEMS_KEY, Array.isArray(items) ? items : []);
+  if (!options.skipSync) scheduleDropboxAutoSync();
 }
 
 function getInventoryMovements() {
@@ -5987,8 +5989,9 @@ function getInventoryMovements() {
   return Array.isArray(items) ? items : [];
 }
 
-function saveInventoryMovements(items) {
+function saveInventoryMovements(items, options = {}) {
   setJsonLocalStorage(INVENTORY_MOVEMENTS_KEY, Array.isArray(items) ? items : []);
+  if (!options.skipSync) scheduleDropboxAutoSync();
 }
 
 function getInventoryAnalysis() {
@@ -5996,8 +5999,9 @@ function getInventoryAnalysis() {
   return data && typeof data === 'object' && !Array.isArray(data) ? data : {};
 }
 
-function saveInventoryAnalysis(data) {
+function saveInventoryAnalysis(data, options = {}) {
   setJsonLocalStorage(INVENTORY_ANALYSIS_KEY, data && typeof data === 'object' ? data : {});
+  if (!options.skipSync) scheduleDropboxAutoSync();
 }
 
 function inventoryEntryKey(entry) {
@@ -6223,11 +6227,53 @@ function getInventoryPending() {
   return data;
 }
 
-function saveInventoryPending(data) {
+function saveInventoryPending(data, options = {}) {
   setJsonLocalStorage(INVENTORY_PENDING_KEY, data && typeof data === 'object' ? data : { results: [] });
+  if (!options.skipSync) scheduleDropboxAutoSync();
 }
 
-function createInventoryMovement({ entryKey = '', entryHash = '', entry = null, action = 'korekta_reczna', product, quantity, unit = 'szt', unitCost = 0, confidence = 1, reason = '', sourceDescription = 'Korekta ręczna magazynu' }) {
+
+const INVENTORY_CATEGORIES = [
+  'Kamery',
+  'Rejestratory i dekodery',
+  'Anteny i osprzęt antenowy',
+  'Sieć i routery',
+  'Kable i przewody',
+  'Zasilanie',
+  'Pamięci i komputery',
+  'Montaż i akcesoria',
+  'Narzędzia',
+  'Inne'
+];
+
+function normalizeInventoryCategory(category = '') {
+  const value = String(category || '').trim();
+  if (!value) return 'Inne';
+  const found = INVENTORY_CATEGORIES.find(item => item.toLowerCase() === value.toLowerCase());
+  return found || value;
+}
+
+function inferInventoryCategory(product = '') {
+  const text = String(product || '').toLowerCase();
+  if (/kamera|ezviz|svis|hikvision|dahua|tubow|obrotow|kopuł|kopul|wifi/.test(text)) return 'Kamery';
+  if (/rejestrator|nvr|dvr|dekoder|dvbt|tuner/.test(text)) return 'Rejestratory i dekodery';
+  if (/antena|konwerter|wzmacniacz anten|separator|obejma na konwerter|czasza/.test(text)) return 'Anteny i osprzęt antenowy';
+  if (/router|switch|access point|tp-link|tplink|ubiquiti|mikrotik|lan|ethernet/.test(text)) return 'Sieć i routery';
+  if (/kabel|przewód|przewod|utp|ftp|koncentryk|skrętka|skretka|peszel/.test(text)) return 'Kable i przewody';
+  if (/zasilacz|ładowarka|ladowarka|akumulator|bateria|ups|gniazdko|listwa/.test(text)) return 'Zasilanie';
+  if (/pamięć|pamiec|microsd|sd|dysk|ssd|hdd|płyta główna|plyta glowna|thinkpad|laptop|komputer|ram/.test(text)) return 'Pamięci i komputery';
+  if (/kołki|kolki|uchwyt|puszka|adapter|wtyk|końcówk|koncowk|beczka|taśma|tasma|opaska|listwa maskująca|maskuj/.test(text)) return 'Montaż i akcesoria';
+  if (/wiertarka|miernik|zaciskarka|tester|klucz|śrubokręt|srubokret|narzędzie|narzedzie/.test(text)) return 'Narzędzia';
+  return 'Inne';
+}
+
+function renderInventoryCategoryOptions(selected = '') {
+  const current = normalizeInventoryCategory(selected || 'Inne');
+  const categories = INVENTORY_CATEGORIES.includes(current) ? INVENTORY_CATEGORIES : [...INVENTORY_CATEGORIES, current];
+  return categories.map(category => `<option value="${escapeHtml(category)}" ${category === current ? 'selected' : ''}>${escapeHtml(category)}</option>`).join('');
+}
+
+function createInventoryMovement({ entryKey = '', entryHash = '', entry = null, action = 'korekta_reczna', product, quantity, unit = 'szt', unitCost = 0, category = '', confidence = 1, reason = '', sourceDescription = 'Korekta ręczna magazynu' }) {
   const now = new Date().toISOString();
   const movement = {
     id: `mov-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
@@ -6239,6 +6285,7 @@ function createInventoryMovement({ entryKey = '', entryHash = '', entry = null, 
     entryType: entry?.entryType || '',
     action,
     product: normalizeInventoryProductName(product),
+    category: normalizeInventoryCategory(category || inferInventoryCategory(product)),
     quantity: Number(quantity || 0),
     unit: unit || 'szt',
     unitCost: Number(unitCost || 0),
@@ -6250,7 +6297,7 @@ function createInventoryMovement({ entryKey = '', entryHash = '', entry = null, 
   const movements = getInventoryMovements();
   movements.push(movement);
   saveInventoryMovements(movements);
-  rebuildInventoryItemsFromMovements(false);
+  rebuildInventoryItemsFromMovements(false, { skipSync: true });
   renderInventory();
   scheduleDropboxAutoSync();
   return movement;
@@ -6275,30 +6322,54 @@ function addManualInventoryItem() {
   const unit = (window.prompt('Jednostka:', 'szt') || 'szt').trim() || 'szt';
   const unitCost = promptInventoryNumber('Cena jednostkowa / średni koszt:', '0');
   if (unitCost === null) return;
+  const category = normalizeInventoryCategory(window.prompt('Kategoria:', inferInventoryCategory(product)) || inferInventoryCategory(product));
   createInventoryMovement({
     action: quantity >= 0 ? 'korekta_reczna' : 'korekta_reczna',
     product,
     quantity,
     unit,
     unitCost,
+    category,
     reason: 'Dodano ręcznie z zakładki Magazyn.',
     sourceDescription: 'Dodanie ręczne'
   });
   showMessage('Dodano ręczny ruch magazynowy.');
 }
 
-function editInventoryItem(index) {
+function startInlineInventoryEdit(index) {
+  const row = el.inventoryItemsBody?.querySelector(`tr[data-inventory-index="${index}"]`);
+  if (!row || row.classList.contains('is-editing')) return;
+  renderInventory(index);
+}
+
+function cancelInlineInventoryEdit() {
+  renderInventory();
+}
+
+function saveInlineInventoryItem(index) {
+  const row = el.inventoryItemsBody?.querySelector(`tr[data-inventory-index="${index}"]`);
   const items = getInventoryItems();
   const item = items[index];
-  if (!item) return;
-  const product = normalizeInventoryProductName(window.prompt('Nazwa produktu:', item.name) || '');
-  if (!product) return;
-  const quantity = promptInventoryNumber('Nowa ilość:', item.quantity);
-  if (quantity === null) return;
-  const unit = (window.prompt('Jednostka:', item.unit || 'szt') || item.unit || 'szt').trim() || 'szt';
-  const unitCost = promptInventoryNumber('Nowy średni koszt / cena jednostkowa:', Number(item.avgCost || 0).toFixed(2));
-  if (unitCost === null) return;
+  if (!row || !item) return;
+  const product = normalizeInventoryProductName(row.querySelector('[data-edit-field="name"]')?.value || '');
+  if (!product) {
+    showMessage('Nazwa produktu nie może być pusta.', 'error');
+    return;
+  }
+  const quantity = Number(String(row.querySelector('[data-edit-field="quantity"]')?.value || '0').replace(',', '.'));
+  const unit = String(row.querySelector('[data-edit-field="unit"]')?.value || 'szt').trim() || 'szt';
+  const unitCost = Number(String(row.querySelector('[data-edit-field="avgCost"]')?.value || '0').replace(',', '.'));
+  const category = normalizeInventoryCategory(row.querySelector('[data-edit-field="category"]')?.value || inferInventoryCategory(product));
+  if (!Number.isFinite(quantity) || !Number.isFinite(unitCost)) {
+    showMessage('Ilość i koszt muszą być poprawnymi liczbami.', 'error');
+    return;
+  }
+  setInventoryItemState(item, { product, quantity, unit, unitCost, category, reason: 'Zmiana po edycji bezpośrednio w tabeli.' });
+  showMessage('Zapisano zmianę magazynu.');
+}
 
+function setInventoryItemState(item, { product, quantity, unit = 'szt', unitCost = 0, category = '', reason = 'Ręczna korekta magazynu.' }) {
+  if (!item) return;
   const oldQty = Number(item.quantity || 0);
   if (Math.abs(oldQty) > 0.0001) {
     createInventoryMovement({
@@ -6307,29 +6378,67 @@ function editInventoryItem(index) {
       quantity: -oldQty,
       unit: item.unit || 'szt',
       unitCost: Number(item.avgCost || 0),
+      category: item.category || inferInventoryCategory(item.name),
       reason: 'Wyzerowanie starego stanu przed korektą ręczną.',
-      sourceDescription: 'Korekta ręczna stanu'
+      sourceDescription: reason
     });
   }
-  if (Math.abs(quantity) > 0.0001) {
+  if (Math.abs(Number(quantity || 0)) > 0.0001) {
     createInventoryMovement({
       action: 'korekta_reczna',
       product,
       quantity,
       unit,
       unitCost,
+      category,
       reason: 'Ustawienie nowego stanu po korekcie ręcznej.',
-      sourceDescription: 'Korekta ręczna stanu'
+      sourceDescription: reason
     });
+  } else {
+    rebuildInventoryItemsFromMovements(false, { skipSync: true });
+    renderInventory();
+    scheduleDropboxAutoSync();
   }
-  showMessage('Zmieniono stan magazynowy ręczną korektą.');
+}
+
+let inventoryUndoTimer = null;
+let inventoryUndoSnapshot = null;
+
+function showInventoryUndoToast(message = 'Usunięto pozycję.', duration = 1000) {
+  let toast = document.querySelector('#inventoryUndoToast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'inventoryUndoToast';
+    toast.className = 'inventory-undo-toast';
+    document.body.appendChild(toast);
+  }
+  toast.innerHTML = `<span>${escapeHtml(message)}</span><button type="button">Cofnij</button>`;
+  toast.classList.add('show');
+  const button = toast.querySelector('button');
+  button.addEventListener('click', () => {
+    if (inventoryUndoSnapshot) {
+      saveInventoryMovements(inventoryUndoSnapshot.movements || []);
+      saveInventoryItems(inventoryUndoSnapshot.items || []);
+      inventoryUndoSnapshot = null;
+      renderInventory();
+      scheduleDropboxAutoSync();
+      showMessage('Cofnięto usunięcie pozycji magazynowej.');
+    }
+    toast.classList.remove('show');
+    if (inventoryUndoTimer) clearTimeout(inventoryUndoTimer);
+  }, { once: true });
+  if (inventoryUndoTimer) clearTimeout(inventoryUndoTimer);
+  inventoryUndoTimer = setTimeout(() => {
+    toast.classList.remove('show');
+    inventoryUndoSnapshot = null;
+  }, duration);
 }
 
 function deleteInventoryItem(index) {
   const items = getInventoryItems();
   const item = items[index];
   if (!item) return;
-  if (!window.confirm(`Usunąć pozycję z magazynu?\n\n${item.name}\nIlość: ${item.quantity} ${item.unit || 'szt'}`)) return;
+  inventoryUndoSnapshot = { items: getInventoryItems(), movements: getInventoryMovements() };
   const oldQty = Number(item.quantity || 0);
   if (Math.abs(oldQty) > 0.0001) {
     createInventoryMovement({
@@ -6338,6 +6447,7 @@ function deleteInventoryItem(index) {
       quantity: -oldQty,
       unit: item.unit || 'szt',
       unitCost: Number(item.avgCost || 0),
+      category: item.category || inferInventoryCategory(item.name),
       reason: 'Usunięcie pozycji magazynowej przez użytkownika.',
       sourceDescription: 'Usunięcie ręczne z magazynu'
     });
@@ -6345,8 +6455,9 @@ function deleteInventoryItem(index) {
     const filtered = getInventoryItems().filter((_, itemIndex) => itemIndex !== index);
     saveInventoryItems(filtered);
     renderInventory();
+    scheduleDropboxAutoSync();
   }
-  showMessage('Usunięto pozycję przez ręczną korektę stanu.');
+  showInventoryUndoToast(`Usunięto: ${item.name}`, 1000);
 }
 
 function applyPendingInventoryItem(index) {
@@ -6362,6 +6473,7 @@ function applyPendingInventoryItem(index) {
   const unit = (window.prompt('Jednostka:', item.unit || 'szt') || 'szt').trim() || 'szt';
   const unitCost = promptInventoryNumber('Cena jednostkowa / koszt:', item.unitCost || 0);
   if (unitCost === null) return;
+  const category = normalizeInventoryCategory(window.prompt('Kategoria:', item.category || inferInventoryCategory(product)) || item.category || inferInventoryCategory(product));
   const quantity = direction === '-' ? -Math.abs(quantityValue) : Math.abs(quantityValue);
   const movement = createInventoryMovement({
     entryKey: item.id_wpisu || '',
@@ -6372,6 +6484,7 @@ function applyPendingInventoryItem(index) {
     quantity,
     unit,
     unitCost,
+    category,
     confidence: item.confidence || 1,
     reason: `Ręcznie zastosowano wynik AI: ${item.reason || ''}`,
     sourceDescription: item.entry?.description || item.entry?.originalText || 'Ręczne zastosowanie wyniku AI'
@@ -6446,6 +6559,7 @@ function applyInventoryMovementsFromPending(pending) {
         entryType: item.entry?.entryType || '',
         action: item.decision,
         product: item.product,
+        category: normalizeInventoryCategory(item.category || inferInventoryCategory(item.product)),
         quantity,
         unit: item.unit || 'szt',
         unitCost: Number(item.unitCost || 0),
@@ -6471,25 +6585,26 @@ function applyInventoryMovementsFromPending(pending) {
   }
   saveInventoryMovements(newMovements);
   saveInventoryAnalysis(analysis);
-  rebuildInventoryItemsFromMovements(false);
+  rebuildInventoryItemsFromMovements(false, { skipSync: true });
   renderInventory();
   scheduleDropboxAutoSync();
   return { applied, checkedNoMove };
 }
 
-function rebuildInventoryItemsFromMovements(show = true) {
+function rebuildInventoryItemsFromMovements(show = true, options = {}) {
   const movements = getInventoryMovements().slice().sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
   const map = new Map();
   for (const movement of movements) {
     const key = inventoryProductKey(movement.product, movement.unit);
     if (!map.has(key)) {
-      map.set(key, { id: `item-${key}`, name: movement.product, unit: movement.unit || 'szt', quantity: 0, totalCost: 0, lastUpdated: movement.createdAt || '' });
+      map.set(key, { id: `item-${key}`, name: movement.product, category: normalizeInventoryCategory(movement.category || inferInventoryCategory(movement.product)), unit: movement.unit || 'szt', quantity: 0, totalCost: 0, lastUpdated: movement.createdAt || '' });
     }
     const item = map.get(key);
     const qty = Number(movement.quantity || 0);
     item.quantity += qty;
     if (qty > 0) item.totalCost += qty * Number(movement.unitCost || 0);
     if (qty < 0 && item.quantity >= 0) item.totalCost = Math.max(0, item.totalCost + qty * (item.totalCost / Math.max(item.quantity - qty, 1)));
+    item.category = normalizeInventoryCategory(movement.category || item.category || inferInventoryCategory(item.name));
     item.lastUpdated = movement.createdAt || item.lastUpdated;
   }
   const items = Array.from(map.values()).map(item => ({
@@ -6497,35 +6612,77 @@ function rebuildInventoryItemsFromMovements(show = true) {
     quantity: Number(item.quantity.toFixed(3)),
     avgCost: item.quantity > 0 ? item.totalCost / item.quantity : 0,
     value: item.quantity > 0 ? item.totalCost : 0
-  })).filter(item => Math.abs(Number(item.quantity || 0)) > 0.0001).sort((a, b) => a.name.localeCompare(b.name, 'pl'));
-  saveInventoryItems(items);
+  })).filter(item => Math.abs(Number(item.quantity || 0)) > 0.0001).sort((a, b) => String(a.category || 'Inne').localeCompare(String(b.category || 'Inne'), 'pl') || a.name.localeCompare(b.name, 'pl'));
+  saveInventoryItems(items, options);
   if (show) showMessage('Przeliczono stan magazynu z historii ruchów.');
   return items;
 }
 
-function renderInventory() {
-  const items = getInventoryItems();
+function renderInventory(editIndex = null) {
+  const items = getInventoryItems().map(item => ({ ...item, category: normalizeInventoryCategory(item.category || inferInventoryCategory(item.name)) }))
+    .sort((a, b) => String(a.category || 'Inne').localeCompare(String(b.category || 'Inne'), 'pl') || String(a.name || '').localeCompare(String(b.name || ''), 'pl'));
+  saveInventoryItems(items, { skipSync: true });
   const movements = getInventoryMovements().slice().sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
   if (el.inventorySummary) {
     const totalValue = items.reduce((sum, item) => sum + Number(item.value || 0), 0);
     const negative = items.filter(item => Number(item.quantity || 0) < 0).length;
-    el.inventorySummary.innerHTML = `Pozycji: <b>${items.length}</b> · Ruchów: <b>${movements.length}</b> · Wartość: <b>${formatMoney(totalValue)}</b>${negative ? ` · <b class="danger-text">Ujemne stany: ${negative}</b>` : ''}`;
+    const categoryCount = new Set(items.map(item => item.category || 'Inne')).size;
+    el.inventorySummary.innerHTML = `Pozycji: <b>${items.length}</b> · Kategorii: <b>${categoryCount}</b> · Ruchów: <b>${movements.length}</b> · Wartość: <b>${formatMoney(totalValue)}</b>${negative ? ` · <b class="danger-text">Ujemne stany: ${negative}</b>` : ''}`;
   }
   if (el.inventoryItemsBody) {
-    el.inventoryItemsBody.innerHTML = items.length ? items.map((item, index) => `
-      <tr>
-        <td>${escapeHtml(item.name)}</td>
-        <td>${Number(item.quantity || 0).toLocaleString('pl-PL')}</td>
-        <td>${escapeHtml(item.unit || 'szt')}</td>
-        <td>${formatMoney(Number(item.avgCost || 0))}</td>
-        <td>${formatMoney(Number(item.value || 0))}</td>
-        <td>${escapeHtml(formatDateTime(item.lastUpdated || ''))}</td>
-        <td class="inventory-actions">
-          <button class="tiny-button" type="button" data-inventory-action="edit" data-index="${index}">Edytuj</button>
-          <button class="tiny-button danger-button" type="button" data-inventory-action="delete" data-index="${index}">Usuń</button>
-        </td>
-      </tr>
-    `).join('') : '<tr><td colspan="7" class="empty-state">Brak pozycji magazynowych.</td></tr>';
+    if (!items.length) {
+      el.inventoryItemsBody.innerHTML = '<tr><td colspan="8" class="empty-state">Brak pozycji magazynowych.</td></tr>';
+    } else {
+      let lastCategory = '';
+      const rows = [];
+      items.forEach((item, index) => {
+        const category = normalizeInventoryCategory(item.category || inferInventoryCategory(item.name));
+        if (category !== lastCategory) {
+          lastCategory = category;
+          rows.push(`<tr class="inventory-category-row"><td colspan="8">${escapeHtml(category)}</td></tr>`);
+        }
+        const isEditing = editIndex === index;
+        if (isEditing) {
+          rows.push(`
+            <tr class="is-editing" data-inventory-row="1" data-inventory-index="${index}">
+              <td><input class="inline-edit-input" data-edit-field="name" value="${escapeHtml(item.name)}"></td>
+              <td><input class="inline-edit-input small" data-edit-field="quantity" inputmode="decimal" value="${String(Number(item.quantity || 0)).replace('.', ',')}"></td>
+              <td>
+                <select class="inline-edit-input" data-edit-field="unit">
+                  ${['szt','m','kpl','rolka','opak','usł'].map(unit => `<option value="${unit}" ${String(item.unit || 'szt') === unit ? 'selected' : ''}>${unit}</option>`).join('')}
+                </select>
+              </td>
+              <td><input class="inline-edit-input small" data-edit-field="avgCost" inputmode="decimal" value="${Number(item.avgCost || 0).toFixed(2).replace('.', ',')}"></td>
+              <td>
+                <select class="inline-edit-input" data-edit-field="category">${renderInventoryCategoryOptions(category)}</select>
+              </td>
+              <td>${formatMoney(Number(item.value || 0))}</td>
+              <td>${escapeHtml(formatDateTime(item.lastUpdated || ''))}</td>
+              <td class="inventory-actions">
+                <button class="tiny-button" type="button" data-inventory-action="save" data-index="${index}">Zapisz</button>
+                <button class="tiny-button" type="button" data-inventory-action="cancel" data-index="${index}">Anuluj</button>
+                <button class="tiny-button danger-button" type="button" data-inventory-action="delete" data-index="${index}">Usuń</button>
+              </td>
+            </tr>`);
+        } else {
+          rows.push(`
+            <tr data-inventory-row="1" data-inventory-index="${index}" title="Kliknij dwa razy albo przytrzymaj, żeby edytować bez okna.">
+              <td>${escapeHtml(item.name)}</td>
+              <td>${Number(item.quantity || 0).toLocaleString('pl-PL')}</td>
+              <td>${escapeHtml(item.unit || 'szt')}</td>
+              <td>${formatMoney(Number(item.avgCost || 0))}</td>
+              <td>${escapeHtml(category)}</td>
+              <td>${formatMoney(Number(item.value || 0))}</td>
+              <td>${escapeHtml(formatDateTime(item.lastUpdated || ''))}</td>
+              <td class="inventory-actions">
+                <button class="tiny-button" type="button" data-inventory-action="edit" data-index="${index}">Edytuj</button>
+                <button class="tiny-button danger-button" type="button" data-inventory-action="delete" data-index="${index}">Usuń</button>
+              </td>
+            </tr>`);
+        }
+      });
+      el.inventoryItemsBody.innerHTML = rows.join('');
+    }
   }
   if (el.inventoryPendingBody) {
     const pending = getInventoryPending();
@@ -6556,32 +6713,14 @@ function renderInventory() {
         <td>${escapeHtml(formatDateTime(movement.createdAt || ''))}</td>
         <td>${escapeHtml(formatInventoryAction(movement.action))}</td>
         <td>${escapeHtml(movement.product)}</td>
+        <td>${escapeHtml(normalizeInventoryCategory(movement.category || inferInventoryCategory(movement.product)))}</td>
         <td>${Number(movement.quantity || 0).toLocaleString('pl-PL')} ${escapeHtml(movement.unit || 'szt')}</td>
         <td>${escapeHtml(movement.sourceDescription || movement.entryKey || '')}</td>
       </tr>
-    `).join('') : '<tr><td colspan="5" class="empty-state">Brak ruchów magazynowych.</td></tr>';
+    `).join('') : '<tr><td colspan="6" class="empty-state">Brak ruchów magazynowych.</td></tr>';
   }
 }
 
-function formatInventoryAction(action) {
-  const labels = {
-    dodaj_do_magazynu: 'Dodanie',
-    zdejmij_z_magazynu: 'Zdjęcie',
-    zwrot_do_magazynu: 'Zwrot do magazynu',
-    zwrot_do_sklepu: 'Zwrot do sklepu',
-    korekta_reczna: 'Korekta ręczna',
-    brak_ruchu: 'Brak ruchu',
-    wymaga_sprawdzenia: 'Wymaga sprawdzenia'
-  };
-  return labels[action] || action || '';
-}
-
-function formatDateTime(value) {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value);
-  return date.toLocaleString('pl-PL');
-}
 
 function showInventoryPendingPopup(pending, skippedChecked = 0) {
   const applicable = pending.results.filter(item => item.canApply);
@@ -6624,7 +6763,7 @@ async function runInventoryRecognition() {
     const aiPayload = await callInventoryAi(candidates);
     setInventoryStatus('AI zwróciła wynik. Przygotowuję podsumowanie i ruchy magazynowe...', 'working');
     const pending = buildPendingInventoryAnalysis(aiPayload, candidates);
-    setJsonLocalStorage(INVENTORY_PENDING_KEY, pending);
+    saveInventoryPending(pending);
     const accepted = showInventoryPendingPopup(pending, skippedChecked);
     if (!accepted) {
       setInventoryStatus('Analiza AI została wykonana, ale zmiany nie zostały zapisane.', 'error');
@@ -6648,10 +6787,11 @@ async function runInventoryRecognition() {
 function importInventoryFromPayload(payload, replace = false) {
   if (!payload || typeof payload !== 'object') return;
   if (replace) {
-    if (Array.isArray(payload.inventoryItems)) saveInventoryItems(payload.inventoryItems);
-    if (Array.isArray(payload.inventoryMovements)) saveInventoryMovements(payload.inventoryMovements);
-    if (payload.inventoryAnalysis && typeof payload.inventoryAnalysis === 'object') saveInventoryAnalysis(payload.inventoryAnalysis);
-    rebuildInventoryItemsFromMovements(false);
+    if (Array.isArray(payload.inventoryItems)) saveInventoryItems(payload.inventoryItems, { skipSync: true });
+    if (Array.isArray(payload.inventoryMovements)) saveInventoryMovements(payload.inventoryMovements, { skipSync: true });
+    if (payload.inventoryAnalysis && typeof payload.inventoryAnalysis === 'object') saveInventoryAnalysis(payload.inventoryAnalysis, { skipSync: true });
+    if (payload.inventoryPending && typeof payload.inventoryPending === 'object') saveInventoryPending(payload.inventoryPending, { skipSync: true });
+    rebuildInventoryItemsFromMovements(false, { skipSync: true });
     return;
   }
   if (Array.isArray(payload.inventoryMovements)) {
@@ -6660,12 +6800,24 @@ function importInventoryFromPayload(payload, replace = false) {
     for (const movement of payload.inventoryMovements) {
       if (movement?.id && !byId.has(movement.id)) byId.set(movement.id, movement);
     }
-    saveInventoryMovements(Array.from(byId.values()));
+    saveInventoryMovements(Array.from(byId.values()), { skipSync: true });
   }
   if (payload.inventoryAnalysis && typeof payload.inventoryAnalysis === 'object') {
-    saveInventoryAnalysis({ ...getInventoryAnalysis(), ...payload.inventoryAnalysis });
+    saveInventoryAnalysis({ ...getInventoryAnalysis(), ...payload.inventoryAnalysis }, { skipSync: true });
   }
-  rebuildInventoryItemsFromMovements(false);
+  if (payload.inventoryPending && typeof payload.inventoryPending === 'object') {
+    const localPending = getInventoryPending();
+    const remotePending = payload.inventoryPending;
+    const localResults = Array.isArray(localPending.results) ? localPending.results : [];
+    const remoteResults = Array.isArray(remotePending.results) ? remotePending.results : [];
+    const byKey = new Map(localResults.map(item => [`${item.id_wpisu || ''}|${item.entryHash || ''}|${item.decision || ''}`, item]));
+    for (const item of remoteResults) {
+      const key = `${item.id_wpisu || ''}|${item.entryHash || ''}|${item.decision || ''}`;
+      if (!byKey.has(key)) byKey.set(key, item);
+    }
+    saveInventoryPending({ ...localPending, ...remotePending, results: Array.from(byKey.values()) }, { skipSync: true });
+  }
+  rebuildInventoryItemsFromMovements(false, { skipSync: true });
 }
 
 function setupAiAndInventory() {
@@ -6721,9 +6873,36 @@ function setupAiAndInventory() {
     if (!button) return;
     event.preventDefault();
     const index = Number(button.dataset.index);
-    if (button.dataset.inventoryAction === 'edit') editInventoryItem(index);
+    if (button.dataset.inventoryAction === 'edit') startInlineInventoryEdit(index);
+    if (button.dataset.inventoryAction === 'save') saveInlineInventoryItem(index);
+    if (button.dataset.inventoryAction === 'cancel') cancelInlineInventoryEdit();
     if (button.dataset.inventoryAction === 'delete') deleteInventoryItem(index);
   });
+  if (el.inventoryItemsBody) {
+    el.inventoryItemsBody.addEventListener('dblclick', event => {
+      if (event.target.closest('button, input, select, textarea')) return;
+      const row = event.target.closest('tr[data-inventory-row]');
+      if (!row) return;
+      startInlineInventoryEdit(Number(row.dataset.inventoryIndex));
+    });
+    let holdTimer = null;
+    const clearHold = () => {
+      if (holdTimer) clearTimeout(holdTimer);
+      holdTimer = null;
+    };
+    ['mousedown', 'touchstart'].forEach(type => {
+      el.inventoryItemsBody.addEventListener(type, event => {
+        if (event.target.closest('button, input, select, textarea')) return;
+        const row = event.target.closest('tr[data-inventory-row]');
+        if (!row) return;
+        clearHold();
+        holdTimer = setTimeout(() => startInlineInventoryEdit(Number(row.dataset.inventoryIndex)), 650);
+      }, { passive: true });
+    });
+    ['mouseup', 'mouseleave', 'touchend', 'touchcancel', 'scroll'].forEach(type => {
+      el.inventoryItemsBody.addEventListener(type, clearHold, { passive: true });
+    });
+  }
   if (el.inventoryPendingBody) el.inventoryPendingBody.addEventListener('click', event => {
     const button = event.target.closest('[data-pending-action]');
     if (!button) return;
@@ -6986,7 +7165,7 @@ function bindEvents() {
 async function init() {
   const today = todayISO();
   document.title = 'Portfel PRO';
-  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.1 / 128';
+  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.1 / 130';
   setTodayHeader('wczytywanie...');
   if (isFileProtocol()) {
     showMessage('Program został otwarty bezpośrednio z index.html. Do importu JSON, PWA i cache użyj serwera lokalnego albo GitHub Pages.', 'error');

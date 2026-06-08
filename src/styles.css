@@ -1878,3 +1878,85 @@ body[data-theme="dark"] #todayLabel[data-status="missing"] {
 .inventory-pending-table td {
   vertical-align: top;
 }
+
+.inventory-category-row td {
+  background: #fff3e0;
+  color: #7c2d12;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  border-top: 2px solid rgba(249, 115, 22, 0.35);
+}
+
+.inventory-table tr[data-inventory-row] {
+  cursor: pointer;
+}
+
+.inventory-table tr[data-inventory-row]:hover td {
+  background: #fffaf3;
+}
+
+.inventory-table tr.is-editing td {
+  background: #fffbeb;
+}
+
+.inline-edit-input {
+  width: 100%;
+  min-width: 90px;
+  box-sizing: border-box;
+  border: 1px solid rgba(249, 115, 22, 0.35);
+  border-radius: 10px;
+  padding: 7px 8px;
+  background: #fff;
+  color: #111827;
+  font: inherit;
+}
+
+.inline-edit-input.small {
+  min-width: 70px;
+}
+
+.inventory-undo-toast {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(420px, calc(100vw - 36px));
+  padding: 12px 14px;
+  border-radius: 16px;
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.24);
+  background: #111827;
+  color: #ffffff;
+  transform: translateY(140%);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.18s ease, opacity 0.18s ease;
+}
+
+.inventory-undo-toast.show {
+  transform: translateY(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.inventory-undo-toast button {
+  border: 0;
+  border-radius: 999px;
+  padding: 7px 12px;
+  background: #f97316;
+  color: #ffffff;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+@media (max-width: 760px) {
+  .inventory-actions {
+    min-width: 150px;
+  }
+
+  .inline-edit-input {
+    min-width: 120px;
+  }
+}
