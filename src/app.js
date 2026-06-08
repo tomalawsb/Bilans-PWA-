@@ -1,6 +1,6 @@
 const DB_NAME = 'bilans-pwa-etap1';
 const DB_VERSION = 4;
-const APP_VERSION = '1.1-135';
+const APP_VERSION = '1.1-136';
 const RAW_DROPBOX_DEFAULT_APP_KEY = String(window.PORTFEL_PRO_CONFIG?.dropboxAppKey || '').trim();
 const DROPBOX_DEFAULT_APP_KEY = /^WSTAW_TUTAJ/i.test(RAW_DROPBOX_DEFAULT_APP_KEY) ? '' : RAW_DROPBOX_DEFAULT_APP_KEY; // Ustaw w src/config.js, wtedy użytkownik klika tylko Połącz z Dropbox.
 const MAIN_INSTALL_KEY = 'portfel-pro-main-installed';
@@ -1755,9 +1755,34 @@ function parseMoneyByUnit(numberRaw, unitRaw = '') {
   return number;
 }
 
+function combineVoiceSplitAmount(majorRaw, minorRaw) {
+  const major = normalizeMoneyNumber(majorRaw);
+  const minor = normalizeMoneyNumber(minorRaw);
+  if (!major || !minor) return null;
+
+  const grosze = Math.round(minor);
+  if (grosze < 0 || grosze > 99) return null;
+
+  return Math.round((Math.trunc(major) + grosze / 100) * 100) / 100;
+}
+
 function parseLooseAmount(raw) {
   const source = String(raw ?? '').trim();
   if (!source) return null;
+
+  const splitZlotyPattern = new RegExp(`\b(${MONEY_NUMBER_PATTERN})\s*(?:${ZLOTY_WORDS})\s+(\d{1,2})\s*(?:${ZLOTY_WORDS})\b`, 'iu');
+  const splitZloty = source.match(splitZlotyPattern);
+  if (splitZloty) {
+    const combined = combineVoiceSplitAmount(splitZloty[1], splitZloty[2]);
+    if (combined) return combined;
+  }
+
+  const splitGroszPattern = new RegExp(`\b(\d{1,5})\s*(?:${GROSZ_WORDS})\s+(\d{1,2})\s*(?:${GROSZ_WORDS})\b`, 'iu');
+  const splitGrosz = source.match(splitGroszPattern);
+  if (splitGrosz) {
+    const combined = combineVoiceSplitAmount(splitGrosz[1], splitGrosz[2]);
+    if (combined) return combined;
+  }
 
   const compoundPattern = new RegExp(`\\b(${MONEY_NUMBER_PATTERN})\\s*(?:${ZLOTY_WORDS})\\s*(\\d{1,2})\\s*(?:${GROSZ_WORDS})\\b`, 'iu');
   const compound = source.match(compoundPattern);
@@ -2046,6 +2071,16 @@ function findAmountMatches(text) {
       matches.push(item);
     }
   };
+
+  const splitZlotyRegex = new RegExp(`\b(${MONEY_NUMBER_PATTERN})\s*(?:${ZLOTY_WORDS})\s+(\d{1,2})\s*(?:${ZLOTY_WORDS})\b`, 'giu');
+  for (const match of source.matchAll(splitZlotyRegex)) {
+    addMatch(match, combineVoiceSplitAmount(match[1], match[2]));
+  }
+
+  const splitGroszRegex = new RegExp(`\b(\d{1,5})\s*(?:${GROSZ_WORDS})\s+(\d{1,2})\s*(?:${GROSZ_WORDS})\b`, 'giu');
+  for (const match of source.matchAll(splitGroszRegex)) {
+    addMatch(match, combineVoiceSplitAmount(match[1], match[2]));
+  }
 
   const compoundRegex = new RegExp(`\\b(${MONEY_NUMBER_PATTERN})\\s*(?:${ZLOTY_WORDS})\\s*(\\d{1,2})\\s*(?:${GROSZ_WORDS})\\b`, 'giu');
   for (const match of source.matchAll(compoundRegex)) {
@@ -7352,7 +7387,7 @@ function bindEvents() {
 async function init() {
   const today = todayISO();
   document.title = 'Portfel PRO';
-  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.1 / 135';
+  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.1 / 136';
   setTodayHeader('wczytywanie...');
   if (isFileProtocol()) {
     showMessage('Program został otwarty bezpośrednio z index.html. Do importu JSON, PWA i cache użyj serwera lokalnego albo GitHub Pages.', 'error');

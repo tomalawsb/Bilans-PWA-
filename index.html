@@ -11,11 +11,11 @@
     const __manifestFile = new URLSearchParams(location.search).get('action') === 'voice'
       ? 'manifest-voice.webmanifest'
       : 'manifest.webmanifest';
-    document.write(`<link id="appManifest" rel="manifest" href="./${__manifestFile}?v=135">`);
+    document.write(`<link id="appManifest" rel="manifest" href="./${__manifestFile}?v=134">`);
   </script>
-  <link rel="icon" href="./icons/icon-192.png?v=135">
-  <link rel="apple-touch-icon" href="./icons/icon-192.png?v=135">
-  <link rel="stylesheet" href="./src/styles.css?v=135">
+  <link rel="icon" href="./icons/icon-192.png?v=134">
+  <link rel="apple-touch-icon" href="./icons/icon-192.png?v=134">
+  <link rel="stylesheet" href="./src/styles.css?v=134">
 </head>
 <body data-theme="classic">
   <script>
@@ -26,9 +26,9 @@
   <main class="app-shell">
     <header class="app-header">
       <div class="brand-block">
-        <img class="app-logo" src="./icons/logo-portfel-pro.png?v=135" alt="Portfel PRO">
+        <img class="app-logo" src="./icons/logo-portfel-pro.png?v=134" alt="Portfel PRO">
         <div>
-          <h1>Portfel PRO <span id="appVersionBadge" class="version-badge">v. 1.1 / 135</span></h1>
+          <h1>Portfel PRO <span id="appVersionBadge" class="version-badge">v. 1.1 / 134</span></h1>
           <p id="todayLabel">Lokalna aplikacja webowa</p>
         </div>
       </div>
@@ -427,15 +427,12 @@
           </div>
           <div class="button-row">
             <button id="inventoryRecognizeButton" type="button" data-help="Analizuje firmowe wpisy z wybranego okresu przez AI i przygotowuje ruchy magazynowe. Wpisy już sprawdzone nie są naliczane drugi raz.">Rozpoznaj zakupy i sprzedaż</button>
+            <button id="inventoryPendingButton" class="secondary" type="button" data-help="Pokazuje ostatnie wyniki AI, zwłaszcza wpisy do ręcznego sprawdzenia.">Ręczne sprawdzenie</button>
             <button id="inventoryAddManualButton" class="secondary" type="button" data-help="Dodaje ręcznie produkt lub materiał do stanu magazynowego.">Dodaj ręcznie</button>
             <button id="inventoryRebuildButton" class="secondary" type="button" data-help="Przelicza aktualne stany z historii ruchów magazynowych.">Przelicz stany</button>
           </div>
         </div>
         <div class="inventory-toolbar">
-          <label class="wide">
-            Szukaj w magazynie
-            <input id="inventorySearchInput" type="search" placeholder="np. kamera, svis, router, antena, kabel, zasilanie">
-          </label>
           <label>
             Okres analizy
             <select id="inventoryPeriodSelect">
@@ -477,7 +474,54 @@
           </table>
         </div>
       </section>
+      <section class="panel inventory-pending-panel">
+        <div class="panel-title-row">
+          <div>
+            <h2>Ostatnie rozpoznanie AI / ręczne sprawdzenie</h2>
+            <p>Tu trafiają wpisy, których AI nie zastosowała automatycznie. Możesz je zastosować ręcznie, oznaczyć jako bez ruchu albo usunąć z tej listy.</p>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="entries-table inventory-pending-table">
+            <thead>
+              <tr>
+                <th>Wpis</th>
+                <th>Decyzja AI</th>
+                <th>Produkt</th>
+                <th>Ilość</th>
+                <th>Pewność</th>
+                <th>Powód</th>
+                <th>Działania</th>
+              </tr>
+            </thead>
+            <tbody id="inventoryPendingBody"></tbody>
+          </table>
+        </div>
+      </section>
 
+      <section class="panel inventory-movements-panel">
+        <div class="panel-title-row">
+          <div>
+            <h2>Historia ruchów magazynowych</h2>
+            <p>Każdy ruch jest powiązany z wpisem finansowym, żeby nie naliczyć go drugi raz.</p>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="entries-table inventory-movements-table">
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Ruch</th>
+                <th>Produkt</th>
+                <th>Kategoria</th>
+                <th>Ilość</th>
+                <th>Powiązany wpis</th>
+              </tr>
+            </thead>
+            <tbody id="inventoryMovementsBody"></tbody>
+          </table>
+        </div>
+      </section>
     </section>
 
     <section class="tab-page" data-tab-page="sync">
@@ -555,7 +599,7 @@
         <div class="panel-title-row">
           <div>
             <h2>Pomoc i instrukcja obsługi</h2>
-            <p>Krótka instrukcja dla wersji Portfel PRO v. 1.1 / 135.</p>
+            <p>Krótka instrukcja dla pierwszej wersji testowej Portfel PRO v. 1.1 / 134.</p>
           </div>
         </div>
 
@@ -657,7 +701,7 @@
             <ol>
               <li>Kliknij <strong>Odśwież program</strong>.</li>
               <li>Odśwież stronę w przeglądarce.</li>
-              <li>Jeżeli dalej widzisz starą wersję, otwórz adres z dopiskiem <code>?v=135</code>.</li>
+              <li>Jeżeli dalej widzisz starą wersję, otwórz adres z dopiskiem <code>?v=134</code>.</li>
             </ol>
           </article>
         </div>
@@ -818,7 +862,7 @@
     </section>
   </main>
 
-  <script src="./src/config.js?v=135"></script>
-  <script src="./src/app.js?v=135" type="module"></script>
+  <script src="./src/config.js?v=134"></script>
+  <script src="./src/app.js?v=134" type="module"></script>
 </body>
 </html>

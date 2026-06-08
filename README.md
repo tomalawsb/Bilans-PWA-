@@ -1,27 +1,41 @@
-# Portfel PRO v. 1.1 / 135 — magazyn: wyszukiwarka i uproszczony widok
+# Portfel PRO v. 1.1 / 134 — naprawa magazynu: formatInventoryAction i edycja komórek
 
-Wersja: **1.1 / 135**  
-Data paczki: 08.06.2026
+Wersja: **1.1 / 134**  
+Data: **08.06.2026**
 
-## Zmiany w wersji 1.1 / 135
+## Zmiany
 
-- Usunięto z widoku magazynu sekcję **Ostatnie rozpoznanie AI / ręczne sprawdzenie**.
-- Usunięto z widoku magazynu sekcję **Historia ruchów magazynowych**.
-- Dodano inteligentną wyszukiwarkę w magazynie.
-- Wyszukiwarka działa po nazwie produktu, kategorii, jednostce oraz podstawowych aliasach, np. kamera/kamery, router/tp-link, antena/konwerter, kabel/przewód, zasilanie/zasilacz.
-- Licznik magazynu pokazuje liczbę wyników wyszukiwania, gdy wpisany jest filtr.
-- Zachowano edycję przez dłuższe przytrzymanie konkretnej komórki.
-- Zachowano usuwanie pozycji bez potwierdzania z krótkim przyciskiem **Cofnij**.
-- Dane magazynu nadal synchronizują się przez Dropbox razem z resztą danych programu.
-- Podbito cache PWA do `v=135`.
+- Usunięto edycję przez przycisk **Edytuj** w magazynie.
+- Usunięto edycję przez dwuklik.
+- Edycja magazynu działa tylko przez dłuższe przytrzymanie konkretnej komórki.
+- Przytrzymanie nazwy edytuje tylko nazwę produktu.
+- Przytrzymanie ilości edytuje tylko ilość.
+- Przytrzymanie jednostki pokazuje wybór jednostki.
+- Przytrzymanie średniego kosztu edytuje tylko koszt.
+- Przytrzymanie kategorii pokazuje wybór kategorii.
+- Poprawiono obsługę przycisku **Usuń** w magazynie.
+- Usuwanie nadal działa bez potwierdzania, z krótkim przyciskiem **Cofnij**.
+- Podbito cache PWA do wersji `v=134`.
 - Zaktualizowano skrypt `upload_to_github.ps1` z wpisanym repozytorium:
-
-```text
-https://github.com/tomalawsb/Bilans-PWA-.git
-```
+  `https://github.com/tomalawsb/Bilans-PWA-.git`.
 
 ## Adres po wdrożeniu
 
 ```text
-https://tomalawsb.github.io/Bilans-PWA-/?v=135
+https://tomalawsb.github.io/Bilans-PWA-/?v=134
 ```
+
+## Poprawka 1.1 / 134
+
+- Naprawiono błąd `formatInventoryAction is not defined`, który zatrzymywał moduł magazynu.
+- Po naprawie tabela magazynu, przycisk Usuń oraz edycja komórek przez dłuższe przytrzymanie powinny działać.
+- Edycja magazynu odbywa się wyłącznie przez dłuższe przytrzymanie konkretnej komórki: nazwa, ilość, jednostka, średni koszt albo kategoria.
+- Nie przywracano edycji przez przycisk Edytuj ani przez dwuklik.
+
+
+## Zmiany w wersji 1.1 / 136
+
+- Poprawiono rozpoznawanie kwot po dyktowaniu.
+- Program interpretuje zapis typu `30 zł 45 zł` jako `30,45 zł`.
+- Program interpretuje zapis typu `30 groszy 80 groszy` jako `30,80 zł`, gdy tekst trafia do parsera kwoty.
+- Poprawka działa w rozpoznawaniu tekstu oraz w luźnym parserze kwoty.
