@@ -1999,3 +1999,12 @@ body[data-theme="dark"] #todayLabel[data-status="missing"] {
 .inventory-table td.inventory-cell-editing .inline-edit-input {
   min-width: 130px;
 }
+
+/* Magazyn v135: inteligentna wyszukiwarka i uproszczony widok. */
+#inventorySearchInput {
+  width: 100%;
+  min-height: 42px;
+}
+.inventory-panel .inventory-toolbar label.wide {
+  grid-column: 1 / -1;
+}

@@ -1,6 +1,6 @@
 const DB_NAME = 'bilans-pwa-etap1';
 const DB_VERSION = 4;
-const APP_VERSION = '1.1-134';
+const APP_VERSION = '1.1-135';
 const RAW_DROPBOX_DEFAULT_APP_KEY = String(window.PORTFEL_PRO_CONFIG?.dropboxAppKey || '').trim();
 const DROPBOX_DEFAULT_APP_KEY = /^WSTAW_TUTAJ/i.test(RAW_DROPBOX_DEFAULT_APP_KEY) ? '' : RAW_DROPBOX_DEFAULT_APP_KEY; // Ustaw w src/config.js, wtedy użytkownik klika tylko Połącz z Dropbox.
 const MAIN_INSTALL_KEY = 'portfel-pro-main-installed';
@@ -778,6 +778,7 @@ const el = {
   aiSettingsStatus: document.querySelector('#aiSettingsStatus'),
   inventoryRecognizeButton: document.querySelector('#inventoryRecognizeButton'),
   inventoryPendingButton: document.querySelector('#inventoryPendingButton'),
+  inventorySearchInput: document.querySelector('#inventorySearchInput'),
   inventoryAddManualButton: document.querySelector('#inventoryAddManualButton'),
   inventoryRebuildButton: document.querySelector('#inventoryRebuildButton'),
   inventoryPeriodSelect: document.querySelector('#inventoryPeriodSelect'),
@@ -6651,24 +6652,79 @@ function rebuildInventoryItemsFromMovements(show = true, options = {}) {
   return items;
 }
 
+
+function normalizeInventorySearchText(value = '') {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function expandInventorySearchTerms(query = '') {
+  const base = normalizeInventorySearchText(query).split(/\s+/).filter(Boolean);
+  const extra = [];
+  const aliases = {
+    kamera: ['kamery', 'kamerka', 'ezviz', 'svis', 'hikvision', 'dahua', 'tubowa', 'obrotowa'],
+    kamery: ['kamera', 'kamerka', 'ezviz', 'svis', 'hikvision', 'dahua'],
+    router: ['tp link', 'tplink', 'sieci', 'wifi', 'access point', 'ap'],
+    antena: ['anteny', 'konwerter', 'wzmacniacz', 'separator', 'czasza'],
+    kabel: ['kable', 'przewod', 'przewody', 'utp', 'ftp', 'skretka', 'koncentryk'],
+    zasilanie: ['zasilacz', 'ladowarka', 'akumulator', 'bateria', 'gniazdko', 'listwa'],
+    pamiec: ['pamieci', 'microsd', 'sd', 'karta', 'dysk', 'ssd'],
+    montaz: ['adapter', 'puszka', 'kolki', 'uchwyt', 'wtyk', 'koncowki']
+  };
+  for (const term of base) {
+    if (aliases[term]) extra.push(...aliases[term].map(normalizeInventorySearchText));
+  }
+  return Array.from(new Set([...base, ...extra].filter(Boolean)));
+}
+
+function inventoryItemSearchText(item) {
+  return normalizeInventorySearchText([
+    item?.name,
+    item?.category,
+    item?.unit,
+    inferInventoryCategory(item?.name || '')
+  ].join(' '));
+}
+
+function inventoryItemMatchesSearch(item, query = '') {
+  const cleanQuery = normalizeInventorySearchText(query);
+  if (!cleanQuery) return true;
+  const itemText = inventoryItemSearchText(item);
+  const directTerms = normalizeInventorySearchText(query).split(/\s+/).filter(Boolean);
+  const expandedTerms = expandInventorySearchTerms(query);
+  if (!directTerms.length) return true;
+  const allDirectMatch = directTerms.every(term => itemText.includes(term) || term.includes(itemText));
+  if (allDirectMatch) return true;
+  return expandedTerms.some(term => itemText.includes(term));
+}
+
 function renderInventory(editIndex = null) {
-  const items = getInventoryItems().map(item => ({ ...item, category: normalizeInventoryCategory(item.category || inferInventoryCategory(item.name)) }))
+  const sortedItems = getInventoryItems().map(item => ({ ...item, category: normalizeInventoryCategory(item.category || inferInventoryCategory(item.name)) }))
     .sort((a, b) => String(a.category || 'Inne').localeCompare(String(b.category || 'Inne'), 'pl') || String(a.name || '').localeCompare(String(b.name || ''), 'pl'));
-  saveInventoryItems(items, { skipSync: true });
+  saveInventoryItems(sortedItems, { skipSync: true });
   const movements = getInventoryMovements().slice().sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+  const searchQuery = el.inventorySearchInput?.value || '';
+  const items = sortedItems.map((item, originalIndex) => ({ ...item, _inventoryIndex: originalIndex }))
+    .filter(item => inventoryItemMatchesSearch(item, searchQuery));
   if (el.inventorySummary) {
-    const totalValue = items.reduce((sum, item) => sum + Number(item.value || 0), 0);
-    const negative = items.filter(item => Number(item.quantity || 0) < 0).length;
-    const categoryCount = new Set(items.map(item => item.category || 'Inne')).size;
-    el.inventorySummary.innerHTML = `Pozycji: <b>${items.length}</b> · Kategorii: <b>${categoryCount}</b> · Ruchów: <b>${movements.length}</b> · Wartość: <b>${formatMoney(totalValue)}</b>${negative ? ` · <b class="danger-text">Ujemne stany: ${negative}</b>` : ''}`;
+    const totalValue = sortedItems.reduce((sum, item) => sum + Number(item.value || 0), 0);
+    const negative = sortedItems.filter(item => Number(item.quantity || 0) < 0).length;
+    const categoryCount = new Set(sortedItems.map(item => item.category || 'Inne')).size;
+    const searchInfo = searchQuery ? ` · Wyniki wyszukiwania: <b>${items.length}</b> z ${sortedItems.length}` : '';
+    el.inventorySummary.innerHTML = `Pozycji: <b>${sortedItems.length}</b> · Kategorii: <b>${categoryCount}</b> · Wartość: <b>${formatMoney(totalValue)}</b>${searchInfo}${negative ? ` · <b class="danger-text">Ujemne stany: ${negative}</b>` : ''}`;
   }
   if (el.inventoryItemsBody) {
     if (!items.length) {
-      el.inventoryItemsBody.innerHTML = '<tr><td colspan="8" class="empty-state">Brak pozycji magazynowych.</td></tr>';
+      el.inventoryItemsBody.innerHTML = searchQuery ? '<tr><td colspan="8" class="empty-state">Brak wyników wyszukiwania w magazynie.</td></tr>' : '<tr><td colspan="8" class="empty-state">Brak pozycji magazynowych.</td></tr>';
     } else {
       let lastCategory = '';
       const rows = [];
-      items.forEach((item, index) => {
+      items.forEach((item) => {
+        const index = item._inventoryIndex;
         const category = normalizeInventoryCategory(item.category || inferInventoryCategory(item.name));
         if (category !== lastCategory) {
           lastCategory = category;
@@ -6939,6 +6995,7 @@ function setupAiAndInventory() {
   if (el.inventoryPeriodSelect) el.inventoryPeriodSelect.addEventListener('change', () => updateInventoryPeriodInputs(true));
   if (el.inventoryFromDate) el.inventoryFromDate.addEventListener('change', () => updateInventoryPeriodInputs(false));
   if (el.inventoryToDate) el.inventoryToDate.addEventListener('change', () => updateInventoryPeriodInputs(false));
+  if (el.inventorySearchInput) el.inventorySearchInput.addEventListener('input', () => renderInventory());
   if (el.aiProviderSelect) el.aiProviderSelect.addEventListener('change', () => {
     const settings = getAiSettings();
     setJsonLocalStorage(AI_SETTINGS_KEY, { ...settings, provider: el.aiProviderSelect.value, model: (AI_MODEL_OPTIONS[el.aiProviderSelect.value] || [])[0] || '', customModel: '' });
@@ -7295,7 +7352,7 @@ function bindEvents() {
 async function init() {
   const today = todayISO();
   document.title = 'Portfel PRO';
-  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.1 / 134';
+  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.1 / 135';
   setTodayHeader('wczytywanie...');
   if (isFileProtocol()) {
     showMessage('Program został otwarty bezpośrednio z index.html. Do importu JSON, PWA i cache użyj serwera lokalnego albo GitHub Pages.', 'error');
