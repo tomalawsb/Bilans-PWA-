@@ -1960,3 +1960,22 @@ body[data-theme="dark"] #todayLabel[data-status="missing"] {
     min-width: 120px;
   }
 }
+
+/* Magazyn: tabele muszą być widoczne także na telefonie.
+   Globalnie .table-wrap jest ukrywane na mobile dla historii wpisów, dlatego tu robimy wyjątek. */
+@media (max-width: 640px) {
+  .tab-page[data-tab-page="inventory"] .table-wrap {
+    display: block !important;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .tab-page[data-tab-page="inventory"] .entries-table {
+    min-width: 860px;
+  }
+  .inventory-table tr[data-inventory-row] td:first-child {
+    font-weight: 800;
+  }
+  .inventory-toolbar label input[type="date"] {
+    min-height: 54px;
+  }
+}

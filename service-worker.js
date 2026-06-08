@@ -1,15 +1,15 @@
-const CACHE_NAME = 'portfel-pro-v1-1-v131';
-const APP_VERSION = '1.1-131';
+const CACHE_NAME = 'portfel-pro-v1-1-v132';
+const APP_VERSION = '1.1-132';
 const APP_SHELL = [
   './',
   './index.html',
-  './index.html?v=131',
-  './voice/index.html?v=131',
-  './manifest.webmanifest?v=131',
-  './manifest-voice.webmanifest?v=131',
-  './src/styles.css?v=131',
-  './src/config.js?v=131',
-  './src/app.js?v=131',
+  './index.html?v=132',
+  './voice/index.html?v=132',
+  './manifest.webmanifest?v=132',
+  './manifest-voice.webmanifest?v=132',
+  './src/styles.css?v=132',
+  './src/config.js?v=132',
+  './src/app.js?v=132',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/logo-portfel-pro.png',
@@ -54,9 +54,9 @@ self.addEventListener('fetch', event => {
 
         if (event.request.mode === 'navigate') {
           if (requestUrl.pathname.endsWith('/voice/') || requestUrl.pathname.endsWith('/voice/index.html')) {
-            return await caches.match('./voice/index.html?v=131') || await caches.match('./voice/index.html') || await caches.match('./index.html?v=131');
+            return await caches.match('./voice/index.html?v=132') || await caches.match('./voice/index.html') || await caches.match('./index.html?v=132');
           }
-          return await caches.match('./index.html?v=131') || await caches.match('./index.html');
+          return await caches.match('./index.html?v=132') || await caches.match('./index.html');
         }
 
         return new Response('Brak połączenia i brak pliku w cache.', {

@@ -1,6 +1,6 @@
 const DB_NAME = 'bilans-pwa-etap1';
 const DB_VERSION = 4;
-const APP_VERSION = '1.1-131';
+const APP_VERSION = '1.1-132';
 const RAW_DROPBOX_DEFAULT_APP_KEY = String(window.PORTFEL_PRO_CONFIG?.dropboxAppKey || '').trim();
 const DROPBOX_DEFAULT_APP_KEY = /^WSTAW_TUTAJ/i.test(RAW_DROPBOX_DEFAULT_APP_KEY) ? '' : RAW_DROPBOX_DEFAULT_APP_KEY; // Ustaw w src/config.js, wtedy użytkownik klika tylko Połącz z Dropbox.
 const MAIN_INSTALL_KEY = 'portfel-pro-main-installed';
@@ -6900,22 +6900,49 @@ function setupAiAndInventory() {
       if (!row) return;
       startInlineInventoryEdit(Number(row.dataset.inventoryIndex));
     });
-    let holdTimer = null;
-    const clearHold = () => {
-      if (holdTimer) clearTimeout(holdTimer);
-      holdTimer = null;
+
+    let inventoryHoldTimer = null;
+    let inventoryHoldStartX = 0;
+    let inventoryHoldStartY = 0;
+    let inventoryHoldRow = null;
+
+    const clearInventoryHold = () => {
+      if (inventoryHoldTimer) window.clearTimeout(inventoryHoldTimer);
+      inventoryHoldTimer = null;
+      inventoryHoldRow = null;
     };
-    ['mousedown', 'touchstart'].forEach(type => {
-      el.inventoryItemsBody.addEventListener(type, event => {
-        if (event.target.closest('button, input, select, textarea')) return;
-        const row = event.target.closest('tr[data-inventory-row]');
-        if (!row) return;
-        clearHold();
-        holdTimer = setTimeout(() => startInlineInventoryEdit(Number(row.dataset.inventoryIndex)), 650);
-      }, { passive: true });
+
+    el.inventoryItemsBody.addEventListener('pointerdown', event => {
+      if (event.target.closest('button, input, select, textarea')) return;
+      const row = event.target.closest('tr[data-inventory-row]');
+      if (!row) return;
+      clearInventoryHold();
+      inventoryHoldStartX = event.clientX || 0;
+      inventoryHoldStartY = event.clientY || 0;
+      inventoryHoldRow = row;
+      inventoryHoldTimer = window.setTimeout(() => {
+        if (!inventoryHoldRow || inventoryHoldRow.classList.contains('is-editing')) return;
+        startInlineInventoryEdit(Number(inventoryHoldRow.dataset.inventoryIndex));
+        clearInventoryHold();
+      }, 600);
+    }, { passive: true });
+
+    el.inventoryItemsBody.addEventListener('pointermove', event => {
+      if (!inventoryHoldTimer) return;
+      const dx = Math.abs((event.clientX || 0) - inventoryHoldStartX);
+      const dy = Math.abs((event.clientY || 0) - inventoryHoldStartY);
+      if (dx > 8 || dy > 8) clearInventoryHold();
+    }, { passive: true });
+
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach(type => {
+      el.inventoryItemsBody.addEventListener(type, clearInventoryHold, { passive: true });
     });
-    ['mouseup', 'mouseleave', 'touchend', 'touchcancel', 'scroll'].forEach(type => {
-      el.inventoryItemsBody.addEventListener(type, clearHold, { passive: true });
+
+    el.inventoryItemsBody.addEventListener('contextmenu', event => {
+      const row = event.target.closest('tr[data-inventory-row]');
+      if (!row || event.target.closest('button, input, select, textarea')) return;
+      event.preventDefault();
+      startInlineInventoryEdit(Number(row.dataset.inventoryIndex));
     });
   }
   if (el.inventoryPendingBody) el.inventoryPendingBody.addEventListener('click', event => {
@@ -7180,7 +7207,7 @@ function bindEvents() {
 async function init() {
   const today = todayISO();
   document.title = 'Portfel PRO';
-  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.1 / 131';
+  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.1 / 132';
   setTodayHeader('wczytywanie...');
   if (isFileProtocol()) {
     showMessage('Program został otwarty bezpośrednio z index.html. Do importu JSON, PWA i cache użyj serwera lokalnego albo GitHub Pages.', 'error');
