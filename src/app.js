@@ -1,6 +1,6 @@
 const DB_NAME = 'bilans-pwa-etap1';
 const DB_VERSION = 4;
-const APP_VERSION = '1.1-132';
+const APP_VERSION = '1.1-133';
 const RAW_DROPBOX_DEFAULT_APP_KEY = String(window.PORTFEL_PRO_CONFIG?.dropboxAppKey || '').trim();
 const DROPBOX_DEFAULT_APP_KEY = /^WSTAW_TUTAJ/i.test(RAW_DROPBOX_DEFAULT_APP_KEY) ? '' : RAW_DROPBOX_DEFAULT_APP_KEY; // Ustaw w src/config.js, wtedy użytkownik klika tylko Połącz z Dropbox.
 const MAIN_INSTALL_KEY = 'portfel-pro-main-installed';
@@ -6656,45 +6656,19 @@ function renderInventory(editIndex = null) {
           lastCategory = category;
           rows.push(`<tr class="inventory-category-row"><td colspan="8">${escapeHtml(category)}</td></tr>`);
         }
-        const isEditing = editIndex === index;
-        if (isEditing) {
-          rows.push(`
-            <tr class="is-editing" data-inventory-row="1" data-inventory-index="${index}">
-              <td><input class="inline-edit-input" data-edit-field="name" value="${escapeHtml(item.name)}"></td>
-              <td><input class="inline-edit-input small" data-edit-field="quantity" inputmode="decimal" value="${String(Number(item.quantity || 0)).replace('.', ',')}"></td>
-              <td>
-                <select class="inline-edit-input" data-edit-field="unit">
-                  ${['szt','m','kpl','rolka','opak','usł'].map(unit => `<option value="${unit}" ${String(item.unit || 'szt') === unit ? 'selected' : ''}>${unit}</option>`).join('')}
-                </select>
-              </td>
-              <td><input class="inline-edit-input small" data-edit-field="avgCost" inputmode="decimal" value="${Number(item.avgCost || 0).toFixed(2).replace('.', ',')}"></td>
-              <td>
-                <select class="inline-edit-input" data-edit-field="category">${renderInventoryCategoryOptions(category)}</select>
-              </td>
-              <td>${formatMoney(Number(item.value || 0))}</td>
-              <td>${escapeHtml(formatDateTime(item.lastUpdated || ''))}</td>
-              <td class="inventory-actions">
-                <button class="tiny-button" type="button" data-inventory-action="save" data-index="${index}">Zapisz</button>
-                <button class="tiny-button" type="button" data-inventory-action="cancel" data-index="${index}">Anuluj</button>
-                <button class="tiny-button danger-button" type="button" data-inventory-action="delete" data-index="${index}">Usuń</button>
-              </td>
-            </tr>`);
-        } else {
-          rows.push(`
-            <tr data-inventory-row="1" data-inventory-index="${index}" title="Kliknij dwa razy albo przytrzymaj, żeby edytować bez okna.">
-              <td>${escapeHtml(item.name)}</td>
-              <td>${Number(item.quantity || 0).toLocaleString('pl-PL')}</td>
-              <td>${escapeHtml(item.unit || 'szt')}</td>
-              <td>${formatMoney(Number(item.avgCost || 0))}</td>
-              <td>${escapeHtml(category)}</td>
-              <td>${formatMoney(Number(item.value || 0))}</td>
-              <td>${escapeHtml(formatDateTime(item.lastUpdated || ''))}</td>
-              <td class="inventory-actions">
-                <button class="tiny-button" type="button" data-inventory-action="edit" data-index="${index}">Edytuj</button>
-                <button class="tiny-button danger-button" type="button" data-inventory-action="delete" data-index="${index}">Usuń</button>
-              </td>
-            </tr>`);
-        }
+        rows.push(`
+          <tr data-inventory-row="1" data-inventory-index="${index}">
+            <td data-inventory-cell="name" data-index="${index}" title="Przytrzymaj, aby edytować nazwę.">${escapeHtml(item.name)}</td>
+            <td data-inventory-cell="quantity" data-index="${index}" title="Przytrzymaj, aby edytować ilość.">${Number(item.quantity || 0).toLocaleString('pl-PL')}</td>
+            <td data-inventory-cell="unit" data-index="${index}" title="Przytrzymaj, aby zmienić jednostkę.">${escapeHtml(item.unit || 'szt')}</td>
+            <td data-inventory-cell="avgCost" data-index="${index}" title="Przytrzymaj, aby edytować średni koszt.">${formatMoney(Number(item.avgCost || 0))}</td>
+            <td data-inventory-cell="category" data-index="${index}" title="Przytrzymaj, aby zmienić kategorię.">${escapeHtml(category)}</td>
+            <td>${formatMoney(Number(item.value || 0))}</td>
+            <td>${escapeHtml(formatDateTime(item.lastUpdated || ''))}</td>
+            <td class="inventory-actions">
+              <button class="tiny-button danger-button" type="button" data-inventory-action="delete" data-index="${index}">Usuń</button>
+            </td>
+          </tr>`);
       });
       el.inventoryItemsBody.innerHTML = rows.join('');
     }
@@ -6734,6 +6708,111 @@ function renderInventory(editIndex = null) {
       </tr>
     `).join('') : '<tr><td colspan="6" class="empty-state">Brak ruchów magazynowych.</td></tr>';
   }
+}
+
+function saveInventoryCellValue(index, field, rawValue) {
+  const items = getInventoryItems();
+  const item = items[index];
+  if (!item) return;
+  const next = {
+    product: item.name,
+    quantity: Number(item.quantity || 0),
+    unit: item.unit || 'szt',
+    unitCost: Number(item.avgCost || 0),
+    category: item.category || inferInventoryCategory(item.name)
+  };
+
+  if (field === 'name') {
+    next.product = normalizeInventoryProductName(rawValue || '');
+    if (!next.product) {
+      showMessage('Nazwa produktu nie może być pusta.', 'error');
+      renderInventory();
+      return;
+    }
+  }
+  if (field === 'quantity') {
+    next.quantity = Number(String(rawValue || '0').replace(',', '.'));
+    if (!Number.isFinite(next.quantity)) {
+      showMessage('Ilość musi być liczbą.', 'error');
+      renderInventory();
+      return;
+    }
+  }
+  if (field === 'unit') {
+    next.unit = String(rawValue || 'szt').trim() || 'szt';
+  }
+  if (field === 'avgCost') {
+    next.unitCost = Number(String(rawValue || '0').replace(',', '.'));
+    if (!Number.isFinite(next.unitCost)) {
+      showMessage('Średni koszt musi być liczbą.', 'error');
+      renderInventory();
+      return;
+    }
+  }
+  if (field === 'category') {
+    next.category = normalizeInventoryCategory(rawValue || inferInventoryCategory(next.product));
+  }
+
+  setInventoryItemState(item, { ...next, reason: `Edycja pola ${field} przez dłuższe przytrzymanie komórki.` });
+  showMessage('Zapisano zmianę magazynu.');
+}
+
+function startInventoryCellEdit(cell) {
+  if (!cell || cell.dataset.editing === '1') return;
+  const index = Number(cell.dataset.index);
+  const field = cell.dataset.inventoryCell;
+  const item = getInventoryItems()[index];
+  if (!item || !field) return;
+
+  cell.dataset.editing = '1';
+  cell.classList.add('inventory-cell-editing');
+  const originalHtml = cell.innerHTML;
+  let editor;
+
+  if (field === 'unit') {
+    editor = document.createElement('select');
+    editor.className = 'inline-edit-input';
+    const units = ['szt', 'm', 'kpl', 'rolka', 'opak', 'usł'];
+    const current = item.unit || 'szt';
+    const list = units.includes(current) ? units : [...units, current];
+    editor.innerHTML = list.map(unit => `<option value="${escapeHtml(unit)}" ${unit === current ? 'selected' : ''}>${escapeHtml(unit)}</option>`).join('');
+  } else if (field === 'category') {
+    editor = document.createElement('select');
+    editor.className = 'inline-edit-input';
+    editor.innerHTML = renderInventoryCategoryOptions(item.category || inferInventoryCategory(item.name));
+  } else {
+    editor = document.createElement('input');
+    editor.className = 'inline-edit-input';
+    if (field === 'quantity' || field === 'avgCost') editor.inputMode = 'decimal';
+    editor.value = field === 'name'
+      ? item.name
+      : field === 'quantity'
+        ? String(Number(item.quantity || 0)).replace('.', ',')
+        : String(Number(item.avgCost || 0).toFixed(2)).replace('.', ',');
+  }
+
+  const save = () => {
+    if (!cell.dataset.editing) return;
+    const value = editor.value;
+    cell.dataset.editing = '';
+    saveInventoryCellValue(index, field, value);
+  };
+  const cancel = () => {
+    cell.dataset.editing = '';
+    cell.classList.remove('inventory-cell-editing');
+    cell.innerHTML = originalHtml;
+  };
+
+  cell.innerHTML = '';
+  cell.appendChild(editor);
+  editor.focus();
+  if (editor.select) editor.select();
+  editor.addEventListener('keydown', event => {
+    if (event.key === 'Enter') { event.preventDefault(); save(); }
+    if (event.key === 'Escape') { event.preventDefault(); cancel(); }
+  });
+  editor.addEventListener('change', save);
+  editor.addEventListener('blur', save);
 }
 
 
@@ -6887,51 +6966,42 @@ function setupAiAndInventory() {
     const button = event.target.closest('[data-inventory-action]');
     if (!button) return;
     event.preventDefault();
+    event.stopPropagation();
     const index = Number(button.dataset.index);
-    if (button.dataset.inventoryAction === 'edit') startInlineInventoryEdit(index);
-    if (button.dataset.inventoryAction === 'save') saveInlineInventoryItem(index);
-    if (button.dataset.inventoryAction === 'cancel') cancelInlineInventoryEdit();
     if (button.dataset.inventoryAction === 'delete') deleteInventoryItem(index);
   });
   if (el.inventoryItemsBody) {
-    el.inventoryItemsBody.addEventListener('dblclick', event => {
-      if (event.target.closest('button, input, select, textarea')) return;
-      const row = event.target.closest('tr[data-inventory-row]');
-      if (!row) return;
-      startInlineInventoryEdit(Number(row.dataset.inventoryIndex));
-    });
-
     let inventoryHoldTimer = null;
     let inventoryHoldStartX = 0;
     let inventoryHoldStartY = 0;
-    let inventoryHoldRow = null;
+    let inventoryHoldCell = null;
 
     const clearInventoryHold = () => {
       if (inventoryHoldTimer) window.clearTimeout(inventoryHoldTimer);
       inventoryHoldTimer = null;
-      inventoryHoldRow = null;
+      inventoryHoldCell = null;
     };
 
     el.inventoryItemsBody.addEventListener('pointerdown', event => {
       if (event.target.closest('button, input, select, textarea')) return;
-      const row = event.target.closest('tr[data-inventory-row]');
-      if (!row) return;
+      const cell = event.target.closest('[data-inventory-cell]');
+      if (!cell) return;
       clearInventoryHold();
       inventoryHoldStartX = event.clientX || 0;
       inventoryHoldStartY = event.clientY || 0;
-      inventoryHoldRow = row;
+      inventoryHoldCell = cell;
       inventoryHoldTimer = window.setTimeout(() => {
-        if (!inventoryHoldRow || inventoryHoldRow.classList.contains('is-editing')) return;
-        startInlineInventoryEdit(Number(inventoryHoldRow.dataset.inventoryIndex));
+        if (!inventoryHoldCell) return;
+        startInventoryCellEdit(inventoryHoldCell);
         clearInventoryHold();
-      }, 600);
+      }, 650);
     }, { passive: true });
 
     el.inventoryItemsBody.addEventListener('pointermove', event => {
       if (!inventoryHoldTimer) return;
       const dx = Math.abs((event.clientX || 0) - inventoryHoldStartX);
       const dy = Math.abs((event.clientY || 0) - inventoryHoldStartY);
-      if (dx > 8 || dy > 8) clearInventoryHold();
+      if (dx > 10 || dy > 10) clearInventoryHold();
     }, { passive: true });
 
     ['pointerup', 'pointercancel', 'pointerleave'].forEach(type => {
@@ -6939,10 +7009,10 @@ function setupAiAndInventory() {
     });
 
     el.inventoryItemsBody.addEventListener('contextmenu', event => {
-      const row = event.target.closest('tr[data-inventory-row]');
-      if (!row || event.target.closest('button, input, select, textarea')) return;
+      const cell = event.target.closest('[data-inventory-cell]');
+      if (!cell || event.target.closest('button, input, select, textarea')) return;
       event.preventDefault();
-      startInlineInventoryEdit(Number(row.dataset.inventoryIndex));
+      startInventoryCellEdit(cell);
     });
   }
   if (el.inventoryPendingBody) el.inventoryPendingBody.addEventListener('click', event => {
@@ -7207,7 +7277,7 @@ function bindEvents() {
 async function init() {
   const today = todayISO();
   document.title = 'Portfel PRO';
-  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.1 / 132';
+  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.1 / 133';
   setTodayHeader('wczytywanie...');
   if (isFileProtocol()) {
     showMessage('Program został otwarty bezpośrednio z index.html. Do importu JSON, PWA i cache użyj serwera lokalnego albo GitHub Pages.', 'error');

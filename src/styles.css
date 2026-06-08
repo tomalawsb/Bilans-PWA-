@@ -1979,3 +1979,23 @@ body[data-theme="dark"] #todayLabel[data-status="missing"] {
     min-height: 54px;
   }
 }
+
+
+/* Magazyn v133: edycja konkretnej komórki tylko przez dłuższe przytrzymanie. */
+.inventory-table td[data-inventory-cell] {
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.inventory-table td[data-inventory-cell]::after {
+  content: "";
+}
+
+.inventory-table td.inventory-cell-editing {
+  background: #fffbeb !important;
+  min-width: 140px;
+}
+
+.inventory-table td.inventory-cell-editing .inline-edit-input {
+  min-width: 130px;
+}

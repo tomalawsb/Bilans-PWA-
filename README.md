@@ -1,21 +1,26 @@
-# Portfel PRO v. 1.1 / 132 — poprawka widoku magazynu na telefonie i edycji przytrzymaniem
+# Portfel PRO v. 1.1 / 133 — magazyn: edycja komórek przytrzymaniem
 
-Wersja: **1.1 / 132**  
-Data: 08.06.2026
+Wersja: **1.1 / 133**  
+Data: **08.06.2026**
 
-## Co poprawiono
+## Zmiany
 
-- Przywrócono widoczność tabel magazynu na telefonie. W poprzedniej wersji globalny styl mobilny ukrywał `.table-wrap`, przez co licznik pokazywał pozycje, ale lista produktów nie była widoczna.
-- Poprawiono edycję pozycji magazynowej przez dłuższe przytrzymanie wiersza na komputerze i telefonie.
-- Nadal działa edycja przez dwuklik w wiersz oraz przez przycisk **Edytuj**.
-- Usunięto błąd w renderowaniu wiersza edycji inline.
-- Podbito cache PWA do wersji `v=132`.
-- Skrypt `upload_to_github.ps1` ma wpisane repozytorium: `https://github.com/tomalawsb/Bilans-PWA-.git`.
+- Usunięto edycję przez przycisk **Edytuj** w magazynie.
+- Usunięto edycję przez dwuklik.
+- Edycja magazynu działa tylko przez dłuższe przytrzymanie konkretnej komórki.
+- Przytrzymanie nazwy edytuje tylko nazwę produktu.
+- Przytrzymanie ilości edytuje tylko ilość.
+- Przytrzymanie jednostki pokazuje wybór jednostki.
+- Przytrzymanie średniego kosztu edytuje tylko koszt.
+- Przytrzymanie kategorii pokazuje wybór kategorii.
+- Poprawiono obsługę przycisku **Usuń** w magazynie.
+- Usuwanie nadal działa bez potwierdzania, z krótkim przyciskiem **Cofnij**.
+- Podbito cache PWA do wersji `v=133`.
+- Zaktualizowano skrypt `upload_to_github.ps1` z wpisanym repozytorium:
+  `https://github.com/tomalawsb/Bilans-PWA-.git`.
 
 ## Adres po wdrożeniu
 
 ```text
-https://tomalawsb.github.io/Bilans-PWA-/?v=132
+https://tomalawsb.github.io/Bilans-PWA-/?v=133
 ```
-
-Jeżeli przeglądarka pokaże starszą wersję, użyj w programie opcji odświeżenia aplikacji albo otwórz stronę z parametrem `?v=132`.
