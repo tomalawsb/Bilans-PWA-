@@ -1,6 +1,6 @@
-# Portfel PRO v. 1.1 / 130 — synchronizacja magazynu między urządzeniami
+# Portfel PRO v. 1.1 / 131 — synchronizacja magazynu między urządzeniami
 
-Wersja: **1.1 / 130**  
+Wersja: **1.1 / 131**  
 Data paczki: **08.06.2026**
 
 ## Co poprawiono w tej wersji
@@ -23,17 +23,17 @@ Data paczki: **08.06.2026**
   - dopiero wtedy wykonuje commit i `push`,
   - nie powinien już robić problemów typu `fetch first`, `non-fast-forward` albo `cannot rebase`.
 - Dodano `.gitattributes`, żeby ograniczyć problemy z końcami linii LF/CRLF.
-- Podbito cache PWA do wersji `v=130`.
+- Podbito cache PWA do wersji `v=131`.
 
 ## Adres po wysłaniu na GitHub Pages
 
 Po wysłaniu paczki na GitHub otwieraj:
 
 ```text
-https://tomalawsb.github.io/Bilans-PWA-/?v=130
+https://tomalawsb.github.io/Bilans-PWA-/?v=131
 ```
 
-Jeżeli przeglądarka pokaże starszą wersję, użyj w programie opcji odświeżenia aplikacji albo otwórz stronę z parametrem `?v=130`.
+Jeżeli przeglądarka pokaże starszą wersję, użyj w programie opcji odświeżenia aplikacji albo otwórz stronę z parametrem `?v=131`.
 
 ## Jak wysłać paczkę na GitHub
 
