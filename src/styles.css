@@ -1769,3 +1769,38 @@ body[data-theme="dark"] #todayLabel[data-status="missing"] {
   color: #a8b6ca !important;
   font-weight: 400 !important;
 }
+
+
+.ai-settings-grid,
+.inventory-toolbar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+
+.ai-settings-grid .wide,
+.inventory-toolbar .wide {
+  grid-column: 1 / -1;
+}
+
+.settings-status,
+.inventory-summary {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--surface-muted, #f3f4f6);
+  color: var(--text-main, #111827);
+}
+
+.inventory-summary {
+  margin: 12px 0;
+}
+
+.danger-text {
+  color: #b91c1c;
+}
+
+.inventory-table td,
+.inventory-movements-table td {
+  vertical-align: top;
+}

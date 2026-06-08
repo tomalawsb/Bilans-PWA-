@@ -1,6 +1,6 @@
 const DB_NAME = 'bilans-pwa-etap1';
 const DB_VERSION = 4;
-const APP_VERSION = '1.1-125';
+const APP_VERSION = '1.1-126';
 const RAW_DROPBOX_DEFAULT_APP_KEY = String(window.PORTFEL_PRO_CONFIG?.dropboxAppKey || '').trim();
 const DROPBOX_DEFAULT_APP_KEY = /^WSTAW_TUTAJ/i.test(RAW_DROPBOX_DEFAULT_APP_KEY) ? '' : RAW_DROPBOX_DEFAULT_APP_KEY; // Ustaw w src/config.js, wtedy użytkownik klika tylko Połącz z Dropbox.
 const MAIN_INSTALL_KEY = 'portfel-pro-main-installed';
@@ -24,6 +24,11 @@ const CUSTOM_CATEGORIES_KEY = 'portfel-pro-custom-categories-v1';
 const WALLET_MONTHS_KEY = 'portfel-pro-wallet-months-v1';
 const LEARNING_AUTO_CONFIRMATIONS = 2;
 const LEARNING_MAX_EXAMPLES = 8;
+const AI_SETTINGS_KEY = 'portfel-pro-ai-settings-v1';
+const INVENTORY_ITEMS_KEY = 'portfel-pro-inventory-items-v1';
+const INVENTORY_MOVEMENTS_KEY = 'portfel-pro-inventory-movements-v1';
+const INVENTORY_ANALYSIS_KEY = 'portfel-pro-inventory-analysis-v1';
+const INVENTORY_PENDING_KEY = 'portfel-pro-inventory-pending-v1';
 
 const THEMES = {
   classic: { name: 'Jasny klasyczny', color: '#f6f3ea' },
@@ -763,6 +768,23 @@ const el = {
   entriesTableBody: document.querySelector('#entriesTableBody'),
   mobileEntries: document.querySelector('#mobileEntries'),
   themeSelect: document.querySelector('#themeSelect'),
+  aiProviderSelect: document.querySelector('#aiProviderSelect'),
+  aiApiKeyInput: document.querySelector('#aiApiKeyInput'),
+  aiModelSelect: document.querySelector('#aiModelSelect'),
+  aiCustomModelInput: document.querySelector('#aiCustomModelInput'),
+  aiTestKeyButton: document.querySelector('#aiTestKeyButton'),
+  aiSaveSettingsButton: document.querySelector('#aiSaveSettingsButton'),
+  aiClearKeyButton: document.querySelector('#aiClearKeyButton'),
+  aiSettingsStatus: document.querySelector('#aiSettingsStatus'),
+  inventoryRecognizeButton: document.querySelector('#inventoryRecognizeButton'),
+  inventoryRebuildButton: document.querySelector('#inventoryRebuildButton'),
+  inventoryPeriodSelect: document.querySelector('#inventoryPeriodSelect'),
+  inventoryFromDate: document.querySelector('#inventoryFromDate'),
+  inventoryToDate: document.querySelector('#inventoryToDate'),
+  inventoryMinConfidence: document.querySelector('#inventoryMinConfidence'),
+  inventorySummary: document.querySelector('#inventorySummary'),
+  inventoryItemsBody: document.querySelector('#inventoryItemsBody'),
+  inventoryMovementsBody: document.querySelector('#inventoryMovementsBody'),
   themeCards: Array.from(document.querySelectorAll('[data-theme-option]'))
 };
 
@@ -4337,7 +4359,7 @@ function collectImportedEntries(payload) {
     }
   }
 
-  const ignoredKeys = new Set(['tagRules', 'learningRules', 'deletedEntries', 'walletMonths', 'customCategories', 'mainReportSettings']);
+  const ignoredKeys = new Set(['tagRules', 'learningRules', 'deletedEntries', 'walletMonths', 'customCategories', 'mainReportSettings', 'inventoryItems', 'inventoryMovements', 'inventoryAnalysis']);
   for (const [key, value] of Object.entries(payload)) {
     if (ignoredKeys.has(key)) continue;
     if (Array.isArray(value)) {
@@ -4692,6 +4714,10 @@ function makeExportPayload() {
     walletMonths: getWalletMonths(),
     customCategories,
     mainReportSettings: getMainReportSettings(),
+    inventoryItems: getInventoryItems(),
+    inventoryMovements: getInventoryMovements(),
+    inventoryAnalysis: getInventoryAnalysis(),
+    aiSettings: getAiSettingsForExport(),
     entries: allEntries.map(entry => ({
       ...entry,
       syncId: entry.syncId || makeSyncId('entry'),
@@ -4761,6 +4787,7 @@ async function importPayload(payload, options = {}) {
   importCustomCategoriesFromPayload(payload, replace);
   await importLearningRulesFromPayload(payload, replace);
   importWalletMonthsFromPayload(payload, replace);
+  importInventoryFromPayload(payload, replace);
   const imported = collectImportedEntries(payload);
 
   if (replace) {
@@ -4784,7 +4811,7 @@ async function importPayload(payload, options = {}) {
       payload?.walletMonths || payload?.wallet_months ||
       payload?.customCategories || payload?.custom_categories ||
       payload?.mainReportSettings || payload?.main_report_settings ||
-      payload?.tagRules || payload?.learningRules
+      payload?.tagRules || payload?.learningRules || payload?.inventoryItems || payload?.inventoryMovements || payload?.inventoryAnalysis
     );
     if (replace || deletionResult.deleted || importedSettingsOnly) {
       if (!silent) showMessage(`Import zakończony. Dodano wpisy: 0, zaktualizowano: 0, usunięto: ${deletionResult.deleted}.`);
@@ -5793,6 +5820,586 @@ function setupVoiceMode() {
   }
 }
 
+
+function safeJsonParseLocalStorage(key, fallback) {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(key) || 'null');
+    return parsed ?? fallback;
+  } catch (_) {
+    return fallback;
+  }
+}
+
+function setJsonLocalStorage(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch (_) {}
+}
+
+const AI_MODEL_OPTIONS = {
+  gemini: ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash', 'gemini-2.5-flash'],
+  openai: ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'gpt-4.1']
+};
+
+function getAiSettings() {
+  const saved = safeJsonParseLocalStorage(AI_SETTINGS_KEY, {});
+  const provider = ['gemini', 'openai'].includes(saved.provider) ? saved.provider : 'gemini';
+  const models = AI_MODEL_OPTIONS[provider] || [];
+  return {
+    provider,
+    apiKey: String(saved.apiKey || '').trim(),
+    model: String(saved.model || models[0] || '').trim(),
+    customModel: String(saved.customModel || '').trim()
+  };
+}
+
+function getAiSettingsForExport() {
+  const settings = getAiSettings();
+  return { provider: settings.provider, model: settings.model, customModel: settings.customModel, apiKeySaved: Boolean(settings.apiKey) };
+}
+
+function getSelectedAiModel(settings = getAiSettings()) {
+  return String(settings.customModel || settings.model || '').trim();
+}
+
+function saveAiSettingsFromForm() {
+  const current = getAiSettings();
+  const provider = el.aiProviderSelect?.value || current.provider;
+  const settings = {
+    provider,
+    apiKey: String(el.aiApiKeyInput?.value || current.apiKey || '').trim(),
+    model: String(el.aiModelSelect?.value || current.model || '').trim(),
+    customModel: String(el.aiCustomModelInput?.value || '').trim()
+  };
+  setJsonLocalStorage(AI_SETTINGS_KEY, settings);
+  renderAiSettings();
+  showMessage('Zapisano ustawienia AI.');
+  return settings;
+}
+
+function renderAiModelOptions(provider) {
+  if (!el.aiModelSelect) return;
+  const current = getAiSettings();
+  const models = AI_MODEL_OPTIONS[provider] || [];
+  el.aiModelSelect.innerHTML = models.map(model => `<option value="${escapeHtml(model)}">${escapeHtml(model)}</option>`).join('');
+  if (models.includes(current.model)) el.aiModelSelect.value = current.model;
+}
+
+function renderAiSettings() {
+  const settings = getAiSettings();
+  if (el.aiProviderSelect) el.aiProviderSelect.value = settings.provider;
+  renderAiModelOptions(settings.provider);
+  if (el.aiModelSelect && settings.model) el.aiModelSelect.value = settings.model;
+  if (el.aiApiKeyInput) el.aiApiKeyInput.value = settings.apiKey;
+  if (el.aiCustomModelInput) el.aiCustomModelInput.value = settings.customModel;
+  if (el.aiSettingsStatus) {
+    const model = getSelectedAiModel(settings) || 'brak modelu';
+    el.aiSettingsStatus.textContent = settings.apiKey ? `Klucz zapisany · ${settings.provider} · ${model}` : `Brak zapisanego klucza · ${settings.provider} · ${model}`;
+  }
+}
+
+async function testAiKey() {
+  const settings = saveAiSettingsFromForm();
+  if (!settings.apiKey) throw new Error('Wpisz klucz API.');
+  const provider = settings.provider;
+  if (el.aiSettingsStatus) el.aiSettingsStatus.textContent = 'Sprawdzam klucz...';
+  let response;
+  if (provider === 'openai') {
+    response = await fetch('https://api.openai.com/v1/models', {
+      headers: { Authorization: `Bearer ${settings.apiKey}` }
+    });
+  } else {
+    response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(settings.apiKey)}`);
+  }
+  if (!response.ok) throw new Error(`Klucz nie przeszedł testu. Kod HTTP: ${response.status}.`);
+  if (el.aiSettingsStatus) el.aiSettingsStatus.textContent = 'Klucz API działa.';
+  showMessage('Klucz API działa.');
+}
+
+function getInventoryItems() {
+  const items = safeJsonParseLocalStorage(INVENTORY_ITEMS_KEY, []);
+  return Array.isArray(items) ? items : [];
+}
+
+function saveInventoryItems(items) {
+  setJsonLocalStorage(INVENTORY_ITEMS_KEY, Array.isArray(items) ? items : []);
+}
+
+function getInventoryMovements() {
+  const items = safeJsonParseLocalStorage(INVENTORY_MOVEMENTS_KEY, []);
+  return Array.isArray(items) ? items : [];
+}
+
+function saveInventoryMovements(items) {
+  setJsonLocalStorage(INVENTORY_MOVEMENTS_KEY, Array.isArray(items) ? items : []);
+}
+
+function getInventoryAnalysis() {
+  const data = safeJsonParseLocalStorage(INVENTORY_ANALYSIS_KEY, {});
+  return data && typeof data === 'object' && !Array.isArray(data) ? data : {};
+}
+
+function saveInventoryAnalysis(data) {
+  setJsonLocalStorage(INVENTORY_ANALYSIS_KEY, data && typeof data === 'object' ? data : {});
+}
+
+function inventoryEntryKey(entry) {
+  return String(entry?.syncId || entry?.id || '');
+}
+
+function inventoryEntryHash(entry) {
+  const source = [entry?.entryDate, entry?.entryType, entry?.scope, entry?.amount, entry?.description, entry?.originalText, entry?.category, entry?.tags?.join?.(',') || entry?.tags || ''].join('|');
+  let hash = 0;
+  for (let i = 0; i < source.length; i += 1) {
+    hash = ((hash << 5) - hash) + source.charCodeAt(i);
+    hash |= 0;
+  }
+  return String(hash);
+}
+
+function normalizeInventoryProductName(value) {
+  const raw = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!raw) return '';
+  return raw.charAt(0).toUpperCase() + raw.slice(1);
+}
+
+function inventoryProductKey(name, unit = '') {
+  return `${normalizeText(name)}|${normalizeText(unit || 'szt')}`;
+}
+
+function getInventoryPeriodRange() {
+  const today = todayISO();
+  const currentMonth = today.slice(0, 7);
+  const mode = el.inventoryPeriodSelect?.value || 'current';
+  if (mode === 'custom') {
+    const from = el.inventoryFromDate?.value || `${currentMonth}-01`;
+    const to = el.inventoryToDate?.value || today;
+    return { from, to };
+  }
+  if (mode === 'previous') {
+    const base = new Date(`${currentMonth}-01T12:00:00`);
+    base.setMonth(base.getMonth() - 1);
+    const month = base.toISOString().slice(0, 7);
+    const last = new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate();
+    return { from: `${month}-01`, to: `${month}-${String(last).padStart(2, '0')}` };
+  }
+  const last = new Date(Number(currentMonth.slice(0, 4)), Number(currentMonth.slice(5, 7)), 0).getDate();
+  return { from: `${currentMonth}-01`, to: `${currentMonth}-${String(last).padStart(2, '0')}` };
+}
+
+function getInventoryCandidates() {
+  const { from, to } = getInventoryPeriodRange();
+  const analysis = getInventoryAnalysis();
+  const candidates = [];
+  let skippedChecked = 0;
+  let skippedNonCompany = 0;
+  for (const entry of allEntries || []) {
+    if (!['przychód', 'wydatek'].includes(entry.entryType)) continue;
+    if (normalizeScope(entry.scope) !== 'firmowe') { skippedNonCompany += 1; continue; }
+    if (entry.entryDate < from || entry.entryDate > to) continue;
+    const key = inventoryEntryKey(entry);
+    const hash = inventoryEntryHash(entry);
+    if (analysis[key]?.entryHash === hash) { skippedChecked += 1; continue; }
+    candidates.push(entry);
+  }
+  return { candidates, skippedChecked, skippedNonCompany, from, to };
+}
+
+function buildInventoryAiPrompt(entries) {
+  const compactEntries = entries.map(entry => ({
+    id_wpisu: inventoryEntryKey(entry),
+    data: entry.entryDate,
+    typ: entry.entryType,
+    firmowy: normalizeScope(entry.scope) === 'firmowe',
+    kategoria: entry.category || '',
+    kwota: Number(entry.amount || 0),
+    opis: String(entry.description || ''),
+    tekst_zrodlowy: String(entry.originalText || ''),
+    tagi: Array.isArray(entry.tags) ? entry.tags.join(', ') : String(entry.tags || '')
+  }));
+  return `Jesteś modułem magazynu w polskiej aplikacji Portfel PRO. Analizujesz wyłącznie firmowe przychody i firmowe wydatki. Zwróć tylko JSON zgodny ze schematem.\n\nZasady:\n- Wydatek firmowy dodaje towar do magazynu tylko wtedy, gdy opis oznacza zakup towaru/materiału na magazyn, do sprzedaży albo do zużycia przy montażu.\n- Przychód firmowy zdejmuje towar z magazynu tylko wtedy, gdy opis jasno mówi o sprzedaży, odsprzedaży, wydaniu z magazynu albo montażu i sprzedaży.\n- Sam montaż, instalacja, konfiguracja, serwis albo robocizna bez słowa sprzedaż nie zdejmuje towaru.\n- Paliwo, ZUS, podatki, księgowość, parking, telefon, internet i typowe koszty firmowe nie są ruchem magazynowym.\n- Liczby techniczne typu 5MP, 8 kanałów, 12V, 1TB nie są ilością.\n- Jeśli nie masz pewności, ustaw decyzja = wymaga_sprawdzenia.\n- Decyzje: dodaj_do_magazynu, zdejmij_z_magazynu, zwrot_do_magazynu, zwrot_do_sklepu, brak_ruchu, wymaga_sprawdzenia.\n- Jednostki: szt, m, rolka, komplet, opakowanie.\n\nWpisy:\n${JSON.stringify(compactEntries, null, 2)}`;
+}
+
+function getInventoryResponseSchema() {
+  return {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      analiza: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            id_wpisu: { type: 'string' },
+            decyzja: { type: 'string', enum: ['dodaj_do_magazynu', 'zdejmij_z_magazynu', 'zwrot_do_magazynu', 'zwrot_do_sklepu', 'brak_ruchu', 'wymaga_sprawdzenia'] },
+            produkt: { type: ['string', 'null'] },
+            ilosc: { type: ['number', 'null'] },
+            jednostka: { type: ['string', 'null'] },
+            cena_jednostkowa: { type: ['number', 'null'] },
+            pewnosc: { type: 'number' },
+            powod: { type: 'string' }
+          },
+          required: ['id_wpisu', 'decyzja', 'produkt', 'ilosc', 'jednostka', 'cena_jednostkowa', 'pewnosc', 'powod']
+        }
+      }
+    },
+    required: ['analiza']
+  };
+}
+
+function extractJsonObject(text) {
+  const raw = String(text || '').trim();
+  if (!raw) throw new Error('AI zwróciła pustą odpowiedź.');
+  try { return JSON.parse(raw); } catch (_) {}
+  const start = raw.indexOf('{');
+  const end = raw.lastIndexOf('}');
+  if (start >= 0 && end > start) return JSON.parse(raw.slice(start, end + 1));
+  throw new Error('AI nie zwróciła poprawnego JSON.');
+}
+
+async function callInventoryAi(entries) {
+  const settings = getAiSettings();
+  const model = getSelectedAiModel(settings);
+  if (!settings.apiKey) throw new Error('Brak klucza API. Wpisz go w Ustawieniach AI.');
+  if (!model) throw new Error('Wybierz model AI w ustawieniach.');
+  const prompt = buildInventoryAiPrompt(entries);
+  if (settings.provider === 'openai') {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${settings.apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0,
+        messages: [
+          { role: 'system', content: 'Zwracasz wyłącznie JSON. Nie dodawaj komentarzy poza JSON.' },
+          { role: 'user', content: prompt }
+        ],
+        response_format: {
+          type: 'json_schema',
+          json_schema: { name: 'inventory_analysis', strict: true, schema: getInventoryResponseSchema() }
+        }
+      })
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload?.error?.message || `OpenAI zwróciło błąd HTTP ${response.status}.`);
+    return extractJsonObject(payload?.choices?.[0]?.message?.content || '');
+  }
+
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(settings.apiKey)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      generationConfig: { temperature: 0, responseMimeType: 'application/json' },
+      contents: [{ role: 'user', parts: [{ text: prompt }] }]
+    })
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload?.error?.message || `Gemini zwróciło błąd HTTP ${response.status}.`);
+  const text = payload?.candidates?.[0]?.content?.parts?.map(part => part.text || '').join('') || '';
+  return extractJsonObject(text);
+}
+
+function normalizeAiDecision(raw, entryByKey) {
+  const entry = entryByKey.get(String(raw?.id_wpisu || ''));
+  if (!entry) return null;
+  const decision = String(raw.decyzja || 'wymaga_sprawdzenia');
+  const product = normalizeInventoryProductName(raw.produkt || '');
+  const quantity = Number(raw.ilosc || 0);
+  const unit = String(raw.jednostka || 'szt').trim() || 'szt';
+  const confidence = Math.max(0, Math.min(1, Number(raw.pewnosc || 0)));
+  const unitCost = Number(raw.cena_jednostkowa || 0) || (quantity > 0 ? Number(entry.amount || 0) / quantity : 0);
+  return {
+    entry,
+    id_wpisu: inventoryEntryKey(entry),
+    entryHash: inventoryEntryHash(entry),
+    decision,
+    product,
+    quantity,
+    unit,
+    unitCost,
+    confidence,
+    reason: String(raw.powod || '').trim()
+  };
+}
+
+function decisionToMovementType(decision) {
+  if (['dodaj_do_magazynu', 'zwrot_do_magazynu'].includes(decision)) return 'in';
+  if (['zdejmij_z_magazynu', 'zwrot_do_sklepu'].includes(decision)) return 'out';
+  return '';
+}
+
+function buildPendingInventoryAnalysis(aiPayload, candidates) {
+  const minConfidence = Math.max(0, Math.min(100, Number(el.inventoryMinConfidence?.value || 85))) / 100;
+  const entryByKey = new Map(candidates.map(entry => [inventoryEntryKey(entry), entry]));
+  const decisions = Array.isArray(aiPayload?.analiza) ? aiPayload.analiza.map(item => normalizeAiDecision(item, entryByKey)).filter(Boolean) : [];
+  const results = decisions.map(item => {
+    const movementType = decisionToMovementType(item.decision);
+    const canApply = Boolean(movementType && item.product && item.quantity > 0 && item.confidence >= minConfidence);
+    return { ...item, movementType, canApply };
+  });
+  const returned = new Set(results.map(item => item.id_wpisu));
+  for (const entry of candidates) {
+    const key = inventoryEntryKey(entry);
+    if (!returned.has(key)) {
+      results.push({
+        entry,
+        id_wpisu: key,
+        entryHash: inventoryEntryHash(entry),
+        decision: 'wymaga_sprawdzenia',
+        product: '',
+        quantity: 0,
+        unit: 'szt',
+        unitCost: 0,
+        confidence: 0,
+        reason: 'AI nie zwróciła decyzji dla tego wpisu.',
+        movementType: '',
+        canApply: false
+      });
+    }
+  }
+  return { createdAt: new Date().toISOString(), minConfidence, results };
+}
+
+function applyInventoryMovementsFromPending(pending) {
+  const now = new Date().toISOString();
+  const movements = getInventoryMovements();
+  const analysis = getInventoryAnalysis();
+  let newMovements = movements.slice();
+  let applied = 0;
+  let checkedNoMove = 0;
+  for (const item of pending.results || []) {
+    const key = item.id_wpisu;
+    const previousIds = new Set(analysis[key]?.movementIds || []);
+    if (previousIds.size) newMovements = newMovements.filter(movement => !previousIds.has(movement.id));
+    const movementIds = [];
+    if (item.canApply) {
+      const quantity = item.movementType === 'out' ? -Math.abs(Number(item.quantity || 0)) : Math.abs(Number(item.quantity || 0));
+      const movement = {
+        id: `mov-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+        entryKey: key,
+        entrySyncId: item.entry?.syncId || '',
+        entryLocalId: item.entry?.id || '',
+        entryHash: item.entryHash,
+        entryDate: item.entry?.entryDate || todayISO(),
+        entryType: item.entry?.entryType || '',
+        action: item.decision,
+        product: item.product,
+        quantity,
+        unit: item.unit || 'szt',
+        unitCost: Number(item.unitCost || 0),
+        confidence: Number(item.confidence || 0),
+        reason: item.reason || '',
+        sourceDescription: item.entry?.description || item.entry?.originalText || '',
+        createdAt: now
+      };
+      newMovements.push(movement);
+      movementIds.push(movement.id);
+      applied += 1;
+    } else {
+      checkedNoMove += 1;
+    }
+    analysis[key] = {
+      entryHash: item.entryHash,
+      checkedAt: now,
+      decision: item.decision,
+      movementIds,
+      confidence: item.confidence,
+      reason: item.reason
+    };
+  }
+  saveInventoryMovements(newMovements);
+  saveInventoryAnalysis(analysis);
+  rebuildInventoryItemsFromMovements(false);
+  renderInventory();
+  scheduleDropboxAutoSync();
+  return { applied, checkedNoMove };
+}
+
+function rebuildInventoryItemsFromMovements(show = true) {
+  const movements = getInventoryMovements().slice().sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
+  const map = new Map();
+  for (const movement of movements) {
+    const key = inventoryProductKey(movement.product, movement.unit);
+    if (!map.has(key)) {
+      map.set(key, { id: `item-${key}`, name: movement.product, unit: movement.unit || 'szt', quantity: 0, totalCost: 0, lastUpdated: movement.createdAt || '' });
+    }
+    const item = map.get(key);
+    const qty = Number(movement.quantity || 0);
+    item.quantity += qty;
+    if (qty > 0) item.totalCost += qty * Number(movement.unitCost || 0);
+    if (qty < 0 && item.quantity >= 0) item.totalCost = Math.max(0, item.totalCost + qty * (item.totalCost / Math.max(item.quantity - qty, 1)));
+    item.lastUpdated = movement.createdAt || item.lastUpdated;
+  }
+  const items = Array.from(map.values()).map(item => ({
+    ...item,
+    quantity: Number(item.quantity.toFixed(3)),
+    avgCost: item.quantity > 0 ? item.totalCost / item.quantity : 0,
+    value: item.quantity > 0 ? item.totalCost : 0
+  })).sort((a, b) => a.name.localeCompare(b.name, 'pl'));
+  saveInventoryItems(items);
+  if (show) showMessage('Przeliczono stan magazynu z historii ruchów.');
+  return items;
+}
+
+function renderInventory() {
+  const items = getInventoryItems();
+  const movements = getInventoryMovements().slice().sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+  if (el.inventorySummary) {
+    const totalValue = items.reduce((sum, item) => sum + Number(item.value || 0), 0);
+    const negative = items.filter(item => Number(item.quantity || 0) < 0).length;
+    el.inventorySummary.innerHTML = `Pozycji: <b>${items.length}</b> · Ruchów: <b>${movements.length}</b> · Wartość: <b>${formatMoney(totalValue)}</b>${negative ? ` · <b class="danger-text">Ujemne stany: ${negative}</b>` : ''}`;
+  }
+  if (el.inventoryItemsBody) {
+    el.inventoryItemsBody.innerHTML = items.length ? items.map(item => `
+      <tr>
+        <td>${escapeHtml(item.name)}</td>
+        <td>${Number(item.quantity || 0).toLocaleString('pl-PL')}</td>
+        <td>${escapeHtml(item.unit || 'szt')}</td>
+        <td>${formatMoney(Number(item.avgCost || 0))}</td>
+        <td>${formatMoney(Number(item.value || 0))}</td>
+        <td>${escapeHtml(formatDateTime(item.lastUpdated || ''))}</td>
+      </tr>
+    `).join('') : '<tr><td colspan="6" class="empty-state">Brak pozycji magazynowych.</td></tr>';
+  }
+  if (el.inventoryMovementsBody) {
+    el.inventoryMovementsBody.innerHTML = movements.length ? movements.slice(0, 100).map(movement => `
+      <tr>
+        <td>${escapeHtml(formatDateTime(movement.createdAt || ''))}</td>
+        <td>${escapeHtml(formatInventoryAction(movement.action))}</td>
+        <td>${escapeHtml(movement.product)}</td>
+        <td>${Number(movement.quantity || 0).toLocaleString('pl-PL')} ${escapeHtml(movement.unit || 'szt')}</td>
+        <td>${escapeHtml(movement.sourceDescription || movement.entryKey || '')}</td>
+      </tr>
+    `).join('') : '<tr><td colspan="5" class="empty-state">Brak ruchów magazynowych.</td></tr>';
+  }
+}
+
+function formatInventoryAction(action) {
+  const labels = {
+    dodaj_do_magazynu: 'Dodanie',
+    zdejmij_z_magazynu: 'Zdjęcie',
+    zwrot_do_magazynu: 'Zwrot do magazynu',
+    zwrot_do_sklepu: 'Zwrot do sklepu'
+  };
+  return labels[action] || action || '';
+}
+
+function formatDateTime(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleString('pl-PL');
+}
+
+function showInventoryPendingPopup(pending, skippedChecked = 0) {
+  const applicable = pending.results.filter(item => item.canApply);
+  const review = pending.results.filter(item => !item.canApply && item.decision === 'wymaga_sprawdzenia');
+  const noMove = pending.results.filter(item => !item.canApply && item.decision === 'brak_ruchu');
+  const lines = [];
+  lines.push(`Rozpoznano wpisów: ${pending.results.length}`);
+  lines.push(`Do zastosowania automatycznie: ${applicable.length}`);
+  lines.push(`Bez ruchu magazynowego: ${noMove.length}`);
+  lines.push(`Do ręcznego sprawdzenia: ${review.length}`);
+  lines.push(`Pominięte jako już sprawdzone: ${skippedChecked}`);
+  if (applicable.length) {
+    lines.push('');
+    lines.push('Zmiany:');
+    for (const item of applicable.slice(0, 12)) {
+      const sign = item.movementType === 'out' ? '-' : '+';
+      lines.push(`${sign}${item.quantity} ${item.unit} · ${item.product} · ${(item.confidence * 100).toFixed(0)}%`);
+    }
+    if (applicable.length > 12) lines.push(`...i jeszcze ${applicable.length - 12} pozycji.`);
+  }
+  lines.push('');
+  lines.push('Zastosować zaakceptowane zmiany magazynowe?');
+  return window.confirm(lines.join('\n'));
+}
+
+async function runInventoryRecognition() {
+  await reloadEntries();
+  const { candidates, skippedChecked, from, to } = getInventoryCandidates();
+  if (!candidates.length) {
+    showMessage(`Brak nowych lub zmienionych firmowych wpisów do analizy za okres ${from} — ${to}.`);
+    renderInventory();
+    return;
+  }
+  showMessage(`Wysyłam do AI ${candidates.length} wpisów z okresu ${from} — ${to}...`);
+  const aiPayload = await callInventoryAi(candidates);
+  const pending = buildPendingInventoryAnalysis(aiPayload, candidates);
+  setJsonLocalStorage(INVENTORY_PENDING_KEY, pending);
+  const accepted = showInventoryPendingPopup(pending, skippedChecked);
+  if (!accepted) {
+    showMessage('Analiza AI została przygotowana, ale nie zapisano zmian w magazynie.', 'error');
+    return;
+  }
+  const result = applyInventoryMovementsFromPending(pending);
+  showMessage(`Magazyn zaktualizowany. Zastosowano: ${result.applied}, zapisano bez ruchu: ${result.checkedNoMove}.`);
+}
+
+function importInventoryFromPayload(payload, replace = false) {
+  if (!payload || typeof payload !== 'object') return;
+  if (replace) {
+    if (Array.isArray(payload.inventoryItems)) saveInventoryItems(payload.inventoryItems);
+    if (Array.isArray(payload.inventoryMovements)) saveInventoryMovements(payload.inventoryMovements);
+    if (payload.inventoryAnalysis && typeof payload.inventoryAnalysis === 'object') saveInventoryAnalysis(payload.inventoryAnalysis);
+    rebuildInventoryItemsFromMovements(false);
+    return;
+  }
+  if (Array.isArray(payload.inventoryMovements)) {
+    const current = getInventoryMovements();
+    const byId = new Map(current.map(item => [item.id, item]));
+    for (const movement of payload.inventoryMovements) {
+      if (movement?.id && !byId.has(movement.id)) byId.set(movement.id, movement);
+    }
+    saveInventoryMovements(Array.from(byId.values()));
+  }
+  if (payload.inventoryAnalysis && typeof payload.inventoryAnalysis === 'object') {
+    saveInventoryAnalysis({ ...getInventoryAnalysis(), ...payload.inventoryAnalysis });
+  }
+  rebuildInventoryItemsFromMovements(false);
+}
+
+function setupAiAndInventory() {
+  renderAiSettings();
+  renderInventory();
+  if (el.inventoryFromDate && !el.inventoryFromDate.value) el.inventoryFromDate.value = `${todayISO().slice(0, 7)}-01`;
+  if (el.inventoryToDate && !el.inventoryToDate.value) el.inventoryToDate.value = todayISO();
+  if (el.aiProviderSelect) el.aiProviderSelect.addEventListener('change', () => {
+    const settings = getAiSettings();
+    setJsonLocalStorage(AI_SETTINGS_KEY, { ...settings, provider: el.aiProviderSelect.value, model: (AI_MODEL_OPTIONS[el.aiProviderSelect.value] || [])[0] || '', customModel: '' });
+    renderAiSettings();
+  });
+  if (el.aiSaveSettingsButton) el.aiSaveSettingsButton.addEventListener('click', event => {
+    event.preventDefault();
+    saveAiSettingsFromForm();
+  });
+  if (el.aiTestKeyButton) el.aiTestKeyButton.addEventListener('click', event => {
+    event.preventDefault();
+    testAiKey().catch(error => {
+      if (el.aiSettingsStatus) el.aiSettingsStatus.textContent = error.message;
+      showMessage(error.message, 'error');
+    });
+  });
+  if (el.aiClearKeyButton) el.aiClearKeyButton.addEventListener('click', event => {
+    event.preventDefault();
+    const settings = getAiSettings();
+    setJsonLocalStorage(AI_SETTINGS_KEY, { ...settings, apiKey: '' });
+    renderAiSettings();
+    showMessage('Usunięto zapisany klucz API.');
+  });
+  if (el.inventoryRecognizeButton) el.inventoryRecognizeButton.addEventListener('click', event => {
+    event.preventDefault();
+    runInventoryRecognition().catch(error => showMessage(error.message || 'Nie udało się rozpoznać magazynu.', 'error'));
+  });
+  if (el.inventoryRebuildButton) el.inventoryRebuildButton.addEventListener('click', event => {
+    event.preventDefault();
+    rebuildInventoryItemsFromMovements(true);
+    renderInventory();
+  });
+}
+
 function setupTabs() {
   const buttons = Array.from(document.querySelectorAll('[data-tab]'));
   const pages = Array.from(document.querySelectorAll('[data-tab-page]'));
@@ -6044,7 +6651,7 @@ function bindEvents() {
 async function init() {
   const today = todayISO();
   document.title = 'Portfel PRO';
-  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.1 / 125';
+  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.1 / 126';
   setTodayHeader('wczytywanie...');
   if (isFileProtocol()) {
     showMessage('Program został otwarty bezpośrednio z index.html. Do importu JSON, PWA i cache użyj serwera lokalnego albo GitHub Pages.', 'error');
@@ -6079,6 +6686,7 @@ async function init() {
   setupThemes();
   setupSmartTooltips();
   setupVoiceMode();
+  setupAiAndInventory();
   updateTodayNamedays();
   updateCloudUi();
   setupFirstRunMode();

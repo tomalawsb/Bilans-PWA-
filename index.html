@@ -5,17 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#f6f3ea">
   <meta name="description" content="Portfel PRO — lokalny rejestr przychodów, wydatków, raportów i kalendarza.">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com https://nameday.abalin.net; worker-src 'self'; manifest-src 'self'; base-uri 'self'; form-action 'self'; object-src 'none';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com https://nameday.abalin.net https://api.openai.com https://generativelanguage.googleapis.com; worker-src 'self'; manifest-src 'self'; base-uri 'self'; form-action 'self'; object-src 'none';">
   <title>Portfel PRO</title>
   <script>
     const __manifestFile = new URLSearchParams(location.search).get('action') === 'voice'
       ? 'manifest-voice.webmanifest'
       : 'manifest.webmanifest';
-    document.write(`<link id="appManifest" rel="manifest" href="./${__manifestFile}?v=125">`);
+    document.write(`<link id="appManifest" rel="manifest" href="./${__manifestFile}?v=126">`);
   </script>
-  <link rel="icon" href="./icons/icon-192.png?v=125">
-  <link rel="apple-touch-icon" href="./icons/icon-192.png?v=125">
-  <link rel="stylesheet" href="./src/styles.css?v=125">
+  <link rel="icon" href="./icons/icon-192.png?v=126">
+  <link rel="apple-touch-icon" href="./icons/icon-192.png?v=126">
+  <link rel="stylesheet" href="./src/styles.css?v=126">
 </head>
 <body data-theme="classic">
   <script>
@@ -26,9 +26,9 @@
   <main class="app-shell">
     <header class="app-header">
       <div class="brand-block">
-        <img class="app-logo" src="./icons/logo-portfel-pro.png?v=125" alt="Portfel PRO">
+        <img class="app-logo" src="./icons/logo-portfel-pro.png?v=126" alt="Portfel PRO">
         <div>
-          <h1>Portfel PRO <span id="appVersionBadge" class="version-badge">v. 1.1 / 125</span></h1>
+          <h1>Portfel PRO <span id="appVersionBadge" class="version-badge">v. 1.1 / 126</span></h1>
           <p id="todayLabel">Lokalna aplikacja webowa</p>
         </div>
       </div>
@@ -47,6 +47,7 @@
       <button class="tab-button" type="button" data-tab="history" data-help="Lista wszystkich wpisów, filtrowanie, edycja, usuwanie i reset programu.">Historia</button>
       <button class="tab-button" type="button" data-tab="reports" data-help="Szczegółowe raporty kategorii i grup wydatków/przychodów.">Raporty</button>
       <button class="tab-button" type="button" data-tab="calendar" data-help="Widok miesięczny i roczny. Wpisy można przenosić między dniami.">Kalendarz</button>
+      <button class="tab-button" type="button" data-tab="inventory" data-help="Magazyn sprzętu: stany, ruchy oraz automatyczne rozpoznawanie zakupów i sprzedaży przez AI.">Magazyn</button>
       <button class="tab-button" type="button" data-tab="sync" data-help="Kopia danych, import, eksport i połączenie z Dropboxem.">Synchronizacja</button>
       <button class="tab-button" type="button" data-tab="help" data-help="Instrukcja obsługi programu, instalacji PWA, synchronizacji Dropbox i resetowania danych.">Pomoc</button>
       <button class="tab-button" type="button" data-tab="settings" data-help="Motyw programu, baza tagów i reguły samouczenia kategorii.">Ustawienia</button>
@@ -416,6 +417,82 @@
       </section>
     </section>
 
+
+    <section class="tab-page" data-tab-page="inventory">
+      <section class="panel inventory-panel">
+        <div class="panel-title-row">
+          <div>
+            <h2>Magazyn</h2>
+            <p>Stan sprzętu i materiałów firmowych. Ruchy mogą być tworzone automatycznie z firmowych przychodów i wydatków.</p>
+          </div>
+          <div class="button-row">
+            <button id="inventoryRecognizeButton" type="button" data-help="Analizuje firmowe wpisy z wybranego okresu przez AI i przygotowuje ruchy magazynowe. Wpisy już sprawdzone nie są naliczane drugi raz.">Rozpoznaj zakupy i sprzedaż</button>
+            <button id="inventoryRebuildButton" class="secondary" type="button" data-help="Przelicza aktualne stany z historii ruchów magazynowych.">Przelicz stany</button>
+          </div>
+        </div>
+        <div class="inventory-toolbar">
+          <label>
+            Okres analizy
+            <select id="inventoryPeriodSelect">
+              <option value="current">Bieżący miesiąc</option>
+              <option value="previous">Poprzedni miesiąc</option>
+              <option value="custom">Własny zakres</option>
+            </select>
+          </label>
+          <label>
+            Od
+            <input id="inventoryFromDate" type="date">
+          </label>
+          <label>
+            Do
+            <input id="inventoryToDate" type="date">
+          </label>
+          <label>
+            Minimalna pewność AI
+            <input id="inventoryMinConfidence" type="number" min="0" max="100" step="1" value="85">
+          </label>
+        </div>
+        <div id="inventorySummary" class="inventory-summary"></div>
+        <div class="table-wrap">
+          <table class="entries-table inventory-table">
+            <thead>
+              <tr>
+                <th>Produkt</th>
+                <th>Ilość</th>
+                <th>Jednostka</th>
+                <th>Śr. koszt</th>
+                <th>Wartość</th>
+                <th>Ostatnia zmiana</th>
+              </tr>
+            </thead>
+            <tbody id="inventoryItemsBody"></tbody>
+          </table>
+        </div>
+      </section>
+      <section class="panel inventory-movements-panel">
+        <div class="panel-title-row">
+          <div>
+            <h2>Historia ruchów magazynowych</h2>
+            <p>Każdy ruch jest powiązany z wpisem finansowym, żeby nie naliczyć go drugi raz.</p>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="entries-table inventory-movements-table">
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Ruch</th>
+                <th>Produkt</th>
+                <th>Ilość</th>
+                <th>Powiązany wpis</th>
+              </tr>
+            </thead>
+            <tbody id="inventoryMovementsBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+
     <section class="tab-page" data-tab-page="sync">
       <section class="panel export-sync-panel">
         <div class="panel-title-row">
@@ -491,7 +568,7 @@
         <div class="panel-title-row">
           <div>
             <h2>Pomoc i instrukcja obsługi</h2>
-            <p>Krótka instrukcja dla pierwszej wersji testowej Portfel PRO v. 1.1 / 125.</p>
+            <p>Krótka instrukcja dla pierwszej wersji testowej Portfel PRO v. 1.1 / 126.</p>
           </div>
         </div>
 
@@ -593,7 +670,7 @@
             <ol>
               <li>Kliknij <strong>Odśwież program</strong>.</li>
               <li>Odśwież stronę w przeglądarce.</li>
-              <li>Jeżeli dalej widzisz starą wersję, otwórz adres z dopiskiem <code>?v=125</code>.</li>
+              <li>Jeżeli dalej widzisz starą wersję, otwórz adres z dopiskiem <code>?v=126</code>.</li>
             </ol>
           </article>
         </div>
@@ -601,6 +678,43 @@
     </section>
 
     <section class="tab-page" data-tab-page="settings">
+
+      <section class="panel ai-settings-panel">
+        <div class="panel-title-row">
+          <div>
+            <h2>AI / Rozpoznawanie magazynu</h2>
+            <p>Ustaw klucz API i model używany do automatycznego rozpoznawania zakupów oraz sprzedaży w magazynie.</p>
+          </div>
+        </div>
+        <div class="ai-settings-grid">
+          <label>
+            Dostawca AI
+            <select id="aiProviderSelect">
+              <option value="gemini">Gemini</option>
+              <option value="openai">OpenAI</option>
+            </select>
+          </label>
+          <label class="wide">
+            Klucz API
+            <input id="aiApiKeyInput" type="password" autocomplete="off" placeholder="Wklej klucz API">
+          </label>
+          <label>
+            Model
+            <select id="aiModelSelect"></select>
+          </label>
+          <label>
+            Własny model, jeśli nie ma go na liście
+            <input id="aiCustomModelInput" type="text" placeholder="np. gemini-2.0-flash albo gpt-4o-mini">
+          </label>
+          <div class="form-actions wide">
+            <button id="aiTestKeyButton" type="button">Sprawdź klucz</button>
+            <button id="aiSaveSettingsButton" class="secondary" type="button">Zapisz ustawienia AI</button>
+            <button id="aiClearKeyButton" class="ghost" type="button">Usuń klucz</button>
+          </div>
+          <div id="aiSettingsStatus" class="settings-status wide"></div>
+        </div>
+      </section>
+
       <section class="panel appearance-panel">
         <div class="panel-title-row">
           <div>
@@ -717,7 +831,7 @@
     </section>
   </main>
 
-  <script src="./src/config.js?v=125"></script>
-  <script src="./src/app.js?v=125" type="module"></script>
+  <script src="./src/config.js?v=126"></script>
+  <script src="./src/app.js?v=126" type="module"></script>
 </body>
 </html>
