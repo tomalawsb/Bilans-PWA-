@@ -1,41 +1,20 @@
-# Portfel PRO v. 1.1 / 134 — naprawa magazynu: formatInventoryAction i edycja komórek
+# Portfel PRO v. 1.1 / 137 — poprawka rozpoznawania kwot z dyktowania
 
-Wersja: **1.1 / 134**  
+Wersja: **1.1 / 137**  
 Data: **08.06.2026**
 
-## Zmiany
+## Zmiany w wersji 1.1 / 137
 
-- Usunięto edycję przez przycisk **Edytuj** w magazynie.
-- Usunięto edycję przez dwuklik.
-- Edycja magazynu działa tylko przez dłuższe przytrzymanie konkretnej komórki.
-- Przytrzymanie nazwy edytuje tylko nazwę produktu.
-- Przytrzymanie ilości edytuje tylko ilość.
-- Przytrzymanie jednostki pokazuje wybór jednostki.
-- Przytrzymanie średniego kosztu edytuje tylko koszt.
-- Przytrzymanie kategorii pokazuje wybór kategorii.
-- Poprawiono obsługę przycisku **Usuń** w magazynie.
-- Usuwanie nadal działa bez potwierdzania, z krótkim przyciskiem **Cofnij**.
-- Podbito cache PWA do wersji `v=134`.
-- Zaktualizowano skrypt `upload_to_github.ps1` z wpisanym repozytorium:
-  `https://github.com/tomalawsb/Bilans-PWA-.git`.
+- Poprawiono parser dyktowanych kwot przed etapem dzielenia tekstu na osobne pozycje.
+- Fraza typu `36 zł 43 zł makaron do domu` jest rozpoznawana jako jedna pozycja z kwotą `36,43 zł`, a nie jako dwa wpisy `36 zł` i `43 zł`.
+- Poprawiono przypadki bez spacji przy walucie, np. `30zł 45zł` → `30,45 zł`.
+- Poprawiono analogiczny przypadek z dwoma zapisami groszy, np. `30 groszy 80 groszy` → `30,80 zł`.
+- Zachowano zmiany magazynu z poprzednich wersji: wyszukiwarka magazynu, synchronizacja magazynu przez Dropbox, edycja komórek przez dłuższe przytrzymanie, usuwanie bez potwierdzania z krótkim cofnięciem.
+- Podbito wersję programu do **1.1 / 137** i cache PWA do **v=137**.
+- `upload_to_github.ps1` ma wpisane repozytorium: `https://github.com/tomalawsb/Bilans-PWA-.git`.
 
 ## Adres po wdrożeniu
 
 ```text
-https://tomalawsb.github.io/Bilans-PWA-/?v=134
+https://tomalawsb.github.io/Bilans-PWA-/?v=137
 ```
-
-## Poprawka 1.1 / 134
-
-- Naprawiono błąd `formatInventoryAction is not defined`, który zatrzymywał moduł magazynu.
-- Po naprawie tabela magazynu, przycisk Usuń oraz edycja komórek przez dłuższe przytrzymanie powinny działać.
-- Edycja magazynu odbywa się wyłącznie przez dłuższe przytrzymanie konkretnej komórki: nazwa, ilość, jednostka, średni koszt albo kategoria.
-- Nie przywracano edycji przez przycisk Edytuj ani przez dwuklik.
-
-
-## Zmiany w wersji 1.1 / 136
-
-- Poprawiono rozpoznawanie kwot po dyktowaniu.
-- Program interpretuje zapis typu `30 zł 45 zł` jako `30,45 zł`.
-- Program interpretuje zapis typu `30 groszy 80 groszy` jako `30,80 zł`, gdy tekst trafia do parsera kwoty.
-- Poprawka działa w rozpoznawaniu tekstu oraz w luźnym parserze kwoty.
