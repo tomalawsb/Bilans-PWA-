@@ -2008,3 +2008,7 @@ body[data-theme="dark"] #todayLabel[data-status="missing"] {
 .inventory-panel .inventory-toolbar label.wide {
   grid-column: 1 / -1;
 }
+
+.muted-card {
+  opacity: 0.62;
+}

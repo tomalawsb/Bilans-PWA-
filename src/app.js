@@ -1,6 +1,6 @@
 const DB_NAME = 'bilans-pwa-etap1';
 const DB_VERSION = 4;
-const APP_VERSION = '1.1-138';
+const APP_VERSION = '1.1-139';
 const RAW_DROPBOX_DEFAULT_APP_KEY = String(window.PORTFEL_PRO_CONFIG?.dropboxAppKey || '').trim();
 const DROPBOX_DEFAULT_APP_KEY = /^WSTAW_TUTAJ/i.test(RAW_DROPBOX_DEFAULT_APP_KEY) ? '' : RAW_DROPBOX_DEFAULT_APP_KEY; // Ustaw w src/config.js, wtedy użytkownik klika tylko Połącz z Dropbox.
 const MAIN_INSTALL_KEY = 'portfel-pro-main-installed';
@@ -1030,6 +1030,10 @@ function prepareEntryForStorage(entry, options = {}) {
   delete cleaned.learningAppliedRuleId;
   delete cleaned.learningConfidence;
   delete cleaned.learningSuggestionNote;
+  delete cleaned.learningOriginalType;
+  delete cleaned.learningOriginalScope;
+  delete cleaned.learningOriginalPaymentMethod;
+  delete cleaned.learningAppliedSnapshot;
   const numericId = Number(cleaned.id);
 
   if (forceNewId || !isValidLocalEntryId(numericId)) {
@@ -1386,7 +1390,7 @@ const LEARNING_STOP_WORDS = new Set([
 function learningStem(token) {
   let value = normalizeText(token).replace(/[^a-z0-9]/g, '');
   if (value.length <= 3) return value;
-  const suffixes = ['ciom', 'ami', 'ach', 'ego', 'emu', 'owa', 'owe', 'owy', 'ych', 'ymi', 'ami', 'owi', 'owe', 'owa', 'om', 'ow', 'em', 'ie', 'ia', 'iu', 'go', 'ej', 'y', 'a', 'e', 'i', 'u'];
+  const suffixes = ['ciom', 'ami', 'ach', 'ego', 'emu', 'owa', 'owe', 'owy', 'ych', 'ymi', 'owi', 'owego', 'owej', 'owym', 'ami', 'om', 'ow', 'em', 'ie', 'ia', 'iu', 'go', 'ej', 'y', 'a', 'e', 'i', 'u'];
   for (const suffix of suffixes) {
     if (value.endsWith(suffix) && value.length - suffix.length >= 3) {
       value = value.slice(0, -suffix.length);
@@ -1415,14 +1419,16 @@ function makeLearningPhrase(entryOrText) {
     ? entryOrText
     : [entryOrText?.description, entryOrText?.originalText].filter(Boolean).join(' ');
   const tokens = learningTokens(text);
-  if (tokens.length) return tokens.slice(0, 5).join(' ');
-  return normalizeAlias(text).split(/\s+/).slice(0, 5).join(' ');
+  if (tokens.length >= 2) return tokens.slice(0, 7).join(' ');
+  if (tokens.length === 1) return tokens[0];
+  return normalizeAlias(text).split(/\s+/).slice(0, 7).join(' ');
 }
 
 function learningConfidence(rule) {
   const confirmations = Number(rule?.confirmations || 0);
   const misses = Number(rule?.misses || 0);
-  return Math.max(35, Math.min(99, 45 + confirmations * 18 - misses * 12));
+  const base = 42 + confirmations * 15 - misses * 18;
+  return Math.max(15, Math.min(99, Math.round(base)));
 }
 
 function normalizeLearningRule(rule) {
@@ -1430,18 +1436,28 @@ function normalizeLearningRule(rule) {
   const now = new Date().toISOString();
   const normalizedPhrase = normalizeLearningPhrase(phrase || rule?.normalizedPhrase || '');
   const idBase = normalizedPhrase || normalizeAlias(phrase) || String(Date.now());
+  const rawScope = rule?.scope ?? rule?.entryScope ?? rule?.kind ?? '';
+  const scope = rawScope ? normalizeScope(rawScope) : '';
+  const paymentMethod = ['gotówka', 'karta', 'bank', 'blik', 'inne'].includes(rule?.paymentMethod) ? rule.paymentMethod : '';
+  const disabled = Boolean(rule?.disabled) || Number(rule?.misses || 0) >= 4 && Number(rule?.misses || 0) > Number(rule?.confirmations || 0);
   return {
     id: rule?.id || `learn-${idBase.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`,
     phrase: phrase || normalizedPhrase,
     normalizedPhrase,
     category: isKnownCategory(rule?.category) ? normalizeKnownCategory(rule.category, 'Inne') : 'Inne',
     entryType: ['przychód', 'wydatek', ''].includes(rule?.entryType) ? rule.entryType : '',
+    scope,
+    paymentMethod,
+    reportGroup: String(rule?.reportGroup || '').trim(),
     confirmations: Math.max(1, Number(rule?.confirmations || 1)),
     misses: Math.max(0, Number(rule?.misses || 0)),
     examples: Array.isArray(rule?.examples) ? rule.examples.slice(-LEARNING_MAX_EXAMPLES).map(String) : [],
     source: rule?.source || 'correction',
+    disabled,
     createdAt: rule?.createdAt || rule?.created_at || now,
-    updatedAt: rule?.updatedAt || rule?.updated_at || now
+    updatedAt: rule?.updatedAt || rule?.updated_at || now,
+    lastMatchedAt: rule?.lastMatchedAt || '',
+    lastMissedAt: rule?.lastMissedAt || ''
   };
 }
 
@@ -1473,9 +1489,10 @@ function levenshteinDistance(a, b) {
   return prev[b.length];
 }
 
-function scoreLearningRule(rule, text) {
-  if (!rule || !isKnownCategory(rule.category)) return 0;
+function scoreLearningRule(rule, text, context = {}) {
+  if (!rule || rule.disabled || !isKnownCategory(rule.category)) return 0;
   if (Number(rule.confirmations || 0) < LEARNING_AUTO_CONFIRMATIONS) return 0;
+  if (isGenericLearningSource(text)) return 0;
 
   const sourceTokens = learningTokens(text);
   const ruleTokens = learningTokens(rule.normalizedPhrase || rule.phrase);
@@ -1483,21 +1500,35 @@ function scoreLearningRule(rule, text) {
 
   const sourcePhrase = ` ${sourceTokens.join(' ')} `;
   const rulePhrase = ` ${ruleTokens.join(' ')} `;
-  let baseScore = sourcePhrase.includes(rulePhrase.trim()) ? 1 : 0;
+  let phraseScore = sourcePhrase.includes(rulePhrase.trim()) ? 1 : 0;
 
-  if (!baseScore) {
+  if (!phraseScore) {
     const matched = ruleTokens.filter(token => tokenMatchesLearning(token, sourceTokens)).length;
-    const required = Math.max(1, Math.ceil(ruleTokens.length * 0.6));
-    if (matched >= required) baseScore = matched / ruleTokens.length;
+    const required = Math.max(1, Math.ceil(ruleTokens.length * 0.65));
+    if (matched >= required) phraseScore = matched / ruleTokens.length;
   }
 
-  if (baseScore < 0.6) return 0;
-  return Math.round(baseScore * learningConfidence(rule));
+  if (phraseScore < 0.65) return 0;
+
+  let score = Math.round(phraseScore * learningConfidence(rule));
+  const explicitType = context.explicitType || detectExplicitEntryType(text);
+  const currentType = context.entryType || explicitType || '';
+  const currentScope = context.scope ? normalizeScope(context.scope) : '';
+
+  // Jawny przychód/wydatek ma bezwzględny priorytet. Reguła sprzeczna z tekstem odpada.
+  if (explicitType && rule.entryType && rule.entryType !== explicitType) return 0;
+  if (!explicitType && currentType && rule.entryType && rule.entryType !== currentType) score -= 25;
+  if (rule.entryType && currentType && rule.entryType === currentType) score += 12;
+  if (rule.scope && currentScope && rule.scope === currentScope) score += 8;
+  if (rule.scope && currentScope && rule.scope !== currentScope && currentScope !== 'nieokreślone') score -= 12;
+  if (Number(rule.misses || 0) > 0) score -= Number(rule.misses || 0) * 5;
+
+  return Math.max(0, Math.min(99, Math.round(score)));
 }
 
-function findBestLearningRule(text) {
+function findBestLearningRule(text, context = {}) {
   const candidates = learningRules
-    .map(rule => ({ rule, score: scoreLearningRule(rule, text) }))
+    .map(rule => ({ rule, score: scoreLearningRule(rule, text, context) }))
     .filter(item => item.score > 0)
     .sort((a, b) => b.score - a.score || Number(b.rule.confirmations || 0) - Number(a.rule.confirmations || 0));
   return candidates[0] || null;
@@ -1511,31 +1542,102 @@ function trainingSimilarity(rule, phrase) {
   return matched / Math.max(ruleTokens.length, phraseTokens.length);
 }
 
-function findSimilarLearningRuleForTraining(phrase, category) {
+function findSimilarLearningRuleForTraining(phrase, category, entryType = '', scope = '') {
   return learningRules
     .filter(rule => rule.category === category)
+    .filter(rule => !entryType || !rule.entryType || rule.entryType === entryType)
+    .filter(rule => !scope || !rule.scope || rule.scope === normalizeScope(scope))
     .map(rule => ({ rule, score: trainingSimilarity(rule, phrase) }))
-    .filter(item => item.score >= 0.5)
+    .filter(item => item.score >= 0.55)
     .sort((a, b) => b.score - a.score || Number(b.rule.confirmations || 0) - Number(a.rule.confirmations || 0))[0]?.rule || null;
+}
+
+function isGenericLearningSource(text) {
+  const normalized = normalizeText(text);
+  const tokens = learningTokens(normalized);
+  if (!tokens.length) return true;
+  if (/\bwpis\s+z\s+tekstu\b/.test(normalized) && tokens.length <= 2) return true;
+  if (tokens.every(token => ['wpis', 'tekst', 'parser', 'inne', 'nauczon'].includes(token))) return true;
+  return false;
+}
+
+function shouldAllowLearningOverride(entry, sourceText, match) {
+  if (!match?.rule?.category) return false;
+  if (match.rule.disabled) return false;
+  if (isGenericLearningSource(sourceText)) return false;
+
+  const explicitType = detectExplicitEntryType(sourceText);
+  if (explicitType && match.rule.entryType && match.rule.entryType !== explicitType) return false;
+
+  const currentCategory = entry?.category || 'Inne';
+  const detectedCategory = detectCategoryFromRules(sourceText, { entryType: entry.entryType, scope: entry.scope });
+
+  // Nauka może wygrać z parserem tylko przy bardzo mocnej regule. Inaczej jest tylko sugestią.
+  if (detectedCategory && detectedCategory !== 'Inne' && detectedCategory !== match.rule.category && match.score < 94) return false;
+  if (currentCategory !== 'Inne' && currentCategory !== 'Dom' && currentCategory !== match.rule.category && match.score < 92) return false;
+
+  return match.score >= 70;
 }
 
 function applyLearningToEntry(entry, options = {}) {
   const sourceText = options.sourceText || [entry.description, entry.originalText].filter(Boolean).join(' ');
   const originalCategory = options.originalCategory || entry.category || 'Inne';
-  const match = findBestLearningRule(sourceText);
+  const explicitType = detectExplicitEntryType(sourceText);
+  const match = findBestLearningRule(sourceText, {
+    entryType: entry.entryType,
+    scope: entry.scope,
+    explicitType
+  });
+
   const updated = {
     ...entry,
     learningOriginalCategory: originalCategory,
+    learningOriginalType: entry.entryType || '',
+    learningOriginalScope: normalizeScope(entry.scope),
+    learningOriginalPaymentMethod: entry.paymentMethod || '',
     learningSourceText: makeLearningPhrase(sourceText)
   };
 
-  if (match?.rule?.category && match.rule.category !== updated.category) {
-    updated.category = match.rule.category;
-    updated.tags = normalizeTags([...(updated.tags ?? []), match.rule.category, 'nauczone'].join(','));
-    updated.reportGroup = updated.reportGroup || inferReportGroup(updated.description || updated.originalText || updated.category);
-    updated.learningAppliedRuleId = match.rule.id;
-    updated.learningConfidence = match.score;
-    updated.learningSuggestionNote = `Nauczona reguła: ${match.rule.phrase}`;
+  // Słowa krytyczne typu „przychód” i „wydatek” zawsze wygrywają z nauką.
+  if (explicitType) updated.entryType = explicitType;
+
+  if (match?.rule) {
+    const rule = match.rule;
+    let applied = false;
+
+    if (!explicitType && rule.entryType && !updated.entryType) {
+      updated.entryType = rule.entryType;
+      applied = true;
+    }
+
+    if (shouldAllowLearningOverride(updated, sourceText, match) && rule.category !== updated.category) {
+      updated.category = rule.category;
+      updated.tags = normalizeTags([...(updated.tags ?? []), rule.category, 'nauczone'].join(','));
+      updated.reportGroup = rule.reportGroup || updated.reportGroup || inferReportGroup(updated.description || updated.originalText || updated.category);
+      applied = true;
+    }
+
+    if (rule.scope && normalizeScope(updated.scope) === 'nieokreślone') {
+      updated.scope = normalizeScope(rule.scope);
+      applied = true;
+    }
+
+    if (rule.paymentMethod && (!updated.paymentMethod || updated.paymentMethod === 'gotówka')) {
+      updated.paymentMethod = rule.paymentMethod;
+      applied = true;
+    }
+
+    if (applied) {
+      updated.learningAppliedRuleId = rule.id;
+      updated.learningConfidence = match.score;
+      updated.learningSuggestionNote = `Nauczona reguła: ${rule.phrase}`;
+      updated.learningAppliedSnapshot = {
+        category: rule.category,
+        entryType: rule.entryType || '',
+        scope: rule.scope || '',
+        paymentMethod: rule.paymentMethod || ''
+      };
+    }
   }
 
   return updated;
@@ -1597,19 +1699,58 @@ async function importLearningRulesFromPayload(payload, replace = false) {
   await reloadLearningRules();
 }
 
+async function penalizeAppliedLearningRule(entry) {
+  const ruleId = entry?.learningAppliedRuleId;
+  if (!ruleId) return false;
+  const rule = learningRules.find(item => item.id === ruleId);
+  if (!rule) return false;
+
+  const snapshot = entry.learningAppliedSnapshot || {};
+  const categoryChanged = snapshot.category && entry.category && snapshot.category !== entry.category;
+  const typeChanged = snapshot.entryType && entry.entryType && snapshot.entryType !== entry.entryType;
+  const scopeChanged = snapshot.scope && entry.scope && normalizeScope(snapshot.scope) !== normalizeScope(entry.scope);
+  const paymentChanged = snapshot.paymentMethod && entry.paymentMethod && snapshot.paymentMethod !== entry.paymentMethod;
+
+  if (!categoryChanged && !typeChanged && !scopeChanged && !paymentChanged) return false;
+
+  const now = new Date().toISOString();
+  await saveLearningRule({
+    ...rule,
+    misses: Number(rule.misses || 0) + 1,
+    disabled: Number(rule.misses || 0) + 1 >= 4 && Number(rule.misses || 0) + 1 > Number(rule.confirmations || 0),
+    lastMissedAt: now,
+    updatedAt: now
+  });
+  return true;
+}
+
 async function learnFromCorrection(entry, previousCategory) {
   const nextCategory = entry?.category || 'Inne';
   const oldCategory = previousCategory || entry?.learningOriginalCategory || 'Inne';
-  if (!entry || !isKnownCategory(nextCategory) || nextCategory === 'Inne' || nextCategory === oldCategory) return null;
+  if (!entry || !isKnownCategory(nextCategory) || nextCategory === 'Inne') return null;
 
-  const phrase = makeLearningPhrase(entry.learningSourceText || entry.description || entry.originalText || '');
+  const learningSource = entry.learningSourceText || entry.description || entry.originalText || '';
+  if (isGenericLearningSource(learningSource)) return null;
+
+  const phrase = makeLearningPhrase(learningSource);
   if (!phrase) return null;
 
   const normalizedPhrase = normalizeLearningPhrase(phrase);
-  if (!normalizedPhrase) return null;
+  if (!normalizedPhrase || isGenericLearningSource(normalizedPhrase)) return null;
 
-  const id = `learn-${normalizedPhrase.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}-${normalizeAlias(nextCategory)}`;
-  const similar = findSimilarLearningRuleForTraining(normalizedPhrase, nextCategory);
+  const nextType = entry.entryType || '';
+  const nextScope = normalizeScope(entry.scope || '');
+  const nextPayment = entry.paymentMethod || '';
+  const categoryChanged = nextCategory !== oldCategory;
+  const typeChanged = entry.learningOriginalType && nextType && entry.learningOriginalType !== nextType;
+  const scopeChanged = entry.learningOriginalScope && nextScope && entry.learningOriginalScope !== nextScope;
+  const paymentChanged = entry.learningOriginalPaymentMethod && nextPayment && entry.learningOriginalPaymentMethod !== nextPayment;
+
+  // Jeżeli użytkownik nic nie poprawił, nie tworzymy sztucznego potwierdzenia.
+  if (!categoryChanged && !typeChanged && !scopeChanged && !paymentChanged) return null;
+
+  const id = `learn-${normalizedPhrase.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}-${normalizeAlias(nextCategory)}-${normalizeAlias(nextType || 'typ')}-${normalizeAlias(nextScope || 'scope')}`;
+  const similar = findSimilarLearningRuleForTraining(normalizedPhrase, nextCategory, nextType, nextScope);
   const existing = similar || learningRules.find(rule => rule.id === id) || null;
   const now = new Date().toISOString();
   const examples = [...(existing?.examples ?? []), entry.description || entry.originalText || phrase]
@@ -1623,12 +1764,18 @@ async function learnFromCorrection(entry, previousCategory) {
     phrase: existing?.phrase || phrase,
     normalizedPhrase: existing?.normalizedPhrase || normalizedPhrase,
     category: nextCategory,
-    entryType: entry.entryType || existing?.entryType || '',
+    entryType: nextType || existing?.entryType || '',
+    scope: nextScope || existing?.scope || '',
+    paymentMethod: nextPayment || existing?.paymentMethod || '',
+    reportGroup: resolveReportGroup(entry),
     confirmations: Number(existing?.confirmations || 0) + 1,
+    misses: Math.max(0, Number(existing?.misses || 0) - 1),
     examples,
-    source: 'correction',
+    source: 'correction-full-decision',
+    disabled: false,
     createdAt: existing?.createdAt || now,
-    updatedAt: now
+    updatedAt: now,
+    lastMatchedAt: now
   });
 
   await reloadLearningRules();
@@ -1638,42 +1785,68 @@ async function learnFromCorrection(entry, previousCategory) {
 
 async function learnFromParsedEntries(entries) {
   let learned = 0;
+  let penalized = 0;
   for (const entry of entries) {
+    const wasPenalized = await penalizeAppliedLearningRule(entry);
+    if (wasPenalized) penalized += 1;
     const saved = await learnFromCorrection(entry, entry.learningOriginalCategory);
     if (saved) learned += 1;
   }
-  return learned;
+  if (penalized && !learned) await reloadLearningRules();
+  return learned + penalized;
 }
 
 function renderLearningRules() {
   if (el.learningSummary) {
-    const active = learningRules.filter(rule => Number(rule.confirmations || 0) >= LEARNING_AUTO_CONFIRMATIONS).length;
-    el.learningSummary.textContent = `Reguły: ${learningRules.length} · aktywne automatycznie: ${active} · próg: ${LEARNING_AUTO_CONFIRMATIONS} potwierdzenia.`;
+    const active = learningRules.filter(rule => !rule.disabled && Number(rule.confirmations || 0) >= LEARNING_AUTO_CONFIRMATIONS).length;
+    const disabled = learningRules.filter(rule => rule.disabled).length;
+    el.learningSummary.textContent = `Reguły: ${learningRules.length} · aktywne automatycznie: ${active} · wyłączone po błędach: ${disabled} · próg: ${LEARNING_AUTO_CONFIRMATIONS} potwierdzenia.`;
   }
 
   if (!el.learningRulesList) return;
   if (!learningRules.length) {
-    el.learningRulesList.innerHTML = '<div class="empty-state">Brak nauczonych reguł. Popraw kategorię w podglądzie rozpoznania, zapisz wpis i program zacznie się uczyć.</div>';
+    el.learningRulesList.innerHTML = '<div class="empty-state">Brak nauczonych reguł. Popraw rozpoznany wpis, zapisz go i program zacznie uczyć się pełnej decyzji: typu, rodzaju, kategorii i płatności.</div>';
     return;
   }
 
   el.learningRulesList.innerHTML = learningRules.map(rule => {
     const confidence = learningConfidence(rule);
-    const active = Number(rule.confirmations || 0) >= LEARNING_AUTO_CONFIRMATIONS;
+    const active = !rule.disabled && Number(rule.confirmations || 0) >= LEARNING_AUTO_CONFIRMATIONS;
     const examples = (rule.examples || []).slice(-2).map(example => `<span class="tag">${escapeHtml(example)}</span>`).join('');
+    const decision = [
+      rule.entryType ? `typ: ${rule.entryType}` : '',
+      rule.scope ? `rodzaj: ${rule.scope}` : '',
+      rule.category ? `kategoria: ${rule.category}` : '',
+      rule.paymentMethod ? `płatność: ${rule.paymentMethod}` : ''
+    ].filter(Boolean).join(' · ');
     return `
-      <article class="tag-rule-card learning-rule-card">
+      <article class="tag-rule-card learning-rule-card${rule.disabled ? ' muted-card' : ''}">
         <div>
           <strong>${escapeHtml(rule.phrase)}</strong>
-          <small>${escapeHtml(rule.category)} · potwierdzenia: ${Number(rule.confirmations || 0)} · pewność: ${confidence}% · ${active ? 'aktywna' : 'uczy się'}</small>
+          <small>${escapeHtml(decision)} · potwierdzenia: ${Number(rule.confirmations || 0)} · błędy: ${Number(rule.misses || 0)} · pewność: ${confidence}% · ${rule.disabled ? 'wyłączona' : active ? 'aktywna' : 'uczy się'}</small>
           <div class="tag-list"><span class="tag learning-tag">${escapeHtml(rule.normalizedPhrase)}</span>${examples}</div>
         </div>
         <div class="row-actions">
+          <button type="button" data-learning-action="toggle" data-id="${escapeHtml(rule.id)}">${rule.disabled ? 'Włącz' : 'Wyłącz'}</button>
           <button class="danger" type="button" data-learning-action="delete" data-id="${escapeHtml(rule.id)}" data-help="Usuwa tę nauczoną regułę. Wpisy finansowe zostają bez zmian.">Usuń</button>
         </div>
       </article>
     `;
   }).join('');
+}
+
+
+async function handleLearningRuleToggle(id) {
+  const rule = learningRules.find(item => item.id === id);
+  if (!rule) return;
+  await saveLearningRule({
+    ...rule,
+    disabled: !rule.disabled,
+    updatedAt: new Date().toISOString()
+  });
+  await reloadLearningRules();
+  showMessage(rule.disabled ? 'Nauczona reguła włączona.' : 'Nauczona reguła wyłączona.');
+  scheduleDropboxAutoSync();
 }
 
 async function handleLearningRuleDelete(id) {
@@ -1691,6 +1864,7 @@ function handleLearningRulesClick(event) {
   if (!button) return;
   const { learningAction, id } = button.dataset;
   if (learningAction === 'delete') handleLearningRuleDelete(id).catch(error => showMessage(error.message, 'error'));
+  if (learningAction === 'toggle') handleLearningRuleToggle(id).catch(error => showMessage(error.message, 'error'));
 }
 
 async function clearAllLearningRules() {
@@ -1889,47 +2063,98 @@ function parseDateForAmount(source, amountIndex, segmentStart = 0) {
 }
 
 const CATEGORY_RULES = [
-  { category: 'Komputerowe', words: ['router', 'komputer', 'laptop', 'dysk', 'ssd', 'ram', 'plyta glowna', 'procesor', 'mysz', 'klawiatura', 'monitor', 'drukarka', 'toner'] },
-  { category: 'Monitoring', words: ['kamera', 'kamery', 'monitoring', 'rejestrator', 'hikvision', 'ezviz', 'dahua', 'ipcam', 'puszka montazowa'] },
-  { category: 'Antenowe', words: ['antena', 'anteny', 'antene', 'satelitarna', 'satelitarne', 'konwerter', 'talerz', 'maszt', 'obejma', 'kabel antenowy'] },
-  { category: 'Montaże', words: ['montaz', 'instalacja', 'ustawienie', 'serwis', 'robocizna', 'dojazd', 'usluga'] },
-  { category: 'Paliwo', words: ['paliwo', 'benzyna', 'diesel', 'ropa', 'lpg', 'orlen', 'bp', 'shell'] },
-  { category: 'Mechanik', words: ['mechanik', 'olej', 'opona', 'opony', 'czesci auto', 'naprawa auta', 'samochod'] },
-  { category: 'Jedzenie', words: ['hotdog', 'hot dog', 'hot-dog', 'jedzenie', 'obiad', 'kolacja', 'sniadanie', 'kebab', 'pizza', 'zabka', 'biedronka'] },
-  { category: 'Dom', words: ['dom', 'czynsz', 'rachunek domowy', 'prad', 'gaz', 'woda', 'internet domowy', 'mieszkanie'] },
-  { category: 'Bank', words: ['bank', 'konto', 'przelew', 'prowizja', 'odsetki', 'rata', 'kredyt'] },
-  { category: 'Podatki/ZUS', words: ['zus', 'podatek', 'pit', 'vat', 'skarbowy'] },
-  { category: 'Hurtownia', words: ['hurtownia', 'faktura', 'magazyn', 'towar'] },
-  { category: 'Usługi', words: ['zarobek', 'przychod', 'wyplata', 'zaplata za', 'klient', 'fucha'] }
+  { category: 'Usługi', weight: 5, words: ['przychod', 'zarobek', 'wyplata', 'zaplata za', 'klient zaplacil', 'zaplacono mi', 'klient', 'fucha', 'naprawa', 'naprawilem', 'naprawilam', 'serwis', 'usluga', 'uslugi', 'telewizor', 'tv', 'fotel masujacy', 'fotela masujacego'] },
+  { category: 'Montaże', weight: 4, words: ['montaz', 'instalacja', 'ustawienie', 'konfiguracja', 'robocizna', 'dojazd'] },
+  { category: 'Monitoring', weight: 4, words: ['kamera', 'kamery', 'monitoring', 'rejestrator', 'hikvision', 'ezviz', 'dahua', 'ipcam', 'puszka montazowa'] },
+  { category: 'Antenowe', weight: 4, words: ['antena', 'anteny', 'antene', 'satelitarna', 'satelitarne', 'konwerter', 'talerz', 'maszt', 'obejma', 'kabel antenowy'] },
+  { category: 'Komputerowe', weight: 3, words: ['router', 'tp-link', 'komputer', 'laptop', 'dysk', 'ssd', 'ram', 'plyta glowna', 'procesor', 'mysz', 'klawiatura', 'monitor', 'drukarka', 'toner'] },
+  { category: 'Hurtownia', weight: 3, words: ['hurtownia', 'faktura', 'magazyn', 'towar'] },
+  { category: 'Paliwo', weight: 6, words: ['paliwo', 'benzyna', 'diesel', 'ropa', 'lpg', 'orlen', 'bp', 'shell'] },
+  { category: 'Mechanik', weight: 4, words: ['mechanik', 'olej', 'opona', 'opony', 'czesci auto', 'naprawa auta', 'samochod'] },
+  { category: 'Jedzenie', weight: 5, words: ['makaron', 'chleb', 'mleko', 'hotdog', 'hot dog', 'hot-dog', 'jedzenie', 'obiad', 'kolacja', 'sniadanie', 'kebab', 'pizza', 'zabka', 'biedronka'] },
+  { category: 'Dom', weight: 4, words: ['dom', 'do domu', 'czynsz', 'rachunek domowy', 'prad', 'gaz', 'woda', 'internet domowy', 'mieszkanie'] },
+  { category: 'Bank', weight: 5, words: ['bank', 'konto', 'przelew', 'prowizja', 'odsetki', 'rata', 'kredyt'] },
+  { category: 'Podatki/ZUS', weight: 6, words: ['zus', 'podatek', 'pit', 'vat', 'skarbowy'] }
 ];
 
-function detectCategoryFromRules(text) {
+function categoryRuleScores(text, context = {}) {
   const normalized = normalizeText(text);
+  const scores = new Map();
+  const addScore = (category, points) => {
+    if (!category || !isKnownCategory(category)) return;
+    scores.set(category, (scores.get(category) || 0) + points);
+  };
+
   for (const rule of CATEGORY_RULES) {
-    if (rule.words.some(word => normalized.includes(word))) return rule.category;
+    let matched = 0;
+    for (const word of rule.words) {
+      if (normalized.includes(word)) matched += 1;
+    }
+    if (matched) addScore(rule.category, rule.weight + matched * 2);
   }
-  return '';
+
+  const entryType = context.entryType || detectExplicitEntryType(text);
+  const scope = normalizeScope(context.scope || '');
+
+  if (entryType === 'przychód') {
+    if (/\b(napraw|serwis|uslug|klient|montaz|ustawieni|konfigurac|dojazd|robocizn)/.test(normalized)) addScore('Usługi', 8);
+    if (/\b(kamera|monitoring|rejestrator)/.test(normalized)) addScore('Monitoring', 3);
+    if (/\b(antena|konwerter|satelit)/.test(normalized)) addScore('Antenowe', 3);
+  }
+
+  if (entryType === 'wydatek') {
+    if (/\b(kupil|zakup|towar|hurtown|faktura)/.test(normalized)) addScore('Hurtownia', 2);
+  }
+
+  if (scope === 'domowe') addScore('Dom', 3);
+  if (scope === 'firmowe' && /\b(klient|uslug|montaz|napraw|kamera|antena|router|towar)/.test(normalized)) addScore('Usługi', 2);
+
+  return [...scores.entries()]
+    .map(([category, score]) => ({ category, score }))
+    .sort((a, b) => b.score - a.score || a.category.localeCompare(b.category));
+}
+
+function detectCategoryFromRules(text, context = {}) {
+  const best = categoryRuleScores(text, context)[0];
+  return best?.category || '';
 }
 
 function detectCategory(text) {
-  return detectCategoryFromRules(text) || el.category.value || 'Inne';
+  return detectCategoryFromRules(text, { entryType: el.entryType.value, scope: el.entryScope?.value }) || el.category.value || 'Inne';
 }
 
-function detectCategoryForParsedEntry(text, scope = 'nieokreślone') {
-  const detected = detectCategoryFromRules(text);
+function detectCategoryForParsedEntry(text, scope = 'nieokreślone', entryType = '') {
+  const detected = detectCategoryFromRules(text, { entryType, scope });
   if (detected) return detected;
   if (normalizeScope(scope) === 'domowe') return 'Dom';
   return 'Inne';
 }
 
-function detectEntryType(text) {
-  const normalized = normalizeText(text);
-  const incomeWords = ['zarobek', 'zarobilem', 'przychod', 'wplyw', 'wplata', 'dostalem', 'otrzymalem', 'wyplata', 'faktura sprzedaz', 'usluga dla'];
-  const expenseWords = ['wydatek', 'wydatki', 'wydatkowe', 'kupilem', 'kupilam', 'zakup', 'zaplacilem', 'zaplacilam', 'wydalem', 'wydalam', 'koszt', 'kosztowalo', 'paragon'];
+function detectExplicitEntryType(text) {
+  const normalized = ` ${normalizeText(text)} `;
 
-  if (incomeWords.some(word => normalized.includes(word))) return 'przychód';
-  if (expenseWords.some(word => normalized.includes(word))) return 'wydatek';
-  return el.entryType.value || 'wydatek';
+  const incomePatterns = [
+    /\bprzychod\b/, /\bzarobek\b/, /\bzarobilem\b/, /\bzarobilam\b/,
+    /\bwplyw\b/, /\bwplata\b/, /\bdostalem\b/, /\bdostalam\b/,
+    /\botrzymalem\b/, /\botrzymalam\b/, /\bklient\s+zaplacil\b/,
+    /\bzaplacono\s+mi\b/, /\bzaplata\s+za\b/, /\bfaktura\s+sprzedaz/,
+    /\bsprzedaz\b/, /\bsprzedalem\b/, /\bsprzedalam\b/, /\busluga\s+dla\b/
+  ];
+
+  const expensePatterns = [
+    /\bwydatek\b/, /\bwydatki\b/, /\bkoszt\b/, /\bkosztowalo\b/,
+    /\bkupilem\b/, /\bkupilam\b/, /\bzakup\b/, /\bzakupy\b/,
+    /\bzaplacilem\b/, /\bzaplacilam\b/, /\bwydalem\b/, /\bwydalam\b/,
+    /\bparagon\b/, /\bfaktura\s+zakup/
+  ];
+
+  if (incomePatterns.some(pattern => pattern.test(normalized))) return 'przychód';
+  if (expensePatterns.some(pattern => pattern.test(normalized))) return 'wydatek';
+  return '';
+}
+
+function detectEntryType(text) {
+  return detectExplicitEntryType(text) || el.entryType.value || 'wydatek';
 }
 
 function detectScope(text, entryType = 'wydatek', category = '') {
@@ -2112,9 +2337,12 @@ function takeBeforeDescription(text, from, to) {
 }
 
 function takeAfterDescription(text, from, to) {
+  // Nie ucinamy opisu po przecinku ani po „i”, bo dyktowanie często daje:
+  // „100 zł przychód, naprawa telewizora i fotela masującego”.
+  // Granicą kolejnej pozycji jest następna rozpoznana kwota, średnik albo nowa linia.
   let part = text.slice(from, to);
-  const firstSeparator = part.search(/(?:\s+i\s+|\s+oraz\s+|\s+plus\s+|[;\n,])/i);
-  if (firstSeparator >= 0) part = part.slice(0, firstSeparator);
+  const firstHardSeparator = part.search(/[;\n]/);
+  if (firstHardSeparator >= 0) part = part.slice(0, firstHardSeparator);
   return cleanDescription(part);
 }
 
@@ -2128,8 +2356,8 @@ function takeBeforeContext(text, from, to) {
 
 function takeAfterContext(text, from, to) {
   let part = text.slice(from, to);
-  const firstSeparator = part.search(/[;\n,]/);
-  if (firstSeparator >= 0) part = part.slice(0, firstSeparator);
+  const firstHardSeparator = part.search(/[;\n]/);
+  if (firstHardSeparator >= 0) part = part.slice(0, firstHardSeparator);
 
   // Jeżeli po kwocie jest tylko znacznik następnej pozycji, np. „wydatek domowy”,
   // nie dopinamy go do bieżącej pozycji, bo psuje rodzaj i kategorię.
@@ -2166,9 +2394,9 @@ function parseNaturalText(rawText) {
     const quantity = extractQuantity(description || context);
     const multiplier = shouldMultiplyByQuantity(context, amountBeforeDescription) ? quantity : 1;
     const amount = Math.round(match.value * multiplier * 100) / 100;
-    const preliminaryCategory = detectCategoryFromRules(`${description} ${context}`) || 'Inne';
+    const preliminaryCategory = detectCategoryFromRules(`${description} ${context}`, { entryType }) || 'Inne';
     const scope = detectScope(`${context} ${description}`, entryType, preliminaryCategory);
-    const category = detectCategoryForParsedEntry(`${description} ${context}`, scope);
+    const category = detectCategoryForParsedEntry(`${description} ${context}`, scope, entryType);
 
     const baseEntry = enrichEntryWithTagRules({
       entryDate,
@@ -2189,10 +2417,15 @@ function parseNaturalText(rawText) {
       updatedAt: new Date().toISOString()
     }, { overrideCategory: true });
 
-    return applyLearningToEntry(baseEntry, {
+    const learnedEntry = applyLearningToEntry(baseEntry, {
       originalCategory: baseEntry.category,
       sourceText: `${description} ${context}`
     });
+
+    const explicitType = detectExplicitEntryType(`${description} ${context}`);
+    if (explicitType) learnedEntry.entryType = explicitType;
+
+    return learnedEntry;
   });
 
   return drafts.filter(item => item.amount > 0 && item.description);
@@ -2917,7 +3150,7 @@ async function reloadEntries() {
     if (a.entryDate !== b.entryDate) return b.entryDate.localeCompare(a.entryDate);
     return String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? ''));
   });
-  applyFilters();
+  applyFilters({ deferHeavy: true });
 }
 
 function makeEntryFromForm() {
@@ -4008,19 +4241,32 @@ function entryMatchesFilters(entry, filters) {
   return true;
 }
 
-function applyFilters() {
+function applyFilters(options = {}) {
+  const isOptionsObject = options && typeof options === 'object' && !('target' in options);
+  const deferHeavy = Boolean(isOptionsObject && options.deferHeavy);
   const filters = getCurrentFilters();
   filteredEntries = allEntries.filter(entry => entryMatchesFilters(entry, filters));
+
   renderSummary();
-  renderCalendar();
-  renderYearCalendar();
   renderMainReport();
-  renderCategoryReport();
-  renderItemReport();
-  renderSmartReports();
-  renderRecurringReport();
   renderWalletReport();
   renderEntries();
+
+  const renderHeavyViews = () => {
+    renderCalendar();
+    renderYearCalendar();
+    renderCategoryReport();
+    renderItemReport();
+    renderSmartReports();
+    renderRecurringReport();
+  };
+
+  if (deferHeavy) {
+    if ('requestIdleCallback' in window) window.requestIdleCallback(renderHeavyViews, { timeout: 1200 });
+    else window.setTimeout(renderHeavyViews, 250);
+  } else {
+    renderHeavyViews();
+  }
 }
 
 function renderCategoryReport() {
@@ -5744,7 +5990,7 @@ function openVoiceMode() {
   if (!el.voiceQuickPanel) return;
   document.body.classList.add('voice-mode');
   el.voiceQuickPanel.classList.remove('hidden');
-  setVoiceStatus('Kliknij mikrofon i mów');
+  setVoiceStatus('Uruchamiam mikrofon...');
   setVoiceButtonsState(false);
   window.setTimeout(() => el.voiceRecordButton?.focus(), 50);
 }
@@ -5890,7 +6136,11 @@ function setupVoiceMode() {
     const params = new URLSearchParams(window.location.search);
     if (params.get('install') === 'voice') {
       setVoiceStatus('Kliknij „Zainstaluj mikrofon”, żeby dodać osobną ikonę szybkiego dodawania.');
+      return;
     }
+    window.setTimeout(() => {
+      if (!voiceIsRecording) startVoiceRecording();
+    }, 350);
   }
 }
 
@@ -7142,9 +7392,9 @@ function setupTabs() {
   if (!buttons.length || !pages.length) return;
 
   const activate = tabName => {
-    buttons.forEach(button => button.classList.toggle('active', button.dataset.tab === tabName));
-    pages.forEach(page => page.classList.toggle('active', page.dataset.tabPage === tabName));
-    try { localStorage.setItem('bilans-pwa-active-tab', tabName); } catch (_) {}
+    const safeTab = pages.some(page => page.dataset.tabPage === tabName) ? tabName : 'start';
+    buttons.forEach(button => button.classList.toggle('active', button.dataset.tab === safeTab));
+    pages.forEach(page => page.classList.toggle('active', page.dataset.tabPage === safeTab));
   };
 
   buttons.forEach(button => {
@@ -7155,10 +7405,9 @@ function setupTabs() {
     button.addEventListener('click', () => activate(button.dataset.jumpTab));
   });
 
-  let saved = 'start';
-  try { saved = localStorage.getItem('bilans-pwa-active-tab') || 'start'; } catch (_) {}
-  if (!pages.some(page => page.dataset.tabPage === saved)) saved = 'start';
-  activate(saved);
+  // Po każdym ponownym wejściu do aplikacji startujemy zawsze od zakładki Start.
+  try { localStorage.removeItem('bilans-pwa-active-tab'); } catch (_) {}
+  activate('start');
 }
 
 function openFilePicker(input) {
@@ -7387,7 +7636,7 @@ function bindEvents() {
 async function init() {
   const today = todayISO();
   document.title = 'Portfel PRO';
-  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.1 / 138';
+  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.1 / 141';
   setTodayHeader('wczytywanie...');
   if (isFileProtocol()) {
     showMessage('Program został otwarty bezpośrednio z index.html. Do importu JSON, PWA i cache użyj serwera lokalnego albo GitHub Pages.', 'error');
@@ -7423,7 +7672,7 @@ async function init() {
   setupSmartTooltips();
   setupVoiceMode();
   setupAiAndInventory();
-  updateTodayNamedays();
+  window.setTimeout(updateTodayNamedays, 300);
   updateCloudUi();
   setupFirstRunMode();
   let handledDropboxReturn = false;
@@ -7433,7 +7682,9 @@ async function init() {
     showMessage(error.message || 'Nie udało się zakończyć logowania Dropbox.', 'error');
   }
   if (!handledDropboxReturn && getStorageMode() === 'dropbox' && hasDropboxConnection() && !new URL(window.location.href).searchParams.get('code')) {
-    syncDropboxNow().catch(error => updateCloudUi(`Błąd synchronizacji Dropbox: ${error.message}`));
+    window.setTimeout(() => {
+      syncDropboxNow().catch(error => updateCloudUi(`Błąd synchronizacji Dropbox: ${error.message}`));
+    }, 2000);
   }
 }
 
