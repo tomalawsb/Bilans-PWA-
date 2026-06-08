@@ -1843,3 +1843,38 @@ body[data-theme="dark"] #todayLabel[data-status="missing"] {
 @keyframes inventorySpin {
   to { transform: rotate(360deg); }
 }
+
+.inventory-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tiny-button {
+  border: 1px solid rgba(15, 23, 42, 0.16);
+  border-radius: 10px;
+  padding: 5px 9px;
+  background: #ffffff;
+  color: #1f2937;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tiny-button:hover {
+  background: #fff7ed;
+  border-color: rgba(249, 115, 22, 0.45);
+}
+
+.danger-button {
+  color: #991b1b;
+  border-color: rgba(220, 38, 38, 0.22);
+}
+
+.inventory-pending-panel {
+  margin-top: 16px;
+}
+
+.inventory-pending-table td {
+  vertical-align: top;
+}

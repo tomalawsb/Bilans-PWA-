@@ -1,6 +1,6 @@
 const DB_NAME = 'bilans-pwa-etap1';
 const DB_VERSION = 4;
-const APP_VERSION = '1.1-127';
+const APP_VERSION = '1.1-128';
 const RAW_DROPBOX_DEFAULT_APP_KEY = String(window.PORTFEL_PRO_CONFIG?.dropboxAppKey || '').trim();
 const DROPBOX_DEFAULT_APP_KEY = /^WSTAW_TUTAJ/i.test(RAW_DROPBOX_DEFAULT_APP_KEY) ? '' : RAW_DROPBOX_DEFAULT_APP_KEY; // Ustaw w src/config.js, wtedy użytkownik klika tylko Połącz z Dropbox.
 const MAIN_INSTALL_KEY = 'portfel-pro-main-installed';
@@ -777,6 +777,8 @@ const el = {
   aiClearKeyButton: document.querySelector('#aiClearKeyButton'),
   aiSettingsStatus: document.querySelector('#aiSettingsStatus'),
   inventoryRecognizeButton: document.querySelector('#inventoryRecognizeButton'),
+  inventoryPendingButton: document.querySelector('#inventoryPendingButton'),
+  inventoryAddManualButton: document.querySelector('#inventoryAddManualButton'),
   inventoryRebuildButton: document.querySelector('#inventoryRebuildButton'),
   inventoryPeriodSelect: document.querySelector('#inventoryPeriodSelect'),
   inventoryFromDate: document.querySelector('#inventoryFromDate'),
@@ -785,6 +787,7 @@ const el = {
   inventoryStatus: document.querySelector('#inventoryStatus'),
   inventorySummary: document.querySelector('#inventorySummary'),
   inventoryItemsBody: document.querySelector('#inventoryItemsBody'),
+  inventoryPendingBody: document.querySelector('#inventoryPendingBody'),
   inventoryMovementsBody: document.querySelector('#inventoryMovementsBody'),
   themeCards: Array.from(document.querySelectorAll('[data-theme-option]'))
 };
@@ -5923,6 +5926,8 @@ function setInventoryBusy(isBusy, message = '') {
     el.inventoryRecognizeButton.textContent = isBusy ? 'Rozpoznaję...' : 'Rozpoznaj zakupy i sprzedaż';
   }
   if (el.inventoryRebuildButton) el.inventoryRebuildButton.disabled = Boolean(isBusy);
+  if (el.inventoryPendingButton) el.inventoryPendingButton.disabled = Boolean(isBusy);
+  if (el.inventoryAddManualButton) el.inventoryAddManualButton.disabled = Boolean(isBusy);
   if (isBusy || message) setInventoryStatus(message || 'Trwa analiza AI...', isBusy ? 'working' : 'ready');
 }
 
@@ -6210,6 +6215,213 @@ function buildPendingInventoryAnalysis(aiPayload, candidates) {
   return { createdAt: new Date().toISOString(), minConfidence, results };
 }
 
+
+function getInventoryPending() {
+  const data = safeJsonParseLocalStorage(INVENTORY_PENDING_KEY, { results: [] });
+  if (!data || typeof data !== 'object') return { results: [] };
+  if (!Array.isArray(data.results)) data.results = [];
+  return data;
+}
+
+function saveInventoryPending(data) {
+  setJsonLocalStorage(INVENTORY_PENDING_KEY, data && typeof data === 'object' ? data : { results: [] });
+}
+
+function createInventoryMovement({ entryKey = '', entryHash = '', entry = null, action = 'korekta_reczna', product, quantity, unit = 'szt', unitCost = 0, confidence = 1, reason = '', sourceDescription = 'Korekta ręczna magazynu' }) {
+  const now = new Date().toISOString();
+  const movement = {
+    id: `mov-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    entryKey: entryKey || '',
+    entrySyncId: entry?.syncId || '',
+    entryLocalId: entry?.id || '',
+    entryHash: entryHash || '',
+    entryDate: entry?.entryDate || todayISO(),
+    entryType: entry?.entryType || '',
+    action,
+    product: normalizeInventoryProductName(product),
+    quantity: Number(quantity || 0),
+    unit: unit || 'szt',
+    unitCost: Number(unitCost || 0),
+    confidence: Number(confidence || 1),
+    reason,
+    sourceDescription,
+    createdAt: now
+  };
+  const movements = getInventoryMovements();
+  movements.push(movement);
+  saveInventoryMovements(movements);
+  rebuildInventoryItemsFromMovements(false);
+  renderInventory();
+  scheduleDropboxAutoSync();
+  return movement;
+}
+
+function promptInventoryNumber(label, currentValue = '') {
+  const raw = window.prompt(label, String(currentValue ?? '').replace('.', ','));
+  if (raw === null) return null;
+  const value = Number(String(raw).replace(',', '.'));
+  if (!Number.isFinite(value)) {
+    showMessage('Podano nieprawidłową liczbę.', 'error');
+    return null;
+  }
+  return value;
+}
+
+function addManualInventoryItem() {
+  const product = normalizeInventoryProductName(window.prompt('Nazwa produktu / materiału:', '') || '');
+  if (!product) return;
+  const quantity = promptInventoryNumber('Ilość:', '1');
+  if (quantity === null) return;
+  const unit = (window.prompt('Jednostka:', 'szt') || 'szt').trim() || 'szt';
+  const unitCost = promptInventoryNumber('Cena jednostkowa / średni koszt:', '0');
+  if (unitCost === null) return;
+  createInventoryMovement({
+    action: quantity >= 0 ? 'korekta_reczna' : 'korekta_reczna',
+    product,
+    quantity,
+    unit,
+    unitCost,
+    reason: 'Dodano ręcznie z zakładki Magazyn.',
+    sourceDescription: 'Dodanie ręczne'
+  });
+  showMessage('Dodano ręczny ruch magazynowy.');
+}
+
+function editInventoryItem(index) {
+  const items = getInventoryItems();
+  const item = items[index];
+  if (!item) return;
+  const product = normalizeInventoryProductName(window.prompt('Nazwa produktu:', item.name) || '');
+  if (!product) return;
+  const quantity = promptInventoryNumber('Nowa ilość:', item.quantity);
+  if (quantity === null) return;
+  const unit = (window.prompt('Jednostka:', item.unit || 'szt') || item.unit || 'szt').trim() || 'szt';
+  const unitCost = promptInventoryNumber('Nowy średni koszt / cena jednostkowa:', Number(item.avgCost || 0).toFixed(2));
+  if (unitCost === null) return;
+
+  const oldQty = Number(item.quantity || 0);
+  if (Math.abs(oldQty) > 0.0001) {
+    createInventoryMovement({
+      action: 'korekta_reczna',
+      product: item.name,
+      quantity: -oldQty,
+      unit: item.unit || 'szt',
+      unitCost: Number(item.avgCost || 0),
+      reason: 'Wyzerowanie starego stanu przed korektą ręczną.',
+      sourceDescription: 'Korekta ręczna stanu'
+    });
+  }
+  if (Math.abs(quantity) > 0.0001) {
+    createInventoryMovement({
+      action: 'korekta_reczna',
+      product,
+      quantity,
+      unit,
+      unitCost,
+      reason: 'Ustawienie nowego stanu po korekcie ręcznej.',
+      sourceDescription: 'Korekta ręczna stanu'
+    });
+  }
+  showMessage('Zmieniono stan magazynowy ręczną korektą.');
+}
+
+function deleteInventoryItem(index) {
+  const items = getInventoryItems();
+  const item = items[index];
+  if (!item) return;
+  if (!window.confirm(`Usunąć pozycję z magazynu?\n\n${item.name}\nIlość: ${item.quantity} ${item.unit || 'szt'}`)) return;
+  const oldQty = Number(item.quantity || 0);
+  if (Math.abs(oldQty) > 0.0001) {
+    createInventoryMovement({
+      action: 'korekta_reczna',
+      product: item.name,
+      quantity: -oldQty,
+      unit: item.unit || 'szt',
+      unitCost: Number(item.avgCost || 0),
+      reason: 'Usunięcie pozycji magazynowej przez użytkownika.',
+      sourceDescription: 'Usunięcie ręczne z magazynu'
+    });
+  } else {
+    const filtered = getInventoryItems().filter((_, itemIndex) => itemIndex !== index);
+    saveInventoryItems(filtered);
+    renderInventory();
+  }
+  showMessage('Usunięto pozycję przez ręczną korektę stanu.');
+}
+
+function applyPendingInventoryItem(index) {
+  const pending = getInventoryPending();
+  const item = pending.results[index];
+  if (!item) return;
+  const direction = (window.prompt('Ruch magazynowy: wpisz + aby dodać albo - aby zdjąć:', item.movementType === 'out' ? '-' : '+') || '').trim();
+  if (!['+', '-'].includes(direction)) return;
+  const product = normalizeInventoryProductName(window.prompt('Produkt:', item.product || '') || '');
+  if (!product) return;
+  const quantityValue = promptInventoryNumber('Ilość:', item.quantity || 1);
+  if (quantityValue === null) return;
+  const unit = (window.prompt('Jednostka:', item.unit || 'szt') || 'szt').trim() || 'szt';
+  const unitCost = promptInventoryNumber('Cena jednostkowa / koszt:', item.unitCost || 0);
+  if (unitCost === null) return;
+  const quantity = direction === '-' ? -Math.abs(quantityValue) : Math.abs(quantityValue);
+  const movement = createInventoryMovement({
+    entryKey: item.id_wpisu || '',
+    entryHash: item.entryHash || '',
+    entry: item.entry || null,
+    action: direction === '-' ? 'zdejmij_z_magazynu' : 'dodaj_do_magazynu',
+    product,
+    quantity,
+    unit,
+    unitCost,
+    confidence: item.confidence || 1,
+    reason: `Ręcznie zastosowano wynik AI: ${item.reason || ''}`,
+    sourceDescription: item.entry?.description || item.entry?.originalText || 'Ręczne zastosowanie wyniku AI'
+  });
+  const analysis = getInventoryAnalysis();
+  analysis[item.id_wpisu] = {
+    entryHash: item.entryHash || '',
+    checkedAt: new Date().toISOString(),
+    decision: direction === '-' ? 'zdejmij_z_magazynu' : 'dodaj_do_magazynu',
+    movementIds: [movement.id],
+    confidence: item.confidence || 1,
+    reason: 'Ręcznie zastosowano po analizie AI.'
+  };
+  saveInventoryAnalysis(analysis);
+  pending.results.splice(index, 1);
+  saveInventoryPending(pending);
+  renderInventory();
+  showMessage('Zastosowano ręcznie wynik AI.');
+}
+
+function markPendingInventoryNoMove(index) {
+  const pending = getInventoryPending();
+  const item = pending.results[index];
+  if (!item) return;
+  const analysis = getInventoryAnalysis();
+  analysis[item.id_wpisu] = {
+    entryHash: item.entryHash || '',
+    checkedAt: new Date().toISOString(),
+    decision: 'brak_ruchu',
+    movementIds: [],
+    confidence: item.confidence || 0,
+    reason: 'Użytkownik oznaczył ręcznie jako bez ruchu magazynowego.'
+  };
+  saveInventoryAnalysis(analysis);
+  pending.results.splice(index, 1);
+  saveInventoryPending(pending);
+  renderInventory();
+  scheduleDropboxAutoSync();
+  showMessage('Oznaczono wpis jako bez ruchu magazynowego.');
+}
+
+function removePendingInventoryItem(index) {
+  const pending = getInventoryPending();
+  if (!pending.results[index]) return;
+  pending.results.splice(index, 1);
+  saveInventoryPending(pending);
+  renderInventory();
+  showMessage('Usunięto pozycję z listy ręcznego sprawdzenia.');
+}
+
 function applyInventoryMovementsFromPending(pending) {
   const now = new Date().toISOString();
   const movements = getInventoryMovements();
@@ -6285,7 +6497,7 @@ function rebuildInventoryItemsFromMovements(show = true) {
     quantity: Number(item.quantity.toFixed(3)),
     avgCost: item.quantity > 0 ? item.totalCost / item.quantity : 0,
     value: item.quantity > 0 ? item.totalCost : 0
-  })).sort((a, b) => a.name.localeCompare(b.name, 'pl'));
+  })).filter(item => Math.abs(Number(item.quantity || 0)) > 0.0001).sort((a, b) => a.name.localeCompare(b.name, 'pl'));
   saveInventoryItems(items);
   if (show) showMessage('Przeliczono stan magazynu z historii ruchów.');
   return items;
@@ -6300,7 +6512,7 @@ function renderInventory() {
     el.inventorySummary.innerHTML = `Pozycji: <b>${items.length}</b> · Ruchów: <b>${movements.length}</b> · Wartość: <b>${formatMoney(totalValue)}</b>${negative ? ` · <b class="danger-text">Ujemne stany: ${negative}</b>` : ''}`;
   }
   if (el.inventoryItemsBody) {
-    el.inventoryItemsBody.innerHTML = items.length ? items.map(item => `
+    el.inventoryItemsBody.innerHTML = items.length ? items.map((item, index) => `
       <tr>
         <td>${escapeHtml(item.name)}</td>
         <td>${Number(item.quantity || 0).toLocaleString('pl-PL')}</td>
@@ -6308,9 +6520,36 @@ function renderInventory() {
         <td>${formatMoney(Number(item.avgCost || 0))}</td>
         <td>${formatMoney(Number(item.value || 0))}</td>
         <td>${escapeHtml(formatDateTime(item.lastUpdated || ''))}</td>
+        <td class="inventory-actions">
+          <button class="tiny-button" type="button" data-inventory-action="edit" data-index="${index}">Edytuj</button>
+          <button class="tiny-button danger-button" type="button" data-inventory-action="delete" data-index="${index}">Usuń</button>
+        </td>
       </tr>
-    `).join('') : '<tr><td colspan="6" class="empty-state">Brak pozycji magazynowych.</td></tr>';
+    `).join('') : '<tr><td colspan="7" class="empty-state">Brak pozycji magazynowych.</td></tr>';
   }
+  if (el.inventoryPendingBody) {
+    const pending = getInventoryPending();
+    const rows = (pending.results || []).filter(item => !item.canApply || item.decision === 'wymaga_sprawdzenia');
+    el.inventoryPendingBody.innerHTML = rows.length ? rows.slice(0, 200).map((item) => {
+      const originalIndex = (pending.results || []).indexOf(item);
+      const entryText = item.entry?.description || item.entry?.originalText || item.id_wpisu || '';
+      return `
+      <tr>
+        <td>${escapeHtml(entryText)}</td>
+        <td>${escapeHtml(formatInventoryAction(item.decision) || item.decision || '')}</td>
+        <td>${escapeHtml(item.product || '')}</td>
+        <td>${item.quantity ? `${Number(item.quantity || 0).toLocaleString('pl-PL')} ${escapeHtml(item.unit || 'szt')}` : ''}</td>
+        <td>${Number(item.confidence || 0) ? `${(Number(item.confidence || 0) * 100).toFixed(0)}%` : ''}</td>
+        <td>${escapeHtml(item.reason || '')}</td>
+        <td class="inventory-actions">
+          <button class="tiny-button" type="button" data-pending-action="apply" data-index="${originalIndex}">Zastosuj ręcznie</button>
+          <button class="tiny-button" type="button" data-pending-action="nomove" data-index="${originalIndex}">Bez ruchu</button>
+          <button class="tiny-button danger-button" type="button" data-pending-action="remove" data-index="${originalIndex}">Usuń</button>
+        </td>
+      </tr>`;
+    }).join('') : '<tr><td colspan="7" class="empty-state">Brak pozycji do ręcznego sprawdzenia.</td></tr>';
+  }
+
   if (el.inventoryMovementsBody) {
     el.inventoryMovementsBody.innerHTML = movements.length ? movements.slice(0, 100).map(movement => `
       <tr>
@@ -6329,7 +6568,10 @@ function formatInventoryAction(action) {
     dodaj_do_magazynu: 'Dodanie',
     zdejmij_z_magazynu: 'Zdjęcie',
     zwrot_do_magazynu: 'Zwrot do magazynu',
-    zwrot_do_sklepu: 'Zwrot do sklepu'
+    zwrot_do_sklepu: 'Zwrot do sklepu',
+    korekta_reczna: 'Korekta ręczna',
+    brak_ruchu: 'Brak ruchu',
+    wymaga_sprawdzenia: 'Wymaga sprawdzenia'
   };
   return labels[action] || action || '';
 }
@@ -6460,10 +6702,36 @@ function setupAiAndInventory() {
     event.preventDefault();
     runInventoryRecognition().catch(error => showMessage(error.message || 'Nie udało się rozpoznać magazynu.', 'error'));
   });
+  if (el.inventoryPendingButton) el.inventoryPendingButton.addEventListener('click', event => {
+    event.preventDefault();
+    renderInventory();
+    setInventoryStatus('Poniżej w sekcji „Ostatnie rozpoznanie AI / ręczne sprawdzenie” możesz zastosować albo odrzucić pozycje wymagające decyzji.', 'ready');
+  });
+  if (el.inventoryAddManualButton) el.inventoryAddManualButton.addEventListener('click', event => {
+    event.preventDefault();
+    addManualInventoryItem();
+  });
   if (el.inventoryRebuildButton) el.inventoryRebuildButton.addEventListener('click', event => {
     event.preventDefault();
     rebuildInventoryItemsFromMovements(true);
     renderInventory();
+  });
+  if (el.inventoryItemsBody) el.inventoryItemsBody.addEventListener('click', event => {
+    const button = event.target.closest('[data-inventory-action]');
+    if (!button) return;
+    event.preventDefault();
+    const index = Number(button.dataset.index);
+    if (button.dataset.inventoryAction === 'edit') editInventoryItem(index);
+    if (button.dataset.inventoryAction === 'delete') deleteInventoryItem(index);
+  });
+  if (el.inventoryPendingBody) el.inventoryPendingBody.addEventListener('click', event => {
+    const button = event.target.closest('[data-pending-action]');
+    if (!button) return;
+    event.preventDefault();
+    const index = Number(button.dataset.index);
+    if (button.dataset.pendingAction === 'apply') applyPendingInventoryItem(index);
+    if (button.dataset.pendingAction === 'nomove') markPendingInventoryNoMove(index);
+    if (button.dataset.pendingAction === 'remove') removePendingInventoryItem(index);
   });
 }
 
@@ -6718,7 +6986,7 @@ function bindEvents() {
 async function init() {
   const today = todayISO();
   document.title = 'Portfel PRO';
-  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.1 / 127';
+  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.1 / 128';
   setTodayHeader('wczytywanie...');
   if (isFileProtocol()) {
     showMessage('Program został otwarty bezpośrednio z index.html. Do importu JSON, PWA i cache użyj serwera lokalnego albo GitHub Pages.', 'error');

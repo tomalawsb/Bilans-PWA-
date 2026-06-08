@@ -1,4 +1,4 @@
-# Portfel PRO v. 1.1 / 127 — jednorazowy zapis Dropbox po imporcie JSON
+# Portfel PRO v. 1.1 / 126 — jednorazowy zapis Dropbox po imporcie JSON
 
 Ta paczka jest poprawką wersji v. 1.1 / 117.
 
@@ -20,10 +20,10 @@ Test wykonany na podanym tekście z 2–7 marca 2026:
 - daty zostały przypisane jako: 2026-03-02, 2026-03-03, 2026-03-04, 2026-03-05, 2026-03-06, 2026-03-07;
 - nie wykryto błędu składni JavaScript w `src/app.js`.
 
-Po wrzuceniu na GitHub Pages uruchom adres z dopiskiem `?v=127` albo użyj przycisku „Odśwież program”.
+Po wrzuceniu na GitHub Pages uruchom adres z dopiskiem `?v=126` albo użyj przycisku „Odśwież program”.
 
 
-## Zmiany v. 1.1 / 127
+## Zmiany v. 1.1 / 126
 - Portfel gotówkowy przeniesiony na górę raportów.
 - Stan portfela dodany na ekran Start nad podsumowaniem dzisiejszych wydatków.
 - Korekta ręczna działa jako dopisywana zmiana: dodatnia kwota zwiększa portfel, ujemna zmniejsza, a pole po zapisie jest czyszczone.
@@ -31,7 +31,7 @@ Po wrzuceniu na GitHub Pages uruchom adres z dopiskiem `?v=127` albo użyj przyc
 - Import JSON/scalanie jest odporniejsze: ręczny import nie stosuje tombstone usunięć, lepiej rozpoznaje wpisy w zagnieżdżonych strukturach i skuteczniej pomija duplikaty.
 
 
-## 1.1-127 — poprawka synchronizacji Dropbox/import JSON
+## 1.1-126 — poprawka synchronizacji Dropbox/import JSON
 - Usunięto 30-minutową blokadę pobierania z Dropboxa.
 - Po imporcie JSON program wykonuje tylko jednorazowy zapis lokalnej bazy do Dropboxa jako aktualnego źródła danych.
 - Po tym jednorazowym zapisie synchronizacja wraca od razu do normalnej pracy między telefonem i komputerem.
@@ -41,7 +41,7 @@ Po wrzuceniu na GitHub Pages uruchom adres z dopiskiem `?v=127` albo użyj przyc
 - Dodano widoczne komunikaty po imporcie, eksporcie, połączeniu, odłączeniu i synchronizacji Dropbox.
 
 
-## 1.1-127 — imieniny i wydatki cykliczne
+## 1.1-126 — imieniny i wydatki cykliczne
 - Poprawiono adres API imienin na aktualny wariant `V2/today?timezone=Europe/Warsaw`.
 - Dodano lokalną bazę imienin na cały rok, więc nagłówek nie pokazuje już „niedostępne”, gdy API nie odpowie.
 - Powiększono i wyróżniono informację o dacie oraz imieninach w nagłówku.
