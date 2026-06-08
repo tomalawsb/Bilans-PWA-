@@ -1,6 +1,6 @@
 const DB_NAME = 'bilans-pwa-etap1';
 const DB_VERSION = 4;
-const APP_VERSION = '1.1-126';
+const APP_VERSION = '1.1-127';
 const RAW_DROPBOX_DEFAULT_APP_KEY = String(window.PORTFEL_PRO_CONFIG?.dropboxAppKey || '').trim();
 const DROPBOX_DEFAULT_APP_KEY = /^WSTAW_TUTAJ/i.test(RAW_DROPBOX_DEFAULT_APP_KEY) ? '' : RAW_DROPBOX_DEFAULT_APP_KEY; // Ustaw w src/config.js, wtedy użytkownik klika tylko Połącz z Dropbox.
 const MAIN_INSTALL_KEY = 'portfel-pro-main-installed';
@@ -782,6 +782,7 @@ const el = {
   inventoryFromDate: document.querySelector('#inventoryFromDate'),
   inventoryToDate: document.querySelector('#inventoryToDate'),
   inventoryMinConfidence: document.querySelector('#inventoryMinConfidence'),
+  inventoryStatus: document.querySelector('#inventoryStatus'),
   inventorySummary: document.querySelector('#inventorySummary'),
   inventoryItemsBody: document.querySelector('#inventoryItemsBody'),
   inventoryMovementsBody: document.querySelector('#inventoryMovementsBody'),
@@ -5914,6 +5915,59 @@ async function testAiKey() {
   showMessage('Klucz API działa.');
 }
 
+
+function setInventoryBusy(isBusy, message = '') {
+  if (el.inventoryRecognizeButton) {
+    el.inventoryRecognizeButton.disabled = Boolean(isBusy);
+    el.inventoryRecognizeButton.classList.toggle('is-working', Boolean(isBusy));
+    el.inventoryRecognizeButton.textContent = isBusy ? 'Rozpoznaję...' : 'Rozpoznaj zakupy i sprzedaż';
+  }
+  if (el.inventoryRebuildButton) el.inventoryRebuildButton.disabled = Boolean(isBusy);
+  if (isBusy || message) setInventoryStatus(message || 'Trwa analiza AI...', isBusy ? 'working' : 'ready');
+}
+
+function setInventoryStatus(message, mode = 'ready') {
+  if (!el.inventoryStatus) return;
+  el.inventoryStatus.textContent = message || '';
+  el.inventoryStatus.dataset.mode = mode;
+}
+
+function calculateInventoryPeriodRange(mode = 'current') {
+  const today = todayISO();
+  const currentMonth = today.slice(0, 7);
+  if (mode === 'previous') {
+    const base = new Date(`${currentMonth}-01T12:00:00`);
+    base.setMonth(base.getMonth() - 1);
+    const month = base.toISOString().slice(0, 7);
+    const last = new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate();
+    return { from: `${month}-01`, to: `${month}-${String(last).padStart(2, '0')}` };
+  }
+  const last = new Date(Number(currentMonth.slice(0, 4)), Number(currentMonth.slice(5, 7)), 0).getDate();
+  return { from: `${currentMonth}-01`, to: `${currentMonth}-${String(last).padStart(2, '0')}` };
+}
+
+function updateInventoryPeriodInputs(force = false) {
+  const mode = el.inventoryPeriodSelect?.value || 'current';
+  if (!el.inventoryFromDate || !el.inventoryToDate) return;
+  if (mode === 'custom') {
+    el.inventoryFromDate.disabled = false;
+    el.inventoryToDate.disabled = false;
+    if (force && (!el.inventoryFromDate.value || !el.inventoryToDate.value)) {
+      const range = calculateInventoryPeriodRange('current');
+      el.inventoryFromDate.value = el.inventoryFromDate.value || range.from;
+      el.inventoryToDate.value = el.inventoryToDate.value || range.to;
+    }
+    setInventoryStatus(`Zakres własny: ${el.inventoryFromDate.value || '—'} — ${el.inventoryToDate.value || '—'}.`, 'ready');
+    return;
+  }
+  const range = calculateInventoryPeriodRange(mode);
+  el.inventoryFromDate.disabled = true;
+  el.inventoryToDate.disabled = true;
+  el.inventoryFromDate.value = range.from;
+  el.inventoryToDate.value = range.to;
+  setInventoryStatus(`Gotowy. Okres analizy: ${range.from} — ${range.to}.`, 'ready');
+}
+
 function getInventoryItems() {
   const items = safeJsonParseLocalStorage(INVENTORY_ITEMS_KEY, []);
   return Array.isArray(items) ? items : [];
@@ -5966,23 +6020,17 @@ function inventoryProductKey(name, unit = '') {
 }
 
 function getInventoryPeriodRange() {
-  const today = todayISO();
-  const currentMonth = today.slice(0, 7);
   const mode = el.inventoryPeriodSelect?.value || 'current';
-  if (mode === 'custom') {
-    const from = el.inventoryFromDate?.value || `${currentMonth}-01`;
-    const to = el.inventoryToDate?.value || today;
-    return { from, to };
+  if (mode !== 'custom') {
+    const range = calculateInventoryPeriodRange(mode);
+    if (el.inventoryFromDate) el.inventoryFromDate.value = range.from;
+    if (el.inventoryToDate) el.inventoryToDate.value = range.to;
+    return range;
   }
-  if (mode === 'previous') {
-    const base = new Date(`${currentMonth}-01T12:00:00`);
-    base.setMonth(base.getMonth() - 1);
-    const month = base.toISOString().slice(0, 7);
-    const last = new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate();
-    return { from: `${month}-01`, to: `${month}-${String(last).padStart(2, '0')}` };
-  }
-  const last = new Date(Number(currentMonth.slice(0, 4)), Number(currentMonth.slice(5, 7)), 0).getDate();
-  return { from: `${currentMonth}-01`, to: `${currentMonth}-${String(last).padStart(2, '0')}` };
+  const fallback = calculateInventoryPeriodRange('current');
+  const from = el.inventoryFromDate?.value || fallback.from;
+  const to = el.inventoryToDate?.value || fallback.to;
+  return { from, to };
 }
 
 function getInventoryCandidates() {
@@ -6318,24 +6366,41 @@ function showInventoryPendingPopup(pending, skippedChecked = 0) {
 }
 
 async function runInventoryRecognition() {
-  await reloadEntries();
-  const { candidates, skippedChecked, from, to } = getInventoryCandidates();
-  if (!candidates.length) {
-    showMessage(`Brak nowych lub zmienionych firmowych wpisów do analizy za okres ${from} — ${to}.`);
-    renderInventory();
-    return;
+  setInventoryBusy(true, 'Przygotowuję wpisy do analizy...');
+  try {
+    await reloadEntries();
+    const { candidates, skippedChecked, from, to } = getInventoryCandidates();
+    if (!candidates.length) {
+      const message = `Brak nowych lub zmienionych firmowych wpisów do analizy za okres ${from} — ${to}. Pominięte jako już sprawdzone: ${skippedChecked}.`;
+      setInventoryStatus(message, 'ready');
+      showMessage(message);
+      renderInventory();
+      return;
+    }
+    setInventoryStatus(`Trwa analiza AI: wysyłam ${candidates.length} wpisów z okresu ${from} — ${to}. Nie zamykaj programu.`, 'working');
+    showMessage(`Wysyłam do AI ${candidates.length} wpisów z okresu ${from} — ${to}...`);
+    const aiPayload = await callInventoryAi(candidates);
+    setInventoryStatus('AI zwróciła wynik. Przygotowuję podsumowanie i ruchy magazynowe...', 'working');
+    const pending = buildPendingInventoryAnalysis(aiPayload, candidates);
+    setJsonLocalStorage(INVENTORY_PENDING_KEY, pending);
+    const accepted = showInventoryPendingPopup(pending, skippedChecked);
+    if (!accepted) {
+      setInventoryStatus('Analiza AI została wykonana, ale zmiany nie zostały zapisane.', 'error');
+      showMessage('Analiza AI została przygotowana, ale nie zapisano zmian w magazynie.', 'error');
+      return;
+    }
+    setInventoryStatus('Zapisuję zaakceptowane ruchy magazynowe...', 'working');
+    const result = applyInventoryMovementsFromPending(pending);
+    const finalMessage = `Magazyn zaktualizowany. Zastosowano: ${result.applied}, zapisano bez ruchu: ${result.checkedNoMove}, pominięte jako wcześniej sprawdzone: ${skippedChecked}.`;
+    setInventoryStatus(finalMessage, 'ready');
+    showMessage(finalMessage);
+  } catch (error) {
+    const message = error.message || 'Nie udało się rozpoznać magazynu.';
+    setInventoryStatus(message, 'error');
+    throw error;
+  } finally {
+    setInventoryBusy(false);
   }
-  showMessage(`Wysyłam do AI ${candidates.length} wpisów z okresu ${from} — ${to}...`);
-  const aiPayload = await callInventoryAi(candidates);
-  const pending = buildPendingInventoryAnalysis(aiPayload, candidates);
-  setJsonLocalStorage(INVENTORY_PENDING_KEY, pending);
-  const accepted = showInventoryPendingPopup(pending, skippedChecked);
-  if (!accepted) {
-    showMessage('Analiza AI została przygotowana, ale nie zapisano zmian w magazynie.', 'error');
-    return;
-  }
-  const result = applyInventoryMovementsFromPending(pending);
-  showMessage(`Magazyn zaktualizowany. Zastosowano: ${result.applied}, zapisano bez ruchu: ${result.checkedNoMove}.`);
 }
 
 function importInventoryFromPayload(payload, replace = false) {
@@ -6364,8 +6429,10 @@ function importInventoryFromPayload(payload, replace = false) {
 function setupAiAndInventory() {
   renderAiSettings();
   renderInventory();
-  if (el.inventoryFromDate && !el.inventoryFromDate.value) el.inventoryFromDate.value = `${todayISO().slice(0, 7)}-01`;
-  if (el.inventoryToDate && !el.inventoryToDate.value) el.inventoryToDate.value = todayISO();
+  updateInventoryPeriodInputs(true);
+  if (el.inventoryPeriodSelect) el.inventoryPeriodSelect.addEventListener('change', () => updateInventoryPeriodInputs(true));
+  if (el.inventoryFromDate) el.inventoryFromDate.addEventListener('change', () => updateInventoryPeriodInputs(false));
+  if (el.inventoryToDate) el.inventoryToDate.addEventListener('change', () => updateInventoryPeriodInputs(false));
   if (el.aiProviderSelect) el.aiProviderSelect.addEventListener('change', () => {
     const settings = getAiSettings();
     setJsonLocalStorage(AI_SETTINGS_KEY, { ...settings, provider: el.aiProviderSelect.value, model: (AI_MODEL_OPTIONS[el.aiProviderSelect.value] || [])[0] || '', customModel: '' });
@@ -6651,7 +6718,7 @@ function bindEvents() {
 async function init() {
   const today = todayISO();
   document.title = 'Portfel PRO';
-  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.1 / 126';
+  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.1 / 127';
   setTodayHeader('wczytywanie...');
   if (isFileProtocol()) {
     showMessage('Program został otwarty bezpośrednio z index.html. Do importu JSON, PWA i cache użyj serwera lokalnego albo GitHub Pages.', 'error');

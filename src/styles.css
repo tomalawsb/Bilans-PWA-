@@ -1804,3 +1804,42 @@ body[data-theme="dark"] #todayLabel[data-status="missing"] {
 .inventory-movements-table td {
   vertical-align: top;
 }
+
+.inventory-status {
+  margin: 12px 0 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: #f8fafc;
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.inventory-status[data-mode="working"] {
+  border-color: rgba(245, 158, 11, 0.45);
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.inventory-status[data-mode="error"] {
+  border-color: rgba(220, 38, 38, 0.35);
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+#inventoryRecognizeButton.is-working::before {
+  content: "";
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 8px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  vertical-align: -2px;
+  animation: inventorySpin 0.8s linear infinite;
+}
+
+@keyframes inventorySpin {
+  to { transform: rotate(360deg); }
+}

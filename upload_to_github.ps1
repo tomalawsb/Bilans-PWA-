@@ -1,136 +1,83 @@
-# upload_to_github_fixed.ps1
-# Wysylanie aktualnego folderu projektu na GitHub
-# Uruchom w glownym folderze projektu:
-# powershell -ExecutionPolicy Bypass -File .\upload_to_github_fixed.ps1
+# ============================================================
+# Automatyczne wysylanie projektu na GitHub
+# Uzytkownik: tomalawsb
+# Repozytorium: Bilans-PWA-
+# ============================================================
 
-$ErrorActionPreference = "Stop"
-
-function Stop-WithMessage($Message) {
-    Write-Host ""
-    Write-Host "BLAD: $Message" -ForegroundColor Red
-    Write-Host ""
-    exit 1
-}
-
-function Info($Message) {
-    Write-Host $Message -ForegroundColor Cyan
-}
-
-function Ok($Message) {
-    Write-Host $Message -ForegroundColor Green
-}
-
-function Warn($Message) {
-    Write-Host $Message -ForegroundColor Yellow
-}
+$RepoUrl = "https://github.com/tomalawsb/Bilans-PWA-.git"
+$GitUserName = "Tomasz Wolak"
+$GitUserEmail = "wolak82@gmail.com"
+$BranchName = "main"
+$CommitMessage = "Aktualizacja programu"
 
 Write-Host "========================================"
 Write-Host " Wysylanie projektu na GitHub"
 Write-Host "========================================"
 
-# 1. Sprawdzenie Git
-try {
-    git --version | Out-Null
-} catch {
-    Stop-WithMessage "Git nie jest zainstalowany albo nie jest dodany do PATH. Zainstaluj Git for Windows i uruchom terminal ponownie."
+$ProjectPath = Get-Location
+Write-Host "Folder projektu: $ProjectPath"
+Write-Host "Repozytorium: $RepoUrl"
+
+# Sprawdzenie Git
+if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+    Write-Host "BLAD: Git nie jest zainstalowany albo nie jest dodany do PATH." -ForegroundColor Red
+    exit 1
 }
 
-$ProjectFolder = Get-Location
-Info "Folder projektu: $ProjectFolder"
+# Ustawienie autora commitow
+Write-Host "Ustawiam autora Git..."
+git config --global user.name "$GitUserName"
+git config --global user.email "$GitUserEmail"
 
-# 2. Dane autora commita
-$GitName = git config --global user.name
-$GitEmail = git config --global user.email
-
-if ([string]::IsNullOrWhiteSpace($GitName)) {
-    $GitName = Read-Host "Podaj nazwe autora commitow, np. Tomasz Wolak"
-    if ([string]::IsNullOrWhiteSpace($GitName)) {
-        Stop-WithMessage "Nie podano nazwy autora."
-    }
-    git config --global user.name "$GitName"
-}
-
-if ([string]::IsNullOrWhiteSpace($GitEmail)) {
-    $GitEmail = Read-Host "Podaj email autora commitow, np. twoj-mail@gmail.com"
-    if ([string]::IsNullOrWhiteSpace($GitEmail)) {
-        Stop-WithMessage "Nie podano emaila autora."
-    }
-    git config --global user.email "$GitEmail"
-}
-
-Ok "Autor Git: $GitName <$GitEmail>"
-
-# 3. Repozytorium
-$RepoUrl = Read-Host "Wklej adres repozytorium GitHub, np. https://github.com/login/repo.git"
-if ([string]::IsNullOrWhiteSpace($RepoUrl)) {
-    Stop-WithMessage "Nie podano adresu repozytorium."
-}
-
-# Poprawka czestego bledu: uzytkownik wkleja adres /upload/main z przegladarki
-if ($RepoUrl -match "/upload/main") {
-    $RepoUrl = $RepoUrl -replace "/upload/main", ".git"
-    Warn "Wykryto adres strony /upload/main. Poprawiam na adres repo: $RepoUrl"
-}
-
-# Jesli ktos poda adres bez .git, dopisz .git tylko dla github.com/login/repo
-if ($RepoUrl -match "^https://github\.com/[^/]+/[^/]+/?$" -and $RepoUrl -notmatch "\.git$") {
-    $RepoUrl = $RepoUrl.TrimEnd('/') + ".git"
-    Warn "Dopisuje koncowke .git: $RepoUrl"
-}
-
-if ($RepoUrl -notmatch "^https://github\.com/.+/.+\.git$" -and $RepoUrl -notmatch "^git@github\.com:.+/.+\.git$") {
-    Stop-WithMessage "Adres repozytorium wyglada niepoprawnie. Uzyj formatu: https://github.com/login/repo.git"
-}
-
-# 4. Inicjalizacja repo lokalnego
-if (!(Test-Path ".git")) {
-    Info "Inicjalizuje repozytorium Git..."
+# Inicjalizacja repo, jesli potrzeba
+if (-not (Test-Path ".git")) {
+    Write-Host "Inicjalizuje repozytorium Git..."
     git init
+    if ($LASTEXITCODE -ne 0) { exit 1 }
 }
 
-# 5. Galaz main
-try {
-    git branch -M main
-} catch {
-    Warn "Nie udalo sie przelaczyc/utworzyc galezi main. Kontynuuje."
-}
+# Ustawienie galezi main
+Write-Host "Ustawiam galaz $BranchName..."
+git branch -M $BranchName
 
-# 6. Remote origin
-$ExistingOrigin = ""
-try {
-    $ExistingOrigin = git remote get-url origin 2>$null
-} catch {}
-
-if ([string]::IsNullOrWhiteSpace($ExistingOrigin)) {
-    Info "Dodaje remote origin: $RepoUrl"
+# Ustawienie remote origin
+$CurrentRemote = git remote get-url origin 2>$null
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($CurrentRemote)) {
+    Write-Host "Dodaje remote origin..."
     git remote add origin $RepoUrl
 } else {
-    Info "Aktualizuje remote origin: $RepoUrl"
+    Write-Host "Aktualizuje remote origin..."
     git remote set-url origin $RepoUrl
 }
+if ($LASTEXITCODE -ne 0) { exit 1 }
 
-# 7. Dodanie plikow
-Info "Dodaje pliki do commita..."
+# Dodanie plikow
+Write-Host "Dodaje pliki..."
 git add -A
+if ($LASTEXITCODE -ne 0) { exit 1 }
 
+# Commit tylko jesli sa zmiany
 $Status = git status --porcelain
 if ([string]::IsNullOrWhiteSpace($Status)) {
-    Warn "Brak nowych zmian do commita. Sprobuje wykonac push obecnego stanu."
+    Write-Host "Brak nowych zmian do wyslania." -ForegroundColor Yellow
 } else {
-    $DefaultCommit = "Aktualizacja programu"
-    $CommitMessage = Read-Host "Opis commita [Enter = $DefaultCommit]"
-    if ([string]::IsNullOrWhiteSpace($CommitMessage)) {
-        $CommitMessage = $DefaultCommit
-    }
-
-    Info "Tworze commit..."
+    Write-Host "Tworze commit..."
     git commit -m "$CommitMessage"
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "BLAD: Nie udalo sie utworzyc commita." -ForegroundColor Red
+        exit 1
+    }
 }
 
-# 8. Push
-Info "Wysylam na GitHub..."
-git push -u origin main
+# Push
+Write-Host "Wysylam na GitHub..."
+git push -u origin $BranchName
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "BLAD: Nie udalo sie wyslac projektu na GitHub." -ForegroundColor Red
+    Write-Host "Sprawdz, czy jestes zalogowany do GitHub w Git Credential Manager albo czy repozytorium istnieje." -ForegroundColor Yellow
+    exit 1
+}
 
 Write-Host "========================================"
-Ok "Gotowe. Projekt zostal wyslany na GitHub."
+Write-Host " Gotowe. Projekt zostal wyslany na GitHub."
 Write-Host "========================================"
