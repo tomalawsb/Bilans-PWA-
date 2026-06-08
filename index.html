@@ -427,8 +427,6 @@
           </div>
           <div class="button-row">
             <button id="inventoryRecognizeButton" type="button" data-help="Analizuje firmowe wpisy z wybranego okresu przez AI i przygotowuje ruchy magazynowe. Wpisy już sprawdzone nie są naliczane drugi raz.">Rozpoznaj zakupy i sprzedaż</button>
-            <button id="inventoryPendingButton" class="secondary" type="button" data-help="Pokazuje ostatnie wyniki AI, zwłaszcza wpisy do ręcznego sprawdzenia.">Ręczne sprawdzenie</button>
-            <button id="inventoryAddManualButton" class="secondary" type="button" data-help="Dodaje ręcznie produkt lub materiał do stanu magazynowego.">Dodaj ręcznie</button>
             <button id="inventoryRebuildButton" class="secondary" type="button" data-help="Przelicza aktualne stany z historii ruchów magazynowych.">Przelicz stany</button>
           </div>
         </div>
@@ -453,6 +451,10 @@
             Minimalna pewność AI
             <input id="inventoryMinConfidence" type="number" min="0" max="100" step="1" value="85">
           </label>
+          <label class="wide">
+            Inteligentna wyszukiwarka magazynu
+            <input id="inventorySearchInput" type="search" placeholder="Szukaj: nazwa, kategoria, jednostka, alias, np. kamera, kabel, tp-link..." autocomplete="off">
+          </label>
         </div>
         <div id="inventoryStatus" class="inventory-status" data-mode="ready">Gotowy.</div>
         <div id="inventorySummary" class="inventory-summary"></div>
@@ -471,54 +473,6 @@
               </tr>
             </thead>
             <tbody id="inventoryItemsBody"></tbody>
-          </table>
-        </div>
-      </section>
-      <section class="panel inventory-pending-panel">
-        <div class="panel-title-row">
-          <div>
-            <h2>Ostatnie rozpoznanie AI / ręczne sprawdzenie</h2>
-            <p>Tu trafiają wpisy, których AI nie zastosowała automatycznie. Możesz je zastosować ręcznie, oznaczyć jako bez ruchu albo usunąć z tej listy.</p>
-          </div>
-        </div>
-        <div class="table-wrap">
-          <table class="entries-table inventory-pending-table">
-            <thead>
-              <tr>
-                <th>Wpis</th>
-                <th>Decyzja AI</th>
-                <th>Produkt</th>
-                <th>Ilość</th>
-                <th>Pewność</th>
-                <th>Powód</th>
-                <th>Działania</th>
-              </tr>
-            </thead>
-            <tbody id="inventoryPendingBody"></tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="panel inventory-movements-panel">
-        <div class="panel-title-row">
-          <div>
-            <h2>Historia ruchów magazynowych</h2>
-            <p>Każdy ruch jest powiązany z wpisem finansowym, żeby nie naliczyć go drugi raz.</p>
-          </div>
-        </div>
-        <div class="table-wrap">
-          <table class="entries-table inventory-movements-table">
-            <thead>
-              <tr>
-                <th>Data</th>
-                <th>Ruch</th>
-                <th>Produkt</th>
-                <th>Kategoria</th>
-                <th>Ilość</th>
-                <th>Powiązany wpis</th>
-              </tr>
-            </thead>
-            <tbody id="inventoryMovementsBody"></tbody>
           </table>
         </div>
       </section>

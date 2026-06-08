@@ -7,7 +7,7 @@ $ErrorActionPreference = "Stop"
 $RepoUrl = "https://github.com/tomalawsb/Bilans-PWA-.git"
 $GitUserName = "Tomasz Wolak"
 $GitUserEmail = "wolak82@gmail.com"
-$DefaultCommitMessage = "Portfel PRO v1.1 135 - wyszukiwarka magazynu"
+$DefaultCommitMessage = "Portfel PRO v1.1 138 - uproszczony magazyn i wyszukiwarka"
 
 function Stop-WithMessage($Message) {
     Write-Host ""
@@ -87,10 +87,8 @@ if ([string]::IsNullOrWhiteSpace($Status)) {
 Info "Zmiany wykryte przez Git:"
 git status --short
 
-$CommitMessage = Read-Host "Opis commita [Enter = $DefaultCommitMessage]"
-if ([string]::IsNullOrWhiteSpace($CommitMessage)) { $CommitMessage = $DefaultCommitMessage }
-
-Info "Tworze commit..."
+$CommitMessage = $DefaultCommitMessage
+Info "Tworze commit: $CommitMessage"
 git commit -m "$CommitMessage"
 if ($LASTEXITCODE -ne 0) { Stop-WithMessage "Nie udalo sie utworzyc commita." }
 
@@ -102,5 +100,5 @@ Set-Location $ProjectPath
 
 Write-Host "========================================"
 Ok "Gotowe. Projekt zostal wyslany na GitHub."
-Write-Host "Adres strony: https://tomalawsb.github.io/Bilans-PWA-/?v=135"
+Write-Host "Adres strony: https://tomalawsb.github.io/Bilans-PWA-/?v=138"
 Write-Host "========================================"
