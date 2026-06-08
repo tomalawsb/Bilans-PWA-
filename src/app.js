@@ -1,6 +1,6 @@
 const DB_NAME = 'bilans-pwa-etap1';
 const DB_VERSION = 4;
-const APP_VERSION = '1.1-133';
+const APP_VERSION = '1.1-134';
 const RAW_DROPBOX_DEFAULT_APP_KEY = String(window.PORTFEL_PRO_CONFIG?.dropboxAppKey || '').trim();
 const DROPBOX_DEFAULT_APP_KEY = /^WSTAW_TUTAJ/i.test(RAW_DROPBOX_DEFAULT_APP_KEY) ? '' : RAW_DROPBOX_DEFAULT_APP_KEY; // Ustaw w src/config.js, wtedy użytkownik klika tylko Połącz z Dropbox.
 const MAIN_INSTALL_KEY = 'portfel-pro-main-installed';
@@ -2386,6 +2386,24 @@ function formatDateTime(value) {
     second: '2-digit'
   });
 }
+
+function formatInventoryAction(action) {
+  const value = String(action || '').trim();
+  const labels = {
+    dodaj_do_magazynu: 'Dodanie do magazynu',
+    zdejmij_z_magazynu: 'Zdjęcie z magazynu',
+    zwrot_do_magazynu: 'Zwrot do magazynu',
+    zwrot_do_sklepu: 'Zwrot do sklepu',
+    korekta_reczna: 'Korekta ręczna',
+    brak_ruchu: 'Bez ruchu',
+    wymaga_sprawdzenia: 'Do ręcznego sprawdzenia',
+    zakup: 'Zakup',
+    sprzedaz: 'Sprzedaż',
+    sprzedaż: 'Sprzedaż'
+  };
+  return labels[value] || value.replace(/_/g, ' ');
+}
+
 
 function showMessage(text, type = 'success') {
   el.messageBox.textContent = text;
@@ -7277,7 +7295,7 @@ function bindEvents() {
 async function init() {
   const today = todayISO();
   document.title = 'Portfel PRO';
-  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.1 / 133';
+  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.1 / 134';
   setTodayHeader('wczytywanie...');
   if (isFileProtocol()) {
     showMessage('Program został otwarty bezpośrednio z index.html. Do importu JSON, PWA i cache użyj serwera lokalnego albo GitHub Pages.', 'error');
