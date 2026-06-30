@@ -1,6 +1,6 @@
 const DB_NAME = 'bilans-pwa-etap1';
 const DB_VERSION = 4;
-const APP_VERSION = '1.1-139';
+const APP_VERSION = '1.1-142';
 const RAW_DROPBOX_DEFAULT_APP_KEY = String(window.PORTFEL_PRO_CONFIG?.dropboxAppKey || '').trim();
 const DROPBOX_DEFAULT_APP_KEY = /^WSTAW_TUTAJ/i.test(RAW_DROPBOX_DEFAULT_APP_KEY) ? '' : RAW_DROPBOX_DEFAULT_APP_KEY; // Ustaw w src/config.js, wtedy użytkownik klika tylko Połącz z Dropbox.
 const MAIN_INSTALL_KEY = 'portfel-pro-main-installed';
@@ -667,6 +667,8 @@ const el = {
   quickText: document.querySelector('#quickText'),
   parseButton: document.querySelector('#parseButton'),
   addParsedButton: document.querySelector('#addParsedButton'),
+  addParsedBottomButton: document.querySelector('#addParsedBottomButton'),
+  parseBottomActions: document.querySelector('#parseBottomActions'),
   parsePreview: document.querySelector('#parsePreview'),
   calendarPrevButton: document.querySelector('#calendarPrevButton'),
   calendarTodayButton: document.querySelector('#calendarTodayButton'),
@@ -2525,10 +2527,16 @@ function collectParsedDraftsFromPreview() {
   });
 }
 
+function setParsedSaveButtonsState(enabled) {
+  if (el.addParsedButton) el.addParsedButton.disabled = !enabled;
+  if (el.addParsedBottomButton) el.addParsedBottomButton.disabled = !enabled;
+  if (el.parseBottomActions) el.parseBottomActions.classList.toggle('hidden', !enabled);
+}
+
 function renderParsePreview() {
   if (!parsedDrafts.length) {
     el.parsePreview.innerHTML = '<div class="empty-state">Brak rozpoznanych pozycji.</div>';
-    el.addParsedButton.disabled = true;
+    setParsedSaveButtonsState(false);
     return;
   }
 
@@ -2585,7 +2593,7 @@ function renderParsePreview() {
       `;
     }).join('')}
   `;
-  el.addParsedButton.disabled = false;
+  setParsedSaveButtonsState(true);
 }
 
 function handleParseText() {
@@ -7433,6 +7441,9 @@ function bindEvents() {
   if (el.walletSaveButton) el.walletSaveButton.addEventListener('click', saveWalletFormValues);
   el.parseButton.addEventListener('click', handleParseText);
   el.addParsedButton.addEventListener('click', () => handleAddParsedEntries().catch(error => showMessage(error.message, 'error')));
+  if (el.addParsedBottomButton) {
+    el.addParsedBottomButton.addEventListener('click', () => handleAddParsedEntries().catch(error => showMessage(error.message, 'error')));
+  }
   el.parsePreview.addEventListener('input', event => updateParsedDraftFromElement(event.target));
   el.parsePreview.addEventListener('change', event => updateParsedDraftFromElement(event.target));
   if (el.cacheResetButton) el.cacheResetButton.addEventListener('click', clearAppCacheAndReload);
@@ -7636,7 +7647,7 @@ function bindEvents() {
 async function init() {
   const today = todayISO();
   document.title = 'Portfel PRO';
-  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.1 / 141';
+  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.1 / 142';
   setTodayHeader('wczytywanie...');
   if (isFileProtocol()) {
     showMessage('Program został otwarty bezpośrednio z index.html. Do importu JSON, PWA i cache użyj serwera lokalnego albo GitHub Pages.', 'error');

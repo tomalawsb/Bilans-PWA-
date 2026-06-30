@@ -1,9 +1,9 @@
-# Portfel PRO v. 1.1 / 141 — pełna przebudowa parsera i uczenia
+# Portfel PRO v. 1.1 / 142 — dolny przycisk zapisu po rozpoznaniu
 
-Wersja: **1.1 / 141**  
+Wersja: **1.1 / 142**  
 Data: 2026-06-08
 
-## Zmiany w wersji 1.1 / 141
+## Zmiany w wersji 1.1 / 142
 
 - Przebudowano priorytet parsera: jawne słowa **przychód / wydatek** mają pierwszeństwo przed nauczonymi regułami.
 - Dodano punktowanie kategorii zamiast wybierania pierwszego pasującego słowa.
@@ -14,11 +14,16 @@ Data: 2026-06-08
 - W panelu nauczonych reguł pokazano: decyzję, potwierdzenia, błędy, pewność oraz stan aktywna/wyłączona.
 - Dodano możliwość ręcznego włączenia/wyłączenia nauczonej reguły.
 - Uczenie nadal ignoruje ogólne źródła typu „Wpis z tekstu”, żeby nie tworzyć błędnych reguł masowych.
-- Podbito wersję programu do **1.1 / 141** i cache PWA do **v=141**.
+- Podbito wersję programu do **1.1 / 142** i cache PWA do **v=142**.
 - `upload_to_github.ps1` nie pyta o opis commita i ma wpisane repozytorium GitHub.
 
 ## Adres po wdrożeniu
 
 ```text
-https://tomalawsb.github.io/Bilans-PWA-/?v=141
+https://tomalawsb.github.io/Bilans-PWA-/?v=142
 ```
+
+## Zmiana v. 1.1 / 142
+- Dodano drugi przycisk **Zapisz wpisy** pod podglądem rozpoznanych pozycji.
+- Dolny przycisk działa tak samo jak górny i znika, gdy nie ma pozycji do zapisania.
+- Podbito cache PWA do **v=142**, żeby GitHub Pages pobrał świeże pliki.
