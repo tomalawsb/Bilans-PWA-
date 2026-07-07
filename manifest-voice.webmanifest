@@ -3,14 +3,14 @@
   "short_name": "Dodaj głosem",
   "description": "Szybkie dodawanie wpisów głosem do Portfel PRO.",
   "lang": "pl",
-  "id": "./?app=portfel-pro-voice",
-  "start_url": "./index.html?action=voice&v=151",
-  "scope": "./",
+  "id": "./voice/",
+  "start_url": "./voice/index.html?v=139",
+  "scope": "./voice/",
   "display": "standalone",
   "background_color": "#f5fbff",
   "theme_color": "#0e7490",
   "orientation": "portrait-primary",
-  "version": "1.1.151",
+  "version": "1.1.139",
   "icons": [
     {
       "src": "./icons/mic-192.png",

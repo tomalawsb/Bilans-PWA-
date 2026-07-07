@@ -1,62 +1,29 @@
-# Portfel PRO v. 1.1 / 151 — Finalny test i paczka końcowa
+# Portfel PRO v. 1.1 / 142 — dolny przycisk zapisu po rozpoznaniu
 
-Wersja: **1.1 / 151**  
-Etap: **9 — finalny test i paczka końcowa**
+Wersja: **1.1 / 142**  
+Data: 2026-06-08
 
-## Zakres wersji finalnej
+## Zmiany w wersji 1.1 / 142
 
-Ta paczka zawiera komplet poprawek z etapów 1–8 oraz podbicie wersji końcowej do **v151**.
+- Przebudowano priorytet parsera: jawne słowa **przychód / wydatek** mają pierwszeństwo przed nauczonymi regułami.
+- Dodano punktowanie kategorii zamiast wybierania pierwszego pasującego słowa.
+- Moduł uczenia zapisuje teraz pełniejszą decyzję: typ wpisu, rodzaj, kategorię, płatność i grupę raportową.
+- Nauczone reguły są dopasowywane z uwzględnieniem kontekstu: typ wpisu, rodzaj i podobieństwo frazy.
+- Błędne reguły są osłabiane: jeżeli użytkownik poprawi wynik po zastosowaniu reguły, program zwiększa licznik błędów tej reguły.
+- Reguły z dużą liczbą błędów są automatycznie wyłączane.
+- W panelu nauczonych reguł pokazano: decyzję, potwierdzenia, błędy, pewność oraz stan aktywna/wyłączona.
+- Dodano możliwość ręcznego włączenia/wyłączenia nauczonej reguły.
+- Uczenie nadal ignoruje ogólne źródła typu „Wpis z tekstu”, żeby nie tworzyć błędnych reguł masowych.
+- Podbito wersję programu do **1.1 / 142** i cache PWA do **v=142**.
+- `upload_to_github.ps1` nie pyta o opis commita i ma wpisane repozytorium GitHub.
 
-Zawarte obszary:
+## Adres po wdrożeniu
 
-- Magazyn: ręczna kontrola, historia ruchów, ręczne dodawanie pozycji.
-- Migracja danych: bezpieczne struktury dla starych danych i starych kopii.
-- PWA/cache: ujednolicona wersja, odświeżanie i czyszczenie starego cache.
-- Mikrofon: poprawiony skrót i aktualny widok głosowy.
-- Audyt UI: spójność elementów HTML i obsługi JS.
-- Kopie: import, eksport, podgląd i potwierdzenie zastąpienia danych.
-- Ręczne dodawanie wpisu: uproszczony formularz.
-- AI/paragony: uporządkowany wynik, standardowe kategorie i możliwość korekty przed zapisem.
-- Wygląd: poprawiony układ, czytelność i ekspozycja najważniejszych informacji.
-
-## Testy wykonane technicznie
-
-- `node --check src/app.js` — OK.
-- `node --check service-worker.js` — OK.
-- Walidacja `manifest.webmanifest` — OK.
-- Walidacja `manifest-voice.webmanifest` — OK.
-- Kontrola zdublowanych `id` w `index.html` — OK.
-- Kontrola statycznych `document.getElementById(...)` z JS względem `index.html` — OK.
-- Kontrola statycznych selektorów `#id` z JS względem `index.html` — OK.
-- Kontrola zakładek `data-tab` względem `data-tab-page` — OK.
-- Kontrola wpisów cache i `?v=151` — OK.
-- Test archiwum ZIP — OK.
-
-## Czego nie da się potwierdzić bez ręcznego uruchomienia w przeglądarce
-
-- Kliknięcie każdego przycisku na telefonie i komputerze.
-- Faktyczne działanie mikrofonu w Android/PWA.
-- Faktyczny import/eksport na urządzeniu użytkownika.
-- Faktyczne rozpoznanie paragonu przez zewnętrzne API AI.
-
-## Uruchomienie lokalne
-
-```txt
-run_local_windows.bat
+```text
+https://tomalawsb.github.io/Bilans-PWA-/?v=142
 ```
 
-Adres lokalny:
-
-```txt
-http://localhost:8000/?v=151
-```
-
-## GitHub Pages
-
-Po wgraniu na GitHub otwieraj z parametrem:
-
-```txt
-https://tomalawsb.github.io/Bilans-PWA-/?v=151
-```
-
-Jeżeli telefon dalej pokazuje starą wersję, użyj w aplikacji przycisku **Odśwież program** albo usuń dane strony/PWA w ustawieniach przeglądarki.
+## Zmiana v. 1.1 / 142
+- Dodano drugi przycisk **Zapisz wpisy** pod podglądem rozpoznanych pozycji.
+- Dolny przycisk działa tak samo jak górny i znika, gdy nie ma pozycji do zapisania.
+- Podbito cache PWA do **v=142**, żeby GitHub Pages pobrał świeże pliki.

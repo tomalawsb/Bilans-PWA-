@@ -7,7 +7,7 @@ $ErrorActionPreference = "Stop"
 $RepoUrl = "https://github.com/tomalawsb/Bilans-PWA-.git"
 $GitUserName = "Tomasz Wolak"
 $GitUserEmail = "wolak82@gmail.com"
-$DefaultCommitMessage = "Portfel PRO v1.1 151 - finalny test"
+$DefaultCommitMessage = "Portfel PRO v1.1 141 - pelne uczenie parsera"
 
 function Stop-WithMessage($Message) {
     Write-Host ""
@@ -100,5 +100,5 @@ Set-Location $ProjectPath
 
 Write-Host "========================================"
 Ok "Gotowe. Projekt zostal wyslany na GitHub."
-Write-Host "Adres strony: https://tomalawsb.github.io/Bilans-PWA-/?v=151"
+Write-Host "Adres strony: https://tomalawsb.github.io/Bilans-PWA-/?v=141"
 Write-Host "========================================"
