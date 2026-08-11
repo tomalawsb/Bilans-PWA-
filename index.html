@@ -11,11 +11,11 @@
     const __manifestFile = new URLSearchParams(location.search).get('action') === 'voice'
       ? 'manifest-voice.webmanifest'
       : 'manifest.webmanifest';
-    document.write(`<link id="appManifest" rel="manifest" href="./${__manifestFile}?v=151">`);
+    document.write(`<link id="appManifest" rel="manifest" href="./${__manifestFile}?v=153">`);
   </script>
-  <link rel="icon" href="./icons/icon-192.png?v=151">
-  <link rel="apple-touch-icon" href="./icons/icon-192.png?v=151">
-  <link rel="stylesheet" href="./src/styles.css?v=151">
+  <link rel="icon" href="./icons/icon-192.png?v=153">
+  <link rel="apple-touch-icon" href="./icons/icon-192.png?v=153">
+  <link rel="stylesheet" href="./src/styles.css?v=153">
 </head>
 <body data-theme="classic">
   <script>
@@ -26,25 +26,16 @@
   <main class="app-shell">
     <header class="app-header">
       <div class="brand-block">
-        <img class="app-logo" src="./icons/logo-portfel-pro.png?v=151" alt="Portfel PRO">
+        <img class="app-logo" src="./icons/logo-portfel-pro.png?v=153" alt="Portfel PRO">
         <div>
-          <h1>Portfel PRO <span id="appVersionBadge" class="version-badge">v. 1.1 / 151</span></h1>
+          <h1>Portfel PRO <span id="appVersionBadge" class="version-badge">v. 1.1 / 153</span></h1>
           <p id="todayLabel">Lokalna aplikacja webowa</p>
         </div>
-      </div>
-      <div class="header-actions">
-        <button id="installButton" class="secondary hidden" type="button" data-help="Instaluje Portfel PRO jako aplikację na tym urządzeniu. Po instalacji można uruchamiać program z ikony, bez wchodzenia przez przeglądarkę.">Zainstaluj aplikację</button>
-        <button id="installVoiceButton" class="secondary hidden" type="button" data-help="Tworzy osobny skrót do szybkiego dodawania głosem. Na telefonie otwiera mały panel mikrofonu zamiast całego programu.">Zainstaluj mikrofon</button>
-        <button id="voiceShortcutButton" class="secondary" type="button" data-help="Otwiera panel szybkiego dodawania wpisu głosem bez przechodzenia do osobnego skrótu.">🎙 Mikrofon</button>
-        <button id="cacheResetButton" class="ghost" type="button" data-help="Czyści pamięć podręczną PWA i wymusza pobranie najnowszej wersji programu. Nie usuwa wpisów finansowych.">Odśwież program</button>
-        <button id="exportButton" class="secondary" type="button" data-help="Zapisuje lokalną kopię danych do pliku JSON. Przydatne przed większymi zmianami albo testami.">Zapisz kopię danych</button>
-        <button id="importButton" class="file-button" type="button" data-help="Wczytuje dane z pliku JSON i scala je z obecnymi wpisami.">Wczytaj dane</button>
-        <input id="importInput" class="hidden-file-input" type="file" accept="application/json,.json">
       </div>
     </header>
 
     <nav class="app-tabs" aria-label="Główne sekcje programu">
-      <button class="tab-button active" type="button" data-tab="start" data-help="Bilans, szybkie dodawanie, ręczny wpis i najważniejszy raport.">Bilans</button>
+      <button class="tab-button active" type="button" data-tab="start" data-help="Bilans, szybkie rozpoznawanie wpisów i najważniejszy raport.">Bilans</button>
       <button class="tab-button" type="button" data-tab="history" data-help="Lista wszystkich wpisów, filtrowanie, edycja, usuwanie i reset programu.">Historia</button>
       <button class="tab-button" type="button" data-tab="reports" data-help="Szczegółowe raporty kategorii i grup wydatków/przychodów.">Raporty</button>
       <button class="tab-button" type="button" data-tab="calendar" data-help="Widok miesięczny i roczny. Wpisy można przenosić między dniami.">Kalendarz</button>
@@ -122,25 +113,6 @@
         </article>
       </section>
 
-
-      <section class="dashboard-shortcuts" aria-label="Skróty do najważniejszych funkcji">
-        <button class="dashboard-shortcut" type="button" data-jump-tab="start">
-          <strong>Dodaj wpis</strong>
-          <span>Ręcznie albo przez szybkie AI</span>
-        </button>
-        <button class="dashboard-shortcut" type="button" data-jump-tab="inventory">
-          <strong>Magazyn</strong>
-          <span>Stany i ręczna kontrola</span>
-        </button>
-        <button class="dashboard-shortcut" type="button" data-jump-tab="history">
-          <strong>Ostatnie wpisy</strong>
-          <span>Historia, filtry i edycja</span>
-        </button>
-        <button class="dashboard-shortcut" type="button" data-jump-tab="sync">
-          <strong>Kopie</strong>
-          <span>Eksport, import i Dropbox</span>
-        </button>
-      </section>
       <section class="panel quick-parser-panel main-task-panel">
         <div class="panel-title-row">
           <div>
@@ -168,93 +140,73 @@
           <p>Najważniejsze podsumowanie: komputerowe, montaże, wydatki domowe i wynik firmy bez odejmowania wydatków domowych.</p>
           <div id="mainReport" class="category-report main-report"></div>
         </article>
-
-        <article class="panel form-panel compact-manual-panel emphasis-panel">
-          <details open>
-            <summary>Dodaj wpis ręcznie</summary>
-            <div class="details-body">
-              <div class="panel-title-row compact-title-row">
-                <div>
-                  <h2 id="formTitle">Dodaj wpis</h2>
-                  <p>Najpierw wpisz typ, rodzaj, kategorię, kwotę i opis. Reszta pól jest pomocnicza.</p>
-                </div>
-                <button id="cancelEditButton" class="secondary hidden" type="button">Anuluj edycję</button>
-              </div>
-
-              <form id="entryForm" class="entry-form" autocomplete="off">
-                <label class="priority-field">
-                  Typ
-                  <select id="entryType" name="entryType" required>
-                    <option value="wydatek">Wydatek</option>
-                    <option value="przychód">Przychód</option>
-                  </select>
-                </label>
-
-                <label class="priority-field">
-                  Rodzaj
-                  <select id="entryScope" name="entryScope" required>
-                    <option value="domowe">Domowe</option>
-                    <option value="firmowe">Firmowe</option>
-                    <option value="nieokreślone">Nie określono</option>
-                  </select>
-                </label>
-
-                <label class="priority-field">
-                  Kategoria
-                  <select id="category" name="category" required></select>
-                </label>
-
-                <label class="priority-field">
-                  Kwota
-                  <input id="amount" name="amount" type="text" inputmode="decimal" placeholder="np. 120,50" required>
-                </label>
-
-                <label class="wide priority-field">
-                  Opis
-                  <input id="description" name="description" type="text" placeholder="np. kamera, paliwo, zarobek za usługę">
-                </label>
-
-                <label class="priority-field">
-                  Data
-                  <input id="entryDate" name="entryDate" type="date" required>
-                </label>
-
-                <details class="manual-extra wide">
-                  <summary>Pola dodatkowe</summary>
-                  <div class="manual-extra-grid">
-                    <label>
-                      Płatność
-                      <select id="paymentMethod" name="paymentMethod" required>
-                        <option value="gotówka">Gotówka</option>
-                        <option value="karta">Karta</option>
-                        <option value="bank">Bank</option>
-                        <option value="blik">BLIK</option>
-                        <option value="inne">Inne</option>
-                      </select>
-                    </label>
-
-                    <label>
-                      Tagi
-                      <input id="tags" name="tags" type="text" placeholder="np. firma, auto, paragon">
-                    </label>
-
-                    <label class="wide">
-                      Tekst źródłowy
-                      <textarea id="originalText" name="originalText" rows="3" placeholder="Tu możesz wkleić pierwotną notatkę albo dyktowany tekst"></textarea>
-                    </label>
-                  </div>
-                </details>
-
-                <div class="form-actions wide entry-form-actions">
-                  <button id="saveButton" type="submit">Dodaj wpis</button>
-                  <button id="resetButton" class="secondary" type="button">Wyczyść formularz</button>
-                </div>
-              </form>
-            </div>
-          </details>
-        </article>
       </section>
     </section>
+
+    <dialog id="entryEditDialog" class="entry-edit-dialog" aria-labelledby="formTitle">
+      <div class="dialog-title-row">
+        <div>
+          <h2 id="formTitle">Edytuj wpis</h2>
+          <p>Zmiany dotyczą wyłącznie wybranego wpisu z historii.</p>
+        </div>
+        <button id="cancelEditButton" class="ghost" type="button" aria-label="Zamknij edycję">Zamknij</button>
+      </div>
+      <form id="entryForm" class="entry-form" autocomplete="off">
+        <label class="priority-field">
+          Typ
+          <select id="entryType" name="entryType" required>
+            <option value="wydatek">Wydatek</option>
+            <option value="przychód">Przychód</option>
+          </select>
+        </label>
+        <label class="priority-field">
+          Rodzaj
+          <select id="entryScope" name="entryScope" required>
+            <option value="domowe">Domowe</option>
+            <option value="firmowe">Firmowe</option>
+            <option value="nieokreślone">Nie określono</option>
+          </select>
+        </label>
+        <label class="priority-field">
+          Kategoria
+          <select id="category" name="category" required></select>
+        </label>
+        <label class="priority-field">
+          Kwota
+          <input id="amount" name="amount" type="text" inputmode="decimal" required>
+        </label>
+        <label class="wide priority-field">
+          Opis
+          <input id="description" name="description" type="text">
+        </label>
+        <label class="priority-field">
+          Data
+          <input id="entryDate" name="entryDate" type="date" required>
+        </label>
+        <label>
+          Płatność
+          <select id="paymentMethod" name="paymentMethod" required>
+            <option value="gotówka">Gotówka</option>
+            <option value="karta">Karta</option>
+            <option value="bank">Bank</option>
+            <option value="blik">BLIK</option>
+            <option value="inne">Inne</option>
+          </select>
+        </label>
+        <label>
+          Tagi
+          <input id="tags" name="tags" type="text">
+        </label>
+        <label class="wide">
+          Tekst źródłowy
+          <textarea id="originalText" name="originalText" rows="3"></textarea>
+        </label>
+        <div class="form-actions wide dialog-actions">
+          <button id="saveButton" type="submit">Zapisz zmiany</button>
+          <button class="secondary" type="button" data-close-edit>Anuluj</button>
+        </div>
+      </form>
+    </dialog>
 
     <section class="tab-page" data-tab-page="history">
       <section class="panel">
@@ -349,18 +301,14 @@
       <section class="report-layout">
         <article class="panel report-panel wallet-panel">
           <h2>Portfel gotówkowy</h2>
-          <p>Liczy tylko gotówkę: przychody gotówką dodają środki, wydatki gotówką je odejmują. Karta, BLIK i przelew nie zmieniają portfela.</p>
+          <p>Stan jest ciągły między miesiącami. Od ustawionej wartości początkowej program dodaje późniejsze przychody gotówką, odejmuje wydatki gotówką oraz uwzględnia ręczne korekty.</p>
           <div class="wallet-controls">
             <label>
-              Miesiąc
-              <select id="walletMonth"></select>
-            </label>
-            <label>
-              Stan na początek miesiąca
+              Stan początkowy portfela
               <input id="walletInitialBalance" type="text" inputmode="decimal" placeholder="np. 500">
             </label>
             <label>
-              Korekta ręczna
+              Dodaj albo odejmij
               <input id="walletAdjustment" type="text" inputmode="decimal" placeholder="np. 150 albo -25">
             </label>
             <button id="walletSaveButton" class="secondary" type="button">Zapisz portfel</button>
@@ -629,7 +577,7 @@
         <div class="panel-title-row">
           <div>
             <h2>Pomoc i instrukcja obsługi</h2>
-            <p>Krótka instrukcja dla wersji testowej Portfel PRO v. 1.1 / 151.</p>
+            <p>Krótka instrukcja dla Portfel PRO v. 1.1 / 153.</p>
           </div>
         </div>
 
@@ -659,7 +607,7 @@
 
           <article class="help-card">
             <h3>3. AI i paragony</h3>
-            <p>Użyj sekcji <strong>Dodaj wpis ręcznie</strong>, gdy parser źle rozpozna tekst albo chcesz od razu wpisać dokładne dane.</p>
+            <p>Po rozpoznaniu popraw typ, rodzaj, kategorię albo inne pola bezpośrednio w podglądzie. Program zapamięta poprawkę po zapisaniu wpisu.</p>
             <ul>
               <li><strong>Typ</strong>: przychód albo wydatek.</li>
               <li><strong>Rodzaj</strong>: firmowe, domowe albo nieokreślone.</li>
@@ -729,9 +677,9 @@
           <article class="help-card">
             <h3>9. Gdy program pokazuje starą wersję</h3>
             <ol>
-              <li>Kliknij <strong>Odśwież program</strong>.</li>
+              <li>W zakładce <strong>Ustawienia</strong> kliknij <strong>Odśwież program</strong>.</li>
               <li>Odśwież stronę w przeglądarce.</li>
-              <li>Jeżeli dalej widzisz starą wersję, otwórz adres z dopiskiem <code>?v=151</code>.</li>
+              <li>Jeżeli dalej widzisz starą wersję, otwórz adres z dopiskiem <code>?v=153</code>.</li>
             </ol>
           </article>
         </div>
@@ -740,11 +688,26 @@
 
     <section class="tab-page" data-tab-page="settings">
 
+      <section class="panel app-settings-panel">
+        <div class="panel-title-row">
+          <div>
+            <h2>Aplikacja i skróty</h2>
+            <p>Funkcje instalacyjne i techniczne są tutaj, poza ekranem głównym.</p>
+          </div>
+        </div>
+        <div class="app-settings-actions">
+          <button id="installButton" class="secondary hidden" type="button">Zainstaluj aplikację</button>
+          <button id="installVoiceButton" class="secondary hidden" type="button">Zainstaluj mikrofon</button>
+          <button id="cacheResetButton" class="ghost" type="button">Odśwież program</button>
+        </div>
+        <p id="installStatus" class="settings-status">Sprawdzam możliwość instalacji…</p>
+      </section>
+
       <section class="panel ai-settings-panel">
         <div class="panel-title-row">
           <div>
-            <h2>AI / Rozpoznawanie magazynu</h2>
-            <p>Ustaw klucz API i model używany do automatycznego rozpoznawania zakupów oraz sprzedaży w magazynie.</p>
+            <h2>AI / Rozpoznawanie</h2>
+            <p>Ustaw klucz API i model używany przez inteligentne rozpoznawanie wpisów oraz magazynu.</p>
           </div>
         </div>
         <div class="ai-settings-grid">
@@ -881,8 +844,8 @@
       <section class="panel learning-panel">
         <div class="panel-title-row">
           <div>
-            <h2>Samouczenie kategorii</h2>
-            <p>Program zapamiętuje Twoje poprawki kategorii z podglądu rozpoznania. Po dwóch potwierdzeniach zaczyna używać reguły automatycznie.</p>
+            <h2>Samouczenie wpisów</h2>
+            <p>Program zapamiętuje poprawiony typ, rodzaj, kategorię i płatność. Konkretna poprawka zaczyna działać przy kolejnym podobnym wpisie.</p>
           </div>
           <button id="learningClearButton" class="secondary" type="button" data-help="Czyści tylko nauczone reguły. Wpisy finansowe zostają bez zmian.">Wyczyść naukę</button>
         </div>
@@ -892,7 +855,7 @@
     </section>
   </main>
 
-  <script src="./src/config.js?v=151"></script>
-  <script src="./src/app.js?v=151" type="module"></script>
+  <script src="./src/config.js?v=153"></script>
+  <script src="./src/app.js?v=153" type="module"></script>
 </body>
 </html>

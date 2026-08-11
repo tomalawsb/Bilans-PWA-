@@ -1,6 +1,6 @@
 const DB_NAME = 'bilans-pwa-etap1';
 const DB_VERSION = 4;
-const APP_VERSION = '1.1-151';
+const APP_VERSION = '1.1-153';
 const RAW_DROPBOX_DEFAULT_APP_KEY = String(window.PORTFEL_PRO_CONFIG?.dropboxAppKey || '').trim();
 const DROPBOX_DEFAULT_APP_KEY = /^WSTAW_TUTAJ/i.test(RAW_DROPBOX_DEFAULT_APP_KEY) ? '' : RAW_DROPBOX_DEFAULT_APP_KEY; // Ustaw w src/config.js, wtedy użytkownik klika tylko Połącz z Dropbox.
 const MAIN_INSTALL_KEY = 'portfel-pro-main-installed';
@@ -21,8 +21,9 @@ const DROPBOX_FORCE_LOCAL_UPLOAD_KEY = 'portfel-pro-dropbox-force-local-upload-v
 const DELETE_TOMBSTONE_RETENTION_DAYS = 365;
 const MAIN_REPORT_SETTINGS_KEY = 'portfel-pro-main-report-settings-v1';
 const CUSTOM_CATEGORIES_KEY = 'portfel-pro-custom-categories-v1';
-const WALLET_MONTHS_KEY = 'portfel-pro-wallet-months-v1';
-const LEARNING_AUTO_CONFIRMATIONS = 2;
+const WALLET_STATE_KEY = 'portfel-pro-wallet-state-v2';
+const LEGACY_WALLET_MONTHS_KEY = 'portfel-pro-wallet-months-v1';
+const LEARNING_AUTO_CONFIRMATIONS = 1;
 const LEARNING_MAX_EXAMPLES = 8;
 const AI_SETTINGS_KEY = 'portfel-pro-ai-settings-v1';
 const INVENTORY_ITEMS_KEY = 'portfel-pro-inventory-items-v1';
@@ -639,6 +640,7 @@ let filteredEntries = [];
 let editingId = null;
 let deferredInstallPrompt = null;
 let parsedDrafts = [];
+let parseRequestId = 0;
 let tagRules = [];
 let learningRules = [];
 let customCategories = loadCustomCategories();
@@ -656,7 +658,7 @@ const el = {
   messageBox: document.querySelector('#messageBox'),
   installButton: document.querySelector('#installButton'),
   installVoiceButton: document.querySelector('#installVoiceButton'),
-  voiceShortcutButton: document.querySelector('#voiceShortcutButton'),
+  installStatus: document.querySelector('#installStatus'),
   voiceQuickPanel: document.querySelector('#voiceQuickPanel'),
   voiceCloseButton: document.querySelector('#voiceCloseButton'),
   voiceInstallNowButton: document.querySelector('#voiceInstallNowButton'),
@@ -669,9 +671,6 @@ const el = {
   voicePreview: document.querySelector('#voicePreview'),
   cacheResetButton: document.querySelector('#cacheResetButton'),
   appVersionBadge: document.querySelector('#appVersionBadge'),
-  exportButton: document.querySelector('#exportButton'),
-  importButton: document.querySelector('#importButton'),
-  importInput: document.querySelector('#importInput'),
   quickText: document.querySelector('#quickText'),
   parseButton: document.querySelector('#parseButton'),
   addParsedButton: document.querySelector('#addParsedButton'),
@@ -728,9 +727,9 @@ const el = {
   learningSummary: document.querySelector('#learningSummary'),
   learningClearButton: document.querySelector('#learningClearButton'),
   entryForm: document.querySelector('#entryForm'),
+  entryEditDialog: document.querySelector('#entryEditDialog'),
   formTitle: document.querySelector('#formTitle'),
   saveButton: document.querySelector('#saveButton'),
-  resetButton: document.querySelector('#resetButton'),
   cancelEditButton: document.querySelector('#cancelEditButton'),
   entryDate: document.querySelector('#entryDate'),
   entryType: document.querySelector('#entryType'),
@@ -760,7 +759,6 @@ const el = {
   smartReport: document.querySelector('#smartReport'),
   recurringReport: document.querySelector('#recurringReport'),
   walletReport: document.querySelector('#walletReport'),
-  walletMonth: document.querySelector('#walletMonth'),
   walletInitialBalance: document.querySelector('#walletInitialBalance'),
   walletAdjustment: document.querySelector('#walletAdjustment'),
   walletSaveButton: document.querySelector('#walletSaveButton'),
@@ -1065,13 +1063,11 @@ function prepareEntryForStorage(entry, options = {}) {
   const cleaned = { ...entry };
   delete cleaned.learningOriginalCategory;
   delete cleaned.learningSourceText;
-  delete cleaned.learningAppliedRuleId;
   delete cleaned.learningConfidence;
   delete cleaned.learningSuggestionNote;
   delete cleaned.learningOriginalType;
   delete cleaned.learningOriginalScope;
   delete cleaned.learningOriginalPaymentMethod;
-  delete cleaned.learningAppliedSnapshot;
   const numericId = Number(cleaned.id);
 
   if (forceNewId || !isValidLocalEntryId(numericId)) {
@@ -1248,11 +1244,12 @@ function normalizeStandardBilansCategory(value = '', sourceText = '', fallback =
   const direct = STANDARD_BILANS_CATEGORY_DIRECT.get(categoryKey(value));
   if (direct) return normalizeKnownCategory(direct, direct);
 
+  // Wartość wybrana przez użytkownika, także kategoria własna, ma pierwszeństwo
+  // przed ponownym wnioskowaniem z opisu podczas zapisu podglądu.
+  if (isKnownCategory(value)) return normalizeKnownCategory(value, fallback);
+
   const inferred = inferStandardBilansCategoryFromText(`${value} ${sourceText}`);
   if (inferred) return normalizeKnownCategory(inferred, inferred);
-
-  const known = normalizeKnownCategory(value, '');
-  if (known) return known;
 
   return normalizeKnownCategory(fallback, 'Inne');
 }
@@ -1520,7 +1517,7 @@ function normalizeText(value) {
 const LEARNING_STOP_WORDS = new Set([
   'kupilem', 'kupilam', 'kupione', 'kupiony', 'kupiona', 'kupic', 'zakup', 'zakupy', 'zaplacilem', 'zaplacilam',
   'wydalem', 'wydalam', 'koszt', 'kosztowalo', 'paragon', 'faktura', 'rachunek', 'rachunki', 'dostalem', 'otrzymalem',
-  'zarobilem', 'zarobek', 'przychod', 'wplata', 'wplyw', 'gotowka', 'karta', 'bank', 'blik', 'inne',
+  'zarobilem', 'zarobek', 'przychod', 'dochod', 'zysk', 'utarg', 'wynagrodzenie', 'pensja', 'wplata', 'wplyw', 'gotowka', 'karta', 'bank', 'blik', 'inne',
   'domowe', 'firmowe', 'domowy', 'firmowy', 'domowa', 'firmowa', 'nieokreslone', 'dzieci', 'dziecko', 'dzieciom',
   'oraz', 'albo', 'czyli', 'jest', 'bylo', 'byla', 'byly', 'ten', 'ta', 'to', 'tego', 'tej', 'tych', 'dla', 'przez',
   'przy', 'nad', 'pod', 'bez', 'oraz', 'wraz', 'jako', 'szt', 'sztuk', 'sztuki', 'zlotych', 'zlote', 'zloty', 'pln'
@@ -1566,7 +1563,7 @@ function makeLearningPhrase(entryOrText) {
 function learningConfidence(rule) {
   const confirmations = Number(rule?.confirmations || 0);
   const misses = Number(rule?.misses || 0);
-  const base = 42 + confirmations * 15 - misses * 18;
+  const base = 52 + confirmations * 18 - misses * 20;
   return Math.max(15, Math.min(99, Math.round(base)));
 }
 
@@ -1656,7 +1653,8 @@ function scoreLearningRule(rule, text, context = {}) {
 
   // Jawny przychód/wydatek ma bezwzględny priorytet. Reguła sprzeczna z tekstem odpada.
   if (explicitType && rule.entryType && rule.entryType !== explicitType) return 0;
-  if (!explicitType && currentType && rule.entryType && rule.entryType !== currentType) score -= 25;
+  // Bez jawnego słowa „przychód/wydatek” bieżący typ jest tylko domyślną
+  // propozycją parsera, więc nie może blokować nauczonej decyzji użytkownika.
   if (rule.entryType && currentType && rule.entryType === currentType) score += 12;
   if (rule.scope && currentScope && rule.scope === currentScope) score += 8;
   if (rule.scope && currentScope && rule.scope !== currentScope && currentScope !== 'nieokreślone') score -= 12;
@@ -1711,9 +1709,10 @@ function shouldAllowLearningOverride(entry, sourceText, match) {
   const currentCategory = entry?.category || 'Inne';
   const detectedCategory = detectCategoryFromRules(sourceText, { entryType: entry.entryType, scope: entry.scope });
 
-  // Nauka może wygrać z parserem tylko przy bardzo mocnej regule. Inaczej jest tylko sugestią.
-  if (detectedCategory && detectedCategory !== 'Inne' && detectedCategory !== match.rule.category && match.score < 94) return false;
-  if (currentCategory !== 'Inne' && currentCategory !== 'Dom' && currentCategory !== match.rule.category && match.score < 92) return false;
+  // Dokładna, zapisana przez użytkownika poprawka może wygrać już przy następnym
+  // podobnym wpisie. Luźne dopasowania nadal nie osiągną tego progu.
+  if (detectedCategory && detectedCategory !== 'Inne' && detectedCategory !== match.rule.category && match.score < 80) return false;
+  if (currentCategory !== 'Inne' && currentCategory !== 'Dom' && currentCategory !== match.rule.category && match.score < 80) return false;
 
   return match.score >= 70;
 }
@@ -1744,7 +1743,7 @@ function applyLearningToEntry(entry, options = {}) {
     const rule = match.rule;
     let applied = false;
 
-    if (!explicitType && rule.entryType && !updated.entryType) {
+    if (!explicitType && rule.entryType && match.score >= 70 && rule.entryType !== updated.entryType) {
       updated.entryType = rule.entryType;
       applied = true;
     }
@@ -1756,7 +1755,8 @@ function applyLearningToEntry(entry, options = {}) {
       applied = true;
     }
 
-    if (rule.scope && normalizeScope(updated.scope) === 'nieokreślone') {
+    const explicitScope = detectExplicitScope(sourceText);
+    if (rule.scope && !explicitScope && match.score >= 70 && normalizeScope(rule.scope) !== normalizeScope(updated.scope)) {
       updated.scope = normalizeScope(rule.scope);
       applied = true;
     }
@@ -1769,7 +1769,7 @@ function applyLearningToEntry(entry, options = {}) {
     if (applied) {
       updated.learningAppliedRuleId = rule.id;
       updated.learningConfidence = match.score;
-      updated.learningSuggestionNote = `Nauczona reguła: ${rule.phrase}`;
+      updated.learningSuggestionNote = rule.phrase;
       updated.learningAppliedSnapshot = {
         category: rule.category,
         entryType: rule.entryType || '',
@@ -1784,7 +1784,9 @@ function applyLearningToEntry(entry, options = {}) {
 
 async function saveLearningRule(rule) {
   const normalized = normalizeLearningRule(rule);
-  if (!normalized.normalizedPhrase || normalized.category === 'Inne') return null;
+  const hasLearnedDecision = normalized.category !== 'Inne'
+    || Boolean(normalized.entryType || normalized.scope || normalized.paymentMethod || normalized.reportGroup);
+  if (!normalized.normalizedPhrase || !hasLearnedDecision) return null;
   return new Promise((resolve, reject) => {
     const request = txNamedStore(LEARNING_RULE_STORE, 'readwrite').put(normalized);
     request.onsuccess = () => resolve(normalized);
@@ -1866,7 +1868,7 @@ async function penalizeAppliedLearningRule(entry) {
 async function learnFromCorrection(entry, previousCategory) {
   const nextCategory = entry?.category || 'Inne';
   const oldCategory = previousCategory || entry?.learningOriginalCategory || 'Inne';
-  if (!entry || !isKnownCategory(nextCategory) || nextCategory === 'Inne') return null;
+  if (!entry || !isKnownCategory(nextCategory)) return null;
 
   const learningSource = entry.learningSourceText || entry.description || entry.originalText || '';
   if (isGenericLearningSource(learningSource)) return null;
@@ -1939,7 +1941,7 @@ function renderLearningRules() {
   if (el.learningSummary) {
     const active = learningRules.filter(rule => !rule.disabled && Number(rule.confirmations || 0) >= LEARNING_AUTO_CONFIRMATIONS).length;
     const disabled = learningRules.filter(rule => rule.disabled).length;
-    el.learningSummary.textContent = `Reguły: ${learningRules.length} · aktywne automatycznie: ${active} · wyłączone po błędach: ${disabled} · próg: ${LEARNING_AUTO_CONFIRMATIONS} potwierdzenia.`;
+    el.learningSummary.textContent = `Reguły: ${learningRules.length} · aktywne automatycznie: ${active} · wyłączone po błędach: ${disabled} · próg: ${LEARNING_AUTO_CONFIRMATIONS === 1 ? '1 potwierdzenie' : `${LEARNING_AUTO_CONFIRMATIONS} potwierdzenia`}.`;
   }
 
   if (!el.learningRulesList) return;
@@ -2175,7 +2177,7 @@ function parseExplicitDateFromText(text) {
 }
 
 function parseDateFromText(text) {
-  return parseExplicitDateFromText(text) || el.entryDate.value || todayISO();
+  return parseExplicitDateFromText(text) || todayISO();
 }
 
 function parseDateForAmount(source, amountIndex, segmentStart = 0) {
@@ -2202,7 +2204,7 @@ function parseDateForAmount(source, amountIndex, segmentStart = 0) {
 }
 
 const CATEGORY_RULES = [
-  { category: 'Usługi', weight: 5, words: ['przychod', 'zarobek', 'wyplata', 'zaplata za', 'klient zaplacil', 'zaplacono mi', 'klient', 'fucha', 'naprawa', 'naprawilem', 'naprawilam', 'serwis', 'usluga', 'uslugi', 'telewizor', 'tv', 'fotel masujacy', 'fotela masujacego'] },
+  { category: 'Usługi', weight: 5, words: ['przychod', 'dochod', 'zarobek', 'zysk', 'utarg', 'wyplata', 'wynagrodzenie', 'pensja', 'zaplata za', 'klient zaplacil', 'zaplacono mi', 'klient', 'fucha', 'naprawa', 'naprawilem', 'naprawilam', 'serwis', 'usluga', 'uslugi', 'telewizor', 'tv', 'fotel masujacy', 'fotela masujacego'] },
   { category: 'Montaże', weight: 4, words: ['montaz', 'instalacja', 'ustawienie', 'konfiguracja', 'robocizna', 'dojazd'] },
   { category: 'Monitoring', weight: 4, words: ['kamera', 'kamery', 'monitoring', 'rejestrator', 'hikvision', 'ezviz', 'dahua', 'ipcam', 'puszka montazowa'] },
   { category: 'Antenowe', weight: 4, words: ['antena', 'anteny', 'antene', 'satelitarna', 'satelitarne', 'konwerter', 'talerz', 'maszt', 'obejma', 'kabel antenowy'] },
@@ -2282,7 +2284,8 @@ function detectExplicitEntryType(text) {
   const normalized = ` ${normalizeText(text)} `;
 
   const incomePatterns = [
-    /\bprzychod\b/, /\bzarobek\b/, /\bzarobilem\b/, /\bzarobilam\b/,
+    /\bprzychod(?:y|u|em)?\b/, /\bdochod(?:y|u|em)?\b/, /\bzarobek\b/, /\bzarobilem\b/, /\bzarobilam\b/,
+    /\bzysk\b/, /\butarg\b/, /\bwynagrodzeni(?:e|a|u|em)\b/, /\bpensj(?:a|e|i)\b/,
     /\bwplyw\b/, /\bwplata\b/, /\bdostalem\b/, /\bdostalam\b/,
     /\botrzymalem\b/, /\botrzymalam\b/, /\bklient\s+zaplacil\b/,
     /\bzaplacono\s+mi\b/, /\bzaplata\s+za\b/, /\bfaktura\s+sprzedaz/,
@@ -2290,7 +2293,7 @@ function detectExplicitEntryType(text) {
   ];
 
   const expensePatterns = [
-    /\bwydatek\b/, /\bwydatki\b/, /\bkoszt\b/, /\bkosztowalo\b/,
+    /\bwydatek\b/, /\bwydatki\b/, /\bkoszt\b/, /\bkoszty\b/, /\bkoszta\b/, /\bkosztowalo\b/,
     /\bkupilem\b/, /\bkupilam\b/, /\bzakup\b/, /\bzakupy\b/,
     /\bzaplacilem\b/, /\bzaplacilam\b/, /\bwydalem\b/, /\bwydalam\b/,
     /\bparagon\b/, /\bfaktura\s+zakup/
@@ -2302,7 +2305,14 @@ function detectExplicitEntryType(text) {
 }
 
 function detectEntryType(text) {
-  return detectExplicitEntryType(text) || el.entryType.value || 'wydatek';
+  return detectExplicitEntryType(text) || 'wydatek';
+}
+
+function detectExplicitScope(text) {
+  const normalized = normalizeText(text);
+  if (/\b(?:domow\w*|prywatn\w*|rodzinn\w*)\b|dla domu|do domu/.test(normalized)) return 'domowe';
+  if (/\b(?:firmow\w*|sluzbow\w*|dzialalnosc|nip|vat)\b|na firme|dla firmy/.test(normalized)) return 'firmowe';
+  return '';
 }
 
 function detectScope(text, entryType = 'wydatek', category = '') {
@@ -2325,7 +2335,7 @@ function detectScope(text, entryType = 'wydatek', category = '') {
   if (['dom', 'jedzenie'].some(word => normalizedCategory.includes(word))) return 'domowe';
 
   if (entryType === 'przychód') return 'firmowe';
-  return el.entryScope?.value || 'domowe';
+  return 'domowe';
 }
 
 function detectPaymentMethod(text) {
@@ -2386,8 +2396,9 @@ function cleanDescription(raw) {
     'kupiłem', 'kupilem', 'kupiłam', 'kupilam', 'zakup', 'zakupy', 'wydatek', 'wydatki',
     'wydatkowe', 'zapłaciłem', 'zaplacilem', 'zapłaciłam', 'zaplacilam', 'wydałem',
     'wydalem', 'wydałam', 'wydalam', 'koszt', 'kosztowało', 'kosztowalo', 'zarobek',
-    'zarobiłem', 'zarobilem', 'przychód', 'przychod', 'wpływ', 'wplyw', 'dostałem',
-    'dostalem', 'otrzymałem', 'otrzymalem', 'wpłata', 'wplata', 'paragon'
+    'zarobiłem', 'zarobilem', 'przychód', 'przychod', 'dochód', 'dochod', 'dochody', 'zysk',
+    'utarg', 'wynagrodzenie', 'pensja', 'wpływ', 'wplyw', 'dostałem', 'dostalem',
+    'otrzymałem', 'otrzymalem', 'wpłata', 'wplata', 'paragon'
   ];
   const metaWords = [
     'gotówka', 'gotowka', 'kartą', 'karta', 'blik', 'bank', 'przelew', 'konto', 'firmowe',
@@ -2546,6 +2557,7 @@ function parseNaturalText(rawText) {
     const scope = detectScope(`${context} ${description}`, entryType, preliminaryCategory);
     const category = detectCategoryForParsedEntry(`${description} ${context}`, scope, entryType);
 
+    const explicitType = detectExplicitEntryType(`${description} ${context}`);
     const baseEntry = enrichEntryWithTagRules({
       entryDate,
       weekday: getWeekday(entryDate),
@@ -2563,7 +2575,7 @@ function parseNaturalText(rawText) {
       sourceDeviceId: getDeviceId(),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
-    }, { overrideCategory: true });
+    }, { overrideCategory: true, overrideType: !explicitType });
 
     const learnedEntry = applyLearningToEntry(baseEntry, {
       originalCategory: baseEntry.category,
@@ -2571,10 +2583,20 @@ function parseNaturalText(rawText) {
     });
 
     const sourceForRules = `${description} ${context}`;
-    const explicitType = detectExplicitEntryType(sourceForRules);
     if (explicitType) learnedEntry.entryType = explicitType;
 
-    return applyBilansAiRules(learnedEntry, sourceForRules);
+    const finalEntry = applyBilansAiRules(learnedEntry, sourceForRules);
+
+    // Punkt odniesienia do nauki musi odpowiadać temu, co użytkownik faktycznie
+    // zobaczył w podglądzie. Dzięki temu zapis bez poprawek nie udaje korekty.
+    return {
+      ...finalEntry,
+      learningOriginalCategory: finalEntry.category || 'Inne',
+      learningOriginalType: finalEntry.entryType || '',
+      learningOriginalScope: normalizeScope(finalEntry.scope),
+      learningOriginalPaymentMethod: finalEntry.paymentMethod || '',
+      learningSourceText: sourceForRules
+    };
   });
 
   return drafts.filter(item => item.amount > 0 && item.description);
@@ -2748,15 +2770,154 @@ function renderParsePreview() {
   setParsedSaveButtonsState(true);
 }
 
-function handleParseText() {
+function getBilansAiResponseSchema() {
+  return {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      wpisy: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            indeks: { type: 'integer' },
+            typ: { type: 'string', enum: ['wydatek', 'przychód'] },
+            rodzaj: { type: 'string', enum: ['domowe', 'firmowe', 'nieokreślone'] },
+            kategoria: { type: 'string' },
+            platnosc: { type: 'string', enum: ['gotówka', 'karta', 'bank', 'blik', 'inne'] },
+            opis: { type: 'string' },
+            pewnosc: { type: 'number' },
+            uwagi: { type: 'string' }
+          },
+          required: ['indeks', 'typ', 'rodzaj', 'kategoria', 'platnosc', 'opis', 'pewnosc', 'uwagi']
+        }
+      }
+    },
+    required: ['wpisy']
+  };
+}
+
+function buildBilansAiPrompt(sourceText, drafts) {
+  const compact = drafts.map((entry, index) => ({
+    indeks: index,
+    tekst: entry.learningSourceText || entry.originalText || entry.description || '',
+    propozycja: {
+      typ: entry.entryType,
+      rodzaj: normalizeScope(entry.scope),
+      kategoria: entry.category,
+      platnosc: entry.paymentMethod,
+      opis: entry.description,
+      kwota: entry.amount,
+      data: entry.entryDate
+    }
+  }));
+
+  return `Jesteś polskim modułem klasyfikacji wpisów finansowych. Popraw propozycje parsera i zwróć wyłącznie JSON zgodny ze schematem.
+
+Najważniejsze reguły:
+- Jawne słowa określające typ są bezwzględne. „dochód”, „przychód”, „zarobek”, „zysk”, „utarg”, „wynagrodzenie” i „pensja” oznaczają przychód. „wydatek”, „koszt”, „koszty”, „koszta”, „zakup” i „zapłaciłem” oznaczają wydatek.
+- Nie zmieniaj znaczenia jawnych słów nawet wtedy, gdy pozostała treść wygląda inaczej.
+- Rodzaj wybierz jako domowe, firmowe albo nieokreślone.
+- Kategorię wybierz wyłącznie z tej listy: ${getAllCategories().join(', ')}.
+- Nie wymyślaj danych. Przy niepewności zachowaj propozycję lokalną i obniż pewność.
+- Kwoty i daty są już rozpoznane lokalnie; nie zwracaj ich i nie próbuj ich przeliczać.
+
+Pełny tekst użytkownika:
+${String(sourceText || '')}
+
+Pozycje do klasyfikacji:
+${JSON.stringify(compact, null, 2)}`;
+}
+
+function applyBilansAiAnalysis(drafts, payload) {
+  const results = Array.isArray(payload?.wpisy) ? payload.wpisy : [];
+  const byIndex = new Map(results.map(item => [Number(item?.indeks), item]));
+
+  return drafts.map((entry, index) => {
+    const raw = byIndex.get(index);
+    if (!raw) return entry;
+
+    const sourceText = entry.learningSourceText || entry.originalText || entry.description || '';
+    const explicitType = detectExplicitEntryType(sourceText);
+    const explicitScope = detectExplicitScope(sourceText);
+    const aiCategory = isKnownCategory(raw.kategoria) ? normalizeKnownCategory(raw.kategoria, entry.category) : entry.category;
+    const confidence = normalizeInventoryConfidence(raw.pewnosc);
+    let next = {
+      ...entry,
+      entryType: explicitType || (raw.typ === 'przychód' ? 'przychód' : 'wydatek'),
+      scope: explicitScope || normalizeScope(raw.rodzaj || entry.scope),
+      category: aiCategory || entry.category || 'Inne',
+      paymentMethod: ['gotówka', 'karta', 'bank', 'blik', 'inne'].includes(raw.platnosc) ? raw.platnosc : entry.paymentMethod,
+      description: String(raw.opis || entry.description || '').trim() || entry.description,
+      aiConfidence: confidence,
+      aiNotes: String(raw.uwagi || '').trim(),
+      tags: normalizeTags([...(entry.tags ?? []), 'ai'].join(','))
+    };
+
+    // Nauczone przez użytkownika reguły mają pierwszeństwo przed zewnętrzną AI,
+    // z wyjątkiem jawnych słów typu/rodzaju obecnych w aktualnym tekście.
+    next = applyLearningToEntry(next, { originalCategory: next.category, sourceText });
+    if (explicitType) next.entryType = explicitType;
+    if (explicitScope) next.scope = explicitScope;
+    next = applyBilansAiRules(next, sourceText);
+    if (confidence > 0) next.aiConfidence = confidence;
+    if (String(raw.uwagi || '').trim()) next.aiNotes = String(raw.uwagi).trim();
+
+    return {
+      ...next,
+      learningOriginalCategory: next.category || 'Inne',
+      learningOriginalType: next.entryType || '',
+      learningOriginalScope: normalizeScope(next.scope),
+      learningOriginalPaymentMethod: next.paymentMethod || '',
+      learningSourceText: sourceText
+    };
+  });
+}
+
+async function callBilansAi(sourceText, drafts) {
+  return callJsonAi({
+    prompt: buildBilansAiPrompt(sourceText, drafts),
+    schema: getBilansAiResponseSchema(),
+    schemaName: 'bilans_analysis'
+  });
+}
+
+async function handleParseText() {
+  const requestId = ++parseRequestId;
+  const originalButtonText = el.parseButton?.textContent || 'Rozpoznaj';
   try {
     parsedDrafts = parseNaturalText(el.quickText.value);
     renderParsePreview();
-    showMessage(`Rozpoznano pozycji: ${parsedDrafts.length}. Sprawdź podgląd i zapisz.`);
+    const settings = getAiSettings();
+    if (settings.apiKey && getSelectedAiModel(settings)) {
+      if (el.parseButton) {
+        el.parseButton.disabled = true;
+        el.parseButton.textContent = 'Analizuję przez AI…';
+      }
+      try {
+        const payload = await callBilansAi(el.quickText.value, parsedDrafts);
+        if (requestId !== parseRequestId) return;
+        parsedDrafts = applyBilansAiAnalysis(parsedDrafts, payload);
+        renderParsePreview();
+        renderVoicePreview();
+        showMessage(`AI rozpoznała pozycji: ${parsedDrafts.length}. Sprawdź podgląd i zapisz.`);
+      } catch (aiError) {
+        if (requestId !== parseRequestId) return;
+        showMessage(`Użyto parsera lokalnego. AI nie odpowiedziała: ${aiError.message || 'nieznany błąd'}`, 'error');
+      }
+    } else {
+      showMessage(`Rozpoznano lokalnie pozycji: ${parsedDrafts.length}. Sprawdź podgląd i zapisz. Klucz AI możesz dodać w Ustawieniach.`);
+    }
   } catch (error) {
     parsedDrafts = [];
     renderParsePreview();
     showMessage(error.message || 'Nie udało się rozpoznać tekstu.', 'error');
+  } finally {
+    if (requestId === parseRequestId && el.parseButton) {
+      el.parseButton.disabled = false;
+      el.parseButton.textContent = originalButtonText;
+    }
   }
 }
 
@@ -2777,6 +2938,7 @@ async function handleAddParsedEntries() {
       ...cleanEntry,
       syncId: cleanEntry.syncId || makeSyncId('entry'),
       sourceDeviceId: cleanEntry.sourceDeviceId || getDeviceId(),
+      walletRecordedAt: cleanEntry.walletRecordedAt || now,
       createdAt: cleanEntry.createdAt || now,
       updatedAt: now
     };
@@ -3305,15 +3467,15 @@ function fillSelect(select, values, includeEmpty = false) {
 
 function resetForm() {
   editingId = null;
-  el.formTitle.textContent = 'Dodaj wpis';
-  el.saveButton.textContent = 'Dodaj wpis';
-  el.cancelEditButton.classList.add('hidden');
+  el.formTitle.textContent = 'Edytuj wpis';
+  el.saveButton.textContent = 'Zapisz zmiany';
   el.entryForm.reset();
   el.entryDate.value = todayISO();
   el.entryType.value = 'wydatek';
   el.entryScope.value = 'domowe';
   el.category.value = 'Inne';
   el.paymentMethod.value = 'gotówka';
+  if (el.entryEditDialog?.open) el.entryEditDialog.close();
 }
 
 async function reloadEntries() {
@@ -3572,63 +3734,81 @@ function parseMoneyInputValue(raw) {
   return Number.isFinite(value) ? Math.round(value * sign * 100) / 100 : 0;
 }
 
-function normalizeWalletMonthRecord(record = {}) {
+function normalizeWalletState(record = {}) {
+  const baselineAt = String(record.baselineAt || record.baseline_at || '');
   return {
     initialBalance: Number(record.initialBalance ?? record.initial_balance ?? 0) || 0,
     adjustment: Number(record.adjustment ?? record.korekta ?? 0) || 0,
+    baselineAt: Number.isFinite(Date.parse(baselineAt)) ? baselineAt : '',
+    configured: Boolean(record.configured || baselineAt),
     updatedAt: record.updatedAt || record.updated_at || new Date().toISOString()
   };
 }
 
-function getWalletMonths() {
+function legacyWalletState() {
   try {
-    const parsed = JSON.parse(localStorage.getItem(WALLET_MONTHS_KEY) || '{}');
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
-    const result = {};
-    for (const [key, value] of Object.entries(parsed)) {
-      if (/^20\d{2}-\d{2}$/.test(key)) result[key] = normalizeWalletMonthRecord(value);
-    }
-    return result;
+    const months = JSON.parse(localStorage.getItem(LEGACY_WALLET_MONTHS_KEY) || '{}');
+    if (!months || typeof months !== 'object' || Array.isArray(months)) return null;
+    const month = Object.keys(months).filter(key => /^20\d{2}-\d{2}$/.test(key)).sort().at(-1);
+    if (!month) return null;
+    const record = months[month] || {};
+    return normalizeWalletState({
+      initialBalance: record.initialBalance ?? record.initial_balance ?? 0,
+      adjustment: record.adjustment ?? record.korekta ?? 0,
+      baselineAt: `${month}-01T00:00:00`,
+      configured: true,
+      updatedAt: record.updatedAt || record.updated_at
+    });
   } catch (_) {
-    return {};
+    return null;
   }
 }
 
-function saveWalletMonths(months) {
-  try { localStorage.setItem(WALLET_MONTHS_KEY, JSON.stringify(months || {})); } catch (_) {}
+function getWalletState() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(WALLET_STATE_KEY) || 'null');
+    if (saved && typeof saved === 'object' && !Array.isArray(saved)) return normalizeWalletState(saved);
+  } catch (_) {}
+
+  const migrated = legacyWalletState();
+  if (migrated) saveWalletState(migrated);
+  return migrated || normalizeWalletState();
 }
 
-function getWalletMonthRecord(month) {
-  const months = getWalletMonths();
-  return normalizeWalletMonthRecord(months[month] || {});
+function saveWalletState(state) {
+  const normalized = normalizeWalletState({ ...state, updatedAt: new Date().toISOString() });
+  try { localStorage.setItem(WALLET_STATE_KEY, JSON.stringify(normalized)); } catch (_) {}
+  return normalized;
 }
 
-function saveWalletMonthRecord(month, changes = {}) {
-  if (!/^20\d{2}-\d{2}$/.test(month || '')) return;
-  const months = getWalletMonths();
-  months[month] = normalizeWalletMonthRecord({
-    ...(months[month] || {}),
-    ...changes,
-    updatedAt: new Date().toISOString()
-  });
-  saveWalletMonths(months);
-}
+function importWalletStateFromPayload(payload, replace = false) {
+  let incoming = payload?.walletState || payload?.wallet_state || null;
 
-function importWalletMonthsFromPayload(payload, replace = false) {
-  const incoming = payload?.walletMonths || payload?.wallet_months || null;
+  // Starsze kopie przechowywały osobny portfel dla każdego miesiąca. Bierzemy
+  // ostatni zapis jako punkt startowy i od tej chwili prowadzimy już jeden stan.
+  if (!incoming) {
+    const months = payload?.walletMonths || payload?.wallet_months;
+    if (months && typeof months === 'object' && !Array.isArray(months)) {
+      const month = Object.keys(months).filter(key => /^20\d{2}-\d{2}$/.test(key)).sort().at(-1);
+      if (month) {
+        const record = months[month] || {};
+        incoming = {
+          initialBalance: record.initialBalance ?? record.initial_balance ?? 0,
+          adjustment: record.adjustment ?? record.korekta ?? 0,
+          baselineAt: `${month}-01T00:00:00`,
+          configured: true,
+          updatedAt: record.updatedAt || record.updated_at
+        };
+      }
+    }
+  }
+
   if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming)) return;
-  const current = replace ? {} : getWalletMonths();
-
-  for (const [month, rawRecord] of Object.entries(incoming)) {
-    if (!/^20\d{2}-\d{2}$/.test(month)) continue;
-    const normalized = normalizeWalletMonthRecord(rawRecord);
-    const oldRecord = current[month];
-    const incomingTime = Date.parse(normalized.updatedAt || '') || 0;
-    const oldTime = Date.parse(oldRecord?.updatedAt || '') || 0;
-    if (replace || !oldRecord || incomingTime >= oldTime) current[month] = normalized;
-  }
-
-  saveWalletMonths(current);
+  const next = normalizeWalletState(incoming);
+  const current = getWalletState();
+  const incomingTime = Date.parse(next.updatedAt || '') || 0;
+  const currentTime = Date.parse(current.updatedAt || '') || 0;
+  if (replace || !current.configured || incomingTime >= currentTime) saveWalletState(next);
 }
 
 function importCustomCategoriesFromPayload(payload, replace = false) {
@@ -3665,55 +3845,40 @@ function isCashPayment(entry) {
   return normalizeText(entry?.paymentMethod || '') === 'gotowka';
 }
 
-function walletMonthsFromEntries() {
-  const months = new Set([monthKey(todayISO())]);
-  for (const entry of allEntries || []) {
-    if (entry.entryDate && /^20\d{2}-\d{2}/.test(entry.entryDate)) months.add(monthKey(entry.entryDate));
-  }
-  for (const month of Object.keys(getWalletMonths())) months.add(month);
-  return Array.from(months).sort((a, b) => b.localeCompare(a));
+function walletEntryIsAfterBaseline(entry, state) {
+  if (!state.configured || !state.baselineAt) return false;
+  const entryTime = Date.parse(entry?.walletRecordedAt || entry?.createdAt || entry?.updatedAt || '');
+  return Number.isFinite(entryTime) && entryTime >= Date.parse(state.baselineAt);
 }
 
-function summarizeWalletMonth(month) {
-  const record = getWalletMonthRecord(month);
-  const monthEntries = (allEntries || []).filter(entry => entry.entryDate?.startsWith(month) && isCashPayment(entry));
+function summarizeWallet() {
+  const state = getWalletState();
+  const cashEntries = (allEntries || []).filter(entry => isCashPayment(entry) && walletEntryIsAfterBaseline(entry, state));
   let cashIncome = 0;
   let cashExpense = 0;
 
-  for (const entry of monthEntries) {
+  for (const entry of cashEntries) {
     const amount = Number(entry.amount) || 0;
     if (entry.entryType === 'przychód') cashIncome += amount;
     else cashExpense += amount;
   }
 
-  const balance = record.initialBalance + cashIncome - cashExpense + record.adjustment;
-  return { ...record, cashIncome, cashExpense, balance, entries: monthEntries };
+  const balance = state.initialBalance + cashIncome - cashExpense + state.adjustment;
+  return { ...state, cashIncome, cashExpense, balance, entries: cashEntries };
 }
 
 function renderWalletReport() {
-  const months = walletMonthsFromEntries();
-  const currentMonth = monthKey(todayISO());
-  const selectedMonth = el.walletMonth?.value || currentMonth;
-  const safeMonth = months.includes(selectedMonth) ? selectedMonth : currentMonth;
-
-  if (el.walletMonth) {
-    const previous = el.walletMonth.value || safeMonth;
-    el.walletMonth.innerHTML = months.map(month => `<option value="${escapeHtml(month)}">${escapeHtml(month)}</option>`).join('');
-    el.walletMonth.value = months.includes(previous) ? previous : safeMonth;
-  }
-
-  const month = el.walletMonth?.value || safeMonth;
-  const summary = summarizeWalletMonth(month);
+  const summary = summarizeWallet();
 
   if (el.startWalletBalance) {
-    const currentSummary = summarizeWalletMonth(currentMonth);
-    el.startWalletBalance.textContent = formatMoney(currentSummary.balance);
-    el.startWalletBalance.classList.toggle('amount-income', currentSummary.balance >= 0);
-    el.startWalletBalance.classList.toggle('amount-expense', currentSummary.balance < 0);
+    el.startWalletBalance.textContent = formatMoney(summary.balance);
+    el.startWalletBalance.classList.toggle('amount-income', summary.balance >= 0);
+    el.startWalletBalance.classList.toggle('amount-expense', summary.balance < 0);
   }
   if (el.startWalletDetails) {
-    const currentSummary = summarizeWalletMonth(currentMonth);
-    el.startWalletDetails.textContent = `${currentMonth} · gotówka: +${formatMoney(currentSummary.cashIncome)} / -${formatMoney(currentSummary.cashExpense)}`;
+    el.startWalletDetails.textContent = summary.configured
+      ? `Ciągły · gotówka: +${formatMoney(summary.cashIncome)} / -${formatMoney(summary.cashExpense)}`
+      : 'Ustaw stan początkowy w zakładce Raporty';
   }
 
   if (!el.walletReport) return;
@@ -3733,11 +3898,15 @@ function renderWalletReport() {
         </div>
       `).join('')}
     </div>
-  ` : '<div class="empty-state small-empty">Brak gotówkowych wpisów w tym miesiącu.</div>';
+  ` : '<div class="empty-state small-empty">Brak późniejszych wpisów gotówkowych.</div>';
+
+  const baselineLabel = summary.configured && summary.baselineAt
+    ? new Date(summary.baselineAt).toLocaleString('pl-PL')
+    : 'jeszcze nie ustawiono';
 
   el.walletReport.innerHTML = `
     <div class="category-row wallet-result-row">
-      <div><strong>Stan portfela</strong><br><small>${escapeHtml(month)} · tylko wpisy z płatnością „Gotówka”</small></div>
+      <div><strong>Stan portfela</strong><br><small>Ciągły od: ${escapeHtml(baselineLabel)} · tylko płatność „Gotówka”</small></div>
       <b class="${summary.balance >= 0 ? 'amount-income' : 'amount-expense'}">${formatMoney(summary.balance)}</b>
     </div>
     <div class="wallet-mini-grid">
@@ -3751,17 +3920,22 @@ function renderWalletReport() {
 }
 
 function saveWalletFormValues() {
-  const month = el.walletMonth?.value || monthKey(todayISO());
-  const current = getWalletMonthRecord(month);
+  const current = getWalletState();
   const correction = parseMoneyInputValue(el.walletAdjustment?.value || '0');
-  saveWalletMonthRecord(month, {
+  const initialBalance = parseMoneyInputValue(el.walletInitialBalance?.value || '0');
+  saveWalletState({
+    ...current,
     initialBalance: parseMoneyInputValue(el.walletInitialBalance?.value || '0'),
-    adjustment: Math.round((current.adjustment + correction) * 100) / 100
+    adjustment: Math.round((current.adjustment + correction) * 100) / 100,
+    baselineAt: current.configured && current.baselineAt ? current.baselineAt : new Date().toISOString(),
+    configured: true
   });
   if (el.walletAdjustment) el.walletAdjustment.value = '';
   renderWalletReport();
   scheduleDropboxAutoSync();
-  showMessage(correction ? `Zapisano portfel. Korekta: ${correction >= 0 ? '+' : ''}${formatMoney(correction)}.` : 'Zapisano ustawienia portfela gotówkowego.');
+  showMessage(correction
+    ? `Zapisano portfel. Korekta: ${correction >= 0 ? '+' : ''}${formatMoney(correction)}.`
+    : `Zapisano stan początkowy: ${formatMoney(initialBalance)}.`);
 }
 
 function topGroupBy(entries, keyGetter) {
@@ -4665,7 +4839,6 @@ function startEdit(id) {
   editingId = entry.id;
   el.formTitle.textContent = 'Edytuj wpis';
   el.saveButton.textContent = 'Zapisz zmiany';
-  el.cancelEditButton.classList.remove('hidden');
 
   el.entryDate.value = entry.entryDate;
   el.entryType.value = entry.entryType;
@@ -4677,11 +4850,9 @@ function startEdit(id) {
   el.originalText.value = entry.originalText ?? '';
   el.tags.value = (entry.tags ?? []).join(', ');
 
-  const startTab = document.querySelector('[data-tab="start"]');
-  if (startTab) startTab.click();
-  const manualDetails = document.querySelector('.compact-manual-panel details');
-  if (manualDetails) manualDetails.open = true;
-  el.entryForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (typeof el.entryEditDialog?.showModal === 'function') el.entryEditDialog.showModal();
+  else el.entryEditDialog?.setAttribute('open', '');
+  el.entryType.focus();
 }
 
 async function handleDelete(id) {
@@ -4711,13 +4882,20 @@ async function handleFormSubmit(event) {
   event.preventDefault();
 
   try {
-    const previousEntry = editingId ? getEntryById(editingId) : null;
+    if (!editingId) throw new Error('Wybierz wpis do edycji w Historii.');
+    const previousEntry = await getEntryById(editingId);
     const entry = makeEntryFromForm();
-    const learned = previousEntry && previousEntry.category !== entry.category
-      ? await learnFromCorrection(entry, previousEntry.category)
-      : null;
+    const correctionCandidate = previousEntry ? {
+      ...entry,
+      learningOriginalCategory: previousEntry.category || 'Inne',
+      learningOriginalType: previousEntry.entryType || '',
+      learningOriginalScope: normalizeScope(previousEntry.scope),
+      learningOriginalPaymentMethod: previousEntry.paymentMethod || '',
+      learningSourceText: previousEntry.originalText || previousEntry.description || entry.originalText || entry.description || ''
+    } : entry;
+    const learned = previousEntry ? await learnFromParsedEntries([correctionCandidate]) : 0;
     await saveEntry(entry);
-    showMessage(editingId ? `Zmiany zapisane${learned ? ' i dodano naukę kategorii' : ''}.` : 'Wpis dodany.');
+    showMessage(`Zmiany zapisane${learned ? ' i zaktualizowano naukę' : ''}.`);
     resetForm();
     await reloadEntries();
     scheduleDropboxAutoSync();
@@ -4850,7 +5028,7 @@ function collectImportedEntries(payload) {
     }
   }
 
-  const ignoredKeys = new Set(['tagRules', 'learningRules', 'deletedEntries', 'walletMonths', 'customCategories', 'mainReportSettings', 'inventoryItems', 'inventory', 'inventoryMovements', 'inventoryAnalysis', 'inventoryPending']);
+  const ignoredKeys = new Set(['tagRules', 'learningRules', 'deletedEntries', 'walletState', 'walletMonths', 'customCategories', 'mainReportSettings', 'inventoryItems', 'inventory', 'inventoryMovements', 'inventoryAnalysis', 'inventoryPending']);
   for (const [key, value] of Object.entries(payload)) {
     if (ignoredKeys.has(key)) continue;
     if (Array.isArray(value)) {
@@ -4911,6 +5089,7 @@ function normalizeImportedEntry(item, now = new Date().toISOString()) {
     originalText,
     tags: Array.isArray(item.tags) ? item.tags : normalizeTags(item.tags || item.tagi || ''),
     reportGroup: item.reportGroup || item.report_group || item.grupaRaportowa || item.grupa_raportowa || '',
+    walletRecordedAt: item.walletRecordedAt || item.wallet_recorded_at || item.createdAt || item.created_at || now,
     createdAt: item.createdAt || item.created_at || now,
     updatedAt: item.updatedAt || item.updated_at || now
   });
@@ -5135,7 +5314,6 @@ async function handleDropboxInitialSync() {
       await dropboxUploadPayload(makeExportPayload());
       const message = 'Dropbox połączony. Lokalna baza została zastąpiona danymi z chmury.';
       updateCloudUi(message);
-      showMessage(message);
       return;
     }
 
@@ -5144,7 +5322,6 @@ async function handleDropboxInitialSync() {
     await dropboxUploadPayload(makeExportPayload());
     const message = 'Dropbox połączony. Dane lokalne i dane z chmury zostały scalone.';
     updateCloudUi(message);
-    showMessage(message);
     return;
   }
 
@@ -5160,14 +5337,12 @@ async function handleDropboxInitialSync() {
     await dropboxUploadPayload(makeExportPayload());
     const message = 'Dropbox połączony. Pobrano dane z chmury.';
     updateCloudUi(message);
-    showMessage(message);
     return;
   }
 
   await dropboxUploadPayload(makeExportPayload());
   const message = 'Dropbox połączony. Utworzono pusty plik danych w chmurze.';
   updateCloudUi(message);
-  showMessage(message);
 }
 
 async function getDropboxAccessToken() {
@@ -5202,7 +5377,7 @@ function makeExportPayload() {
     tagRules,
     learningRules,
     deletedEntries: getDeletedEntries(),
-    walletMonths: getWalletMonths(),
+    walletState: getWalletState(),
     customCategories,
     mainReportSettings: getMainReportSettings(),
     inventoryItems: getInventoryItems(),
@@ -5255,7 +5430,6 @@ async function uploadLocalStateToDropbox(successMessage = '') {
   if (dropboxSyncBusy) {
     dropboxForceUploadPending = true;
     updateCloudUi('Dropbox kończy poprzednią operację. Po jej zakończeniu program automatycznie zapisze lokalną bazę do chmury.');
-    showMessage('Dropbox jest zajęty. Zapis lokalnej bazy do chmury został dodany do kolejki.');
     return;
   }
   dropboxSyncBusy = true;
@@ -5267,7 +5441,6 @@ async function uploadLocalStateToDropbox(successMessage = '') {
     clearDropboxForceLocalUpload();
     finalMessage = successMessage || `Dropbox zapisany lokalnymi danymi: ${new Date().toLocaleString('pl-PL')}.`;
     updateCloudUi(finalMessage);
-    showMessage(finalMessage);
   } finally {
     dropboxSyncBusy = false;
     updateCloudUi(finalMessage);
@@ -5277,7 +5450,7 @@ async function uploadLocalStateToDropbox(successMessage = '') {
 function hasImportableSettingsPayload(payload) {
   if (!payload || typeof payload !== 'object') return false;
   return Boolean(
-    payload.walletMonths || payload.wallet_months ||
+    payload.walletState || payload.wallet_state || payload.walletMonths || payload.wallet_months ||
     payload.customCategories || payload.custom_categories ||
     payload.mainReportSettings || payload.main_report_settings ||
     payload.tagRules || payload.learningRules ||
@@ -5296,6 +5469,7 @@ function buildImportPreview(payload, options = {}) {
   const pendingResults = Array.isArray(inventory.pending?.results) ? inventory.pending.results.length : 0;
   const deletedEntries = applyDeletions ? collectDeletedEntries(payload).length : 0;
   const customCategoriesRaw = payload?.customCategories || payload?.custom_categories;
+  const walletStateRaw = payload?.walletState || payload?.wallet_state;
   const walletMonthsRaw = payload?.walletMonths || payload?.wallet_months;
   return {
     mode: replace ? 'replace' : 'merge',
@@ -5305,7 +5479,7 @@ function buildImportPreview(payload, options = {}) {
     tagRules: Array.isArray(payload?.tagRules) ? payload.tagRules.length : 0,
     learningRules: Array.isArray(payload?.learningRules) ? payload.learningRules.length : 0,
     customCategories: Array.isArray(customCategoriesRaw) ? customCategoriesRaw.length : 0,
-    walletMonths: walletMonthsRaw && typeof walletMonthsRaw === 'object' && !Array.isArray(walletMonthsRaw) ? Object.keys(walletMonthsRaw).length : 0,
+    walletState: Boolean(walletStateRaw || (walletMonthsRaw && typeof walletMonthsRaw === 'object' && !Array.isArray(walletMonthsRaw) && Object.keys(walletMonthsRaw).length)),
     mainReportSettings: Boolean(payload?.mainReportSettings || payload?.main_report_settings),
     inventoryItems: inventory.items.length,
     inventoryMovements: inventory.movements.length,
@@ -5321,7 +5495,7 @@ function formatImportPreviewLines(preview) {
     `Kategorie własne: ${preview.customCategories}`,
     `Reguły tagów: ${preview.tagRules}`,
     `Reguły uczenia: ${preview.learningRules}`,
-    `Miesiące portfela: ${preview.walletMonths}`,
+    `Stan portfela: ${preview.walletState ? 'tak' : 'nie'}`,
     `Ustawienia raportu: ${preview.mainReportSettings ? 'tak' : 'nie'}`,
     `Magazyn — stany: ${preview.inventoryItems}`,
     `Magazyn — ruchy: ${preview.inventoryMovements}`,
@@ -5395,7 +5569,7 @@ async function importPayload(payload, options = {}) {
   const deletionResult = applyDeletions ? await applyImportedDeletions(payload) : { deleted: 0 };
   importCustomCategoriesFromPayload(payload, replace);
   await importLearningRulesFromPayload(payload, replace);
-  importWalletMonthsFromPayload(payload, replace);
+  importWalletStateFromPayload(payload, replace);
   const inventoryResult = importInventoryFromPayload(payload, replace);
 
   if (replace) {
@@ -5472,10 +5646,16 @@ let dropboxSyncBusy = false;
 let dropboxForceUploadPending = false;
 let dropboxSyncTimer = null;
 
+function reportDropboxSyncError(error) {
+  const message = `Błąd synchronizacji Dropbox: ${error?.message || 'nieznany błąd'}`;
+  updateCloudUi(message);
+  showMessage(message, 'error');
+}
+
 function scheduleDropboxAutoSync() {
   if (getStorageMode() !== 'dropbox' || !hasDropboxConnection()) return;
   window.clearTimeout(dropboxSyncTimer);
-  dropboxSyncTimer = window.setTimeout(() => syncDropboxNow().catch(error => updateCloudUi(`Błąd synchronizacji Dropbox: ${error.message}`)), 1200);
+  dropboxSyncTimer = window.setTimeout(() => syncDropboxNow().catch(reportDropboxSyncError), 1200);
 }
 
 async function syncDropboxNow() {
@@ -5504,7 +5684,6 @@ async function syncDropboxNow() {
     await dropboxUploadPayload(makeExportPayload());
     finalMessage = `Dropbox zsynchronizowany: ${new Date().toLocaleString('pl-PL')}.`;
     updateCloudUi(finalMessage);
-    showMessage(finalMessage);
   } finally {
     dropboxSyncBusy = false;
     updateCloudUi(finalMessage);
@@ -5518,7 +5697,6 @@ async function syncDropboxNow() {
 function disconnectDropbox() {
   if (!hasDropboxConnection()) {
     updateCloudUi('Dropbox jest już odłączony.');
-    showMessage('Dropbox jest już odłączony.');
     return;
   }
   if (!window.confirm('Odłączyć Dropbox od tej przeglądarki? Dane lokalne zostaną w programie.')) return;
@@ -5528,7 +5706,6 @@ function disconnectDropbox() {
   clearDropboxForceLocalUpload();
   setStorageMode('local');
   updateCloudUi('Dropbox odłączony. Program pracuje lokalnie.');
-  showMessage('Dropbox odłączony. Program pracuje lokalnie.');
 }
 
 function setupFirstRunMode() {
@@ -5649,6 +5826,10 @@ function hideInstallButtons() {
   el.voiceInstallNowButton?.classList.add('hidden');
 }
 
+function setInstallStatus(message) {
+  if (el.installStatus) el.installStatus.textContent = message;
+}
+
 function hideInstalledTargetButton(target = null) {
   const resolvedTarget = target || activeInstallTarget || (isVoiceActionRequested() ? 'voice' : 'main');
   if (resolvedTarget === 'voice') {
@@ -5661,22 +5842,39 @@ function hideInstalledTargetButton(target = null) {
 
 function refreshInstallButtons() {
   hideInstallButtons();
-  if (isFileProtocol()) return;
+  if (isFileProtocol()) {
+    setInstallStatus('Instalacja działa po uruchomieniu programu przez HTTPS albo serwer lokalny.');
+    return;
+  }
 
   if (isVoiceActionRequested()) {
-    if (!isVoiceInstallRemembered()) {
+    if (isStandaloneDisplay()) {
+      rememberInstallState('voice');
+      setInstallStatus('Skrót mikrofonu jest uruchomiony jako zainstalowana aplikacja.');
+    } else if (deferredInstallPrompt) {
       el.voiceInstallNowButton?.classList.remove('hidden');
+      setInstallStatus('Możesz zainstalować osobny skrót mikrofonu.');
+    } else {
+      setInstallStatus('Przeglądarka nie udostępnia teraz automatycznej instalacji mikrofonu.');
     }
     return;
   }
 
-  // Przycisk instalacji aplikacji ma być widoczny także wtedy, gdy Chrome jeszcze nie wysłał
-  // beforeinstallprompt. Wtedy kliknięcie pokaże jasną instrukcję ręcznej instalacji z menu Chrome.
-  if (!isMainInstallRemembered()) {
+  if (isStandaloneDisplay()) {
+    rememberInstallState('main');
+    setInstallStatus('Portfel PRO jest uruchomiony jako zainstalowana aplikacja.');
+  } else if (deferredInstallPrompt) {
+    // Przycisk pokazujemy wyłącznie wtedy, gdy przeglądarka potwierdziła, że
+    // bieżąca aplikacja jest instalowalna i nie jest już zainstalowana.
     el.installButton?.classList.remove('hidden');
+    setInstallStatus('Portfel PRO można zainstalować na tym urządzeniu.');
+  } else if (isMainInstallRemembered()) {
+    setInstallStatus('Portfel PRO został już zainstalowany na tym urządzeniu.');
+  } else {
+    setInstallStatus('Przeglądarka nie proponuje instalacji aplikacji — może być już zainstalowana albo instalacja nie jest dostępna.');
   }
 
-  // Osobny skrót mikrofonu wymaga wejścia w tryb ?action=voice, bo wtedy ładowany jest osobny manifest PWA.
+  // Mikrofon jest oddzielną aplikacją PWA z własnym manifestem i ikoną.
   if (!isVoiceInstallRemembered()) {
     el.installVoiceButton?.classList.remove('hidden');
   }
@@ -5730,6 +5928,9 @@ function setupInstallPrompt() {
   window.addEventListener('beforeinstallprompt', event => {
     event.preventDefault();
     deferredInstallPrompt = event;
+    try {
+      localStorage.removeItem(isVoiceActionRequested() ? VOICE_INSTALL_KEY : MAIN_INSTALL_KEY);
+    } catch (_) {}
     refreshInstallButtons();
   });
 
@@ -5803,24 +6004,6 @@ function drawText(ctx, text, x, y, options = {}) {
   ctx.textAlign = align;
   ctx.textBaseline = baseline;
   ctx.fillText(String(text ?? ''), x, y);
-}
-
-function drawWrappedText(ctx, text, x, y, maxWidth, lineHeight, options = {}) {
-  const words = String(text ?? '').split(/\s+/).filter(Boolean);
-  let line = '';
-  let currentY = y;
-  for (const word of words) {
-    const testLine = line ? `${line} ${word}` : word;
-    if (ctx.measureText(testLine).width > maxWidth && line) {
-      drawText(ctx, line, x, currentY, options);
-      line = word;
-      currentY += lineHeight;
-    } else {
-      line = testLine;
-    }
-  }
-  if (line) drawText(ctx, line, x, currentY, options);
-  return currentY + lineHeight;
 }
 
 function makeCalendarCanvas(mode = 'month') {
@@ -6296,11 +6479,11 @@ function renderVoicePreview() {
   el.voicePreview.innerHTML = `<div class="voice-preview-title">Podgląd rozpoznania</div>${rows}`;
 }
 
-function copyVoiceTextToParser() {
+async function copyVoiceTextToParser() {
   const text = (el.voiceText?.value || '').trim();
   if (!text) throw new Error('Brak tekstu z mikrofonu do rozpoznania.');
   el.quickText.value = text;
-  handleParseText();
+  await handleParseText();
   renderVoicePreview();
   setVoiceButtonsState(false);
 }
@@ -6361,7 +6544,7 @@ function startVoiceRecording() {
     setVoiceButtonsState(false);
   };
 
-  recognition.onend = () => {
+  recognition.onend = async () => {
     voiceRecognition = null;
     voiceInterimText = '';
     updateVoiceTranscript();
@@ -6369,7 +6552,7 @@ function startVoiceRecording() {
     if (text) {
       setVoiceStatus('Nagranie zakończone. Sprawdź tekst i zapisz wpisy.');
       try {
-        copyVoiceTextToParser();
+        await copyVoiceTextToParser();
         if (parsedDrafts.length) setVoiceStatus(`Rozpoznano ${parsedDrafts.length} wpis. Sprawdź i zapisz.`);
       } catch (error) {
         setVoiceStatus(error.message || 'Nie udało się rozpoznać tekstu.', 'error');
@@ -6399,7 +6582,7 @@ function stopVoiceRecording() {
 }
 
 async function saveVoiceParsedEntries() {
-  if (!parsedDrafts.length) copyVoiceTextToParser();
+  if (!parsedDrafts.length) await copyVoiceTextToParser();
   await handleAddParsedEntries();
   if (el.voiceText) el.voiceText.value = '';
   parsedDrafts = [];
@@ -6415,7 +6598,7 @@ function setupVoiceMode() {
     openVoiceMode();
     const params = new URLSearchParams(window.location.search);
     if (params.get('install') === 'voice') {
-      setVoiceStatus('Kliknij „Zainstaluj mikrofon”, żeby dodać osobną ikonę szybkiego dodawania.');
+      setVoiceStatus('Zainstaluj osobny skrót mikrofonu. Jeśli przycisk się nie pojawi, użyj menu Chrome → Zainstaluj aplikację.');
       return;
     }
     window.setTimeout(() => {
@@ -6750,12 +6933,12 @@ function extractJsonObject(text) {
   throw new Error('AI nie zwróciła poprawnego JSON.');
 }
 
-async function callInventoryAi(entries) {
+async function callJsonAi({ prompt, schema, schemaName = 'structured_response' }) {
   const settings = getAiSettings();
   const model = getSelectedAiModel(settings);
   if (!settings.apiKey) throw new Error('Brak klucza API. Wpisz go w Ustawieniach AI.');
   if (!model) throw new Error('Wybierz model AI w ustawieniach.');
-  const prompt = buildInventoryAiPrompt(entries);
+
   if (settings.provider === 'openai') {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -6772,7 +6955,7 @@ async function callInventoryAi(entries) {
         ],
         response_format: {
           type: 'json_schema',
-          json_schema: { name: 'inventory_analysis', strict: true, schema: getInventoryResponseSchema() }
+          json_schema: { name: schemaName, strict: true, schema }
         }
       })
     });
@@ -6793,6 +6976,14 @@ async function callInventoryAi(entries) {
   if (!response.ok) throw new Error(payload?.error?.message || `Gemini zwróciło błąd HTTP ${response.status}.`);
   const text = payload?.candidates?.[0]?.content?.parts?.map(part => part.text || '').join('') || '';
   return extractJsonObject(text);
+}
+
+async function callInventoryAi(entries) {
+  return callJsonAi({
+    prompt: buildInventoryAiPrompt(entries),
+    schema: getInventoryResponseSchema(),
+    schemaName: 'inventory_analysis'
+  });
 }
 
 function normalizeAiDecision(raw, entryByKey) {
@@ -7175,38 +7366,6 @@ function addManualInventoryItem() {
     sourceDescription: 'Dodanie ręczne'
   });
   showMessage('Dodano ręczny ruch magazynowy.');
-}
-
-function startInlineInventoryEdit(index) {
-  const row = el.inventoryItemsBody?.querySelector(`tr[data-inventory-index="${index}"]`);
-  if (!row || row.classList.contains('is-editing')) return;
-  renderInventory(index);
-}
-
-function cancelInlineInventoryEdit() {
-  renderInventory();
-}
-
-function saveInlineInventoryItem(index) {
-  const row = el.inventoryItemsBody?.querySelector(`tr[data-inventory-index="${index}"]`);
-  const items = getInventoryItems();
-  const item = items[index];
-  if (!row || !item) return;
-  const product = normalizeInventoryProductName(row.querySelector('[data-edit-field="name"]')?.value || '');
-  if (!product) {
-    showMessage('Nazwa produktu nie może być pusta.', 'error');
-    return;
-  }
-  const quantity = Number(String(row.querySelector('[data-edit-field="quantity"]')?.value || '0').replace(',', '.'));
-  const unit = String(row.querySelector('[data-edit-field="unit"]')?.value || 'szt').trim() || 'szt';
-  const unitCost = Number(String(row.querySelector('[data-edit-field="avgCost"]')?.value || '0').replace(',', '.'));
-  const category = normalizeInventoryCategory(row.querySelector('[data-edit-field="category"]')?.value || inferInventoryCategory(product));
-  if (!Number.isFinite(quantity) || !Number.isFinite(unitCost)) {
-    showMessage('Ilość i koszt muszą być poprawnymi liczbami.', 'error');
-    return;
-  }
-  setInventoryItemState(item, { product, quantity, unit, unitCost, category, reason: 'Zmiana po edycji bezpośrednio w tabeli.' });
-  showMessage('Zapisano zmianę magazynu.');
 }
 
 function setInventoryItemState(item, { product, quantity, unit = 'szt', unitCost = 0, category = '', reason = 'Ręczna korekta magazynu.' }) {
@@ -7980,10 +8139,6 @@ function bindEvents() {
   if (el.categoryForm) el.categoryForm.addEventListener('submit', event => handleCategoryFormSubmit(event).catch(error => showMessage(error.message, 'error')));
   if (el.customCategoriesList) el.customCategoriesList.addEventListener('click', handleCustomCategoryClick);
   if (el.mainReportResetButton) el.mainReportResetButton.addEventListener('click', resetMainReportSettings);
-  if (el.walletMonth) el.walletMonth.addEventListener('change', () => {
-    if (el.walletAdjustment) el.walletAdjustment.value = '';
-    renderWalletReport();
-  });
   if (el.walletSaveButton) el.walletSaveButton.addEventListener('click', saveWalletFormValues);
   el.parseButton.addEventListener('click', handleParseText);
   el.addParsedButton.addEventListener('click', () => handleAddParsedEntries().catch(error => showMessage(error.message, 'error')));
@@ -8001,13 +8156,12 @@ function bindEvents() {
   });
 
 
-  if (el.voiceShortcutButton) el.voiceShortcutButton.addEventListener('click', openVoiceMode);
   if (el.voiceCloseButton) el.voiceCloseButton.addEventListener('click', closeVoiceMode);
   if (el.voiceRecordButton) el.voiceRecordButton.addEventListener('click', startVoiceRecording);
   if (el.voiceStopButton) el.voiceStopButton.addEventListener('click', stopVoiceRecording);
-  if (el.voiceParseButton) el.voiceParseButton.addEventListener('click', () => {
+  if (el.voiceParseButton) el.voiceParseButton.addEventListener('click', async () => {
     try {
-      copyVoiceTextToParser();
+      await copyVoiceTextToParser();
       setVoiceStatus(`Rozpoznano ${parsedDrafts.length} wpis. Sprawdź i zapisz.`);
     } catch (error) {
       setVoiceStatus(error.message || 'Nie udało się rozpoznać tekstu.', 'error');
@@ -8074,12 +8228,11 @@ function bindEvents() {
     selectCalendarDate(button.dataset.date);
   });
   el.cancelEditButton.addEventListener('click', resetForm);
-  if (el.resetButton) {
-    el.resetButton.addEventListener('click', event => {
-      event.preventDefault();
-      resetForm();
-    });
-  }
+  el.entryEditDialog?.querySelectorAll('[data-close-edit]').forEach(button => button.addEventListener('click', resetForm));
+  el.entryEditDialog?.addEventListener('cancel', event => {
+    event.preventDefault();
+    resetForm();
+  });
   el.filterForm.addEventListener('submit', event => {
     event.preventDefault();
     applyFilters();
@@ -8102,7 +8255,6 @@ function bindEvents() {
   el.mobileEntries.addEventListener('click', handleEntriesClick);
   el.mobileEntries.addEventListener('dragstart', handleEntryDragStart);
   el.mobileEntries.addEventListener('dragend', handleEntryDragEnd);
-  el.exportButton.addEventListener('click', () => exportJson().catch(error => showMessage(error.message || 'Nie udało się wyeksportować kopii.', 'error')));
   el.syncExportButton.addEventListener('click', () => exportJson().catch(error => showMessage(error.message || 'Nie udało się wyeksportować kopii.', 'error')));
   el.exportMonthPngButton.addEventListener('click', () => exportCalendarPng('month').catch(error => showMessage(error.message, 'error')));
   el.exportYearPngButton.addEventListener('click', () => exportCalendarPng('year').catch(error => showMessage(error.message, 'error')));
@@ -8129,15 +8281,6 @@ function bindEvents() {
       .catch(error => showMessage(error.message || 'Nie udało się zaimportować pliku.', 'error'))
       .finally(() => { event.target.value = ''; });
   };
-
-  if (el.importButton && el.importInput) {
-    el.importButton.addEventListener('click', event => {
-      event.preventDefault();
-      event.stopPropagation();
-      openFilePicker(el.importInput);
-    });
-    el.importInput.addEventListener('change', event => handleImportChange(event, { replace: false, applyDeletions: false }));
-  }
 
   if (el.syncImportButton && el.syncImportInput) {
     el.syncImportButton.addEventListener('click', event => {
@@ -8190,8 +8333,7 @@ function bindEvents() {
   if (el.dropboxConnectButton) el.dropboxConnectButton.addEventListener('click', () => startDropboxAuth().catch(error => showMessage(error.message, 'error')));
   if (el.dropboxDisconnectButton) el.dropboxDisconnectButton.addEventListener('click', disconnectDropbox);
   if (el.dropboxSyncNowButton) el.dropboxSyncNowButton.addEventListener('click', () => syncDropboxNow().catch(error => {
-    updateCloudUi(`Błąd synchronizacji Dropbox: ${error.message}`);
-    showMessage(error.message, 'error');
+    reportDropboxSyncError(error);
   }));
 
 }
@@ -8199,7 +8341,7 @@ function bindEvents() {
 async function init() {
   const today = todayISO();
   document.title = 'Portfel PRO';
-  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.1 / 151';
+  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.1 / 153';
   runUiBindingAudit();
   setTodayHeader('wczytywanie...');
   if (isFileProtocol()) {
@@ -8248,7 +8390,7 @@ async function init() {
   }
   if (!handledDropboxReturn && getStorageMode() === 'dropbox' && hasDropboxConnection() && !new URL(window.location.href).searchParams.get('code')) {
     window.setTimeout(() => {
-      syncDropboxNow().catch(error => updateCloudUi(`Błąd synchronizacji Dropbox: ${error.message}`));
+      syncDropboxNow().catch(reportDropboxSyncError);
     }, 2000);
   }
 }
