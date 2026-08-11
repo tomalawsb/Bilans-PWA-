@@ -1,6 +1,6 @@
 const DB_NAME = 'bilans-pwa-etap1';
 const DB_VERSION = 4;
-const APP_VERSION = '1.1-142';
+const APP_VERSION = '1.1-151';
 const RAW_DROPBOX_DEFAULT_APP_KEY = String(window.PORTFEL_PRO_CONFIG?.dropboxAppKey || '').trim();
 const DROPBOX_DEFAULT_APP_KEY = /^WSTAW_TUTAJ/i.test(RAW_DROPBOX_DEFAULT_APP_KEY) ? '' : RAW_DROPBOX_DEFAULT_APP_KEY; // Ustaw w src/config.js, wtedy użytkownik klika tylko Połącz z Dropbox.
 const MAIN_INSTALL_KEY = 'portfel-pro-main-installed';
@@ -29,6 +29,7 @@ const INVENTORY_ITEMS_KEY = 'portfel-pro-inventory-items-v1';
 const INVENTORY_MOVEMENTS_KEY = 'portfel-pro-inventory-movements-v1';
 const INVENTORY_ANALYSIS_KEY = 'portfel-pro-inventory-analysis-v1';
 const INVENTORY_PENDING_KEY = 'portfel-pro-inventory-pending-v1';
+const INVENTORY_LEGACY_ITEMS_KEYS = ['portfel-pro-inventory-v1', 'portfel-pro-inventory', 'inventory'];
 
 const THEMES = {
   classic: { name: 'Jasny klasyczny', color: '#f6f3ea' },
@@ -43,14 +44,21 @@ const THEMES = {
 };
 
 const CATEGORIES = [
+  'Jedzenie',
+  'Chemia',
+  'Paliwo',
+  'Części',
+  'Narzędzia',
+  'Elektronika',
+  'Usługi',
+  'Szkoła',
+  'Zdrowie',
+  'Firma',
   'Komputerowe',
   'Antenowe',
   'Montaże',
   'Monitoring',
-  'Paliwo',
   'Mechanik',
-  'Jedzenie',
-  'Usługi',
   'Dom',
   'Bank',
   'Hurtownia',
@@ -696,6 +704,7 @@ const el = {
   replaceImportButton: document.querySelector('#replaceImportButton'),
   replaceImportInput: document.querySelector('#replaceImportInput'),
   syncInfo: document.querySelector('#syncInfo'),
+  importPreviewBox: document.querySelector('#importPreviewBox'),
   startupModePanel: document.querySelector('#startupModePanel'),
   chooseLocalModeButton: document.querySelector('#chooseLocalModeButton'),
   chooseDropboxModeButton: document.querySelector('#chooseDropboxModeButton'),
@@ -795,6 +804,33 @@ const el = {
   themeCards: Array.from(document.querySelectorAll('[data-theme-option]'))
 };
 
+function runUiBindingAudit() {
+  const missingRequired = Object.entries(el)
+    .filter(([key, value]) => key !== 'themeCards' && !value)
+    .map(([key]) => key);
+
+  const ids = Array.from(document.querySelectorAll('[id]')).map(node => node.id);
+  const duplicateIds = ids.filter((id, index) => ids.indexOf(id) !== index);
+  const tabButtons = Array.from(document.querySelectorAll('[data-tab]')).map(node => node.dataset.tab).filter(Boolean);
+  const tabPages = Array.from(document.querySelectorAll('[data-tab-page]')).map(node => node.dataset.tabPage).filter(Boolean);
+  const tabsWithoutPage = tabButtons.filter(tab => !tabPages.includes(tab));
+  const pagesWithoutTab = tabPages.filter(page => !tabButtons.includes(page));
+  const errors = [];
+
+  if (missingRequired.length) errors.push(`Brak elementów UI w HTML: ${missingRequired.map(key => `#${key}`).join(', ')}`);
+  if (duplicateIds.length) errors.push(`Zdublowane id w HTML: ${Array.from(new Set(duplicateIds)).join(', ')}`);
+  if (tabsWithoutPage.length) errors.push(`Zakładki bez sekcji: ${tabsWithoutPage.join(', ')}`);
+  if (pagesWithoutTab.length) errors.push(`Sekcje bez przycisku zakładki: ${pagesWithoutTab.join(', ')}`);
+
+  if (errors.length) {
+    console.error('Audyt UI nie przeszedł:', errors);
+    showMessage(`Błąd układu aplikacji: ${errors.join(' | ')}`, 'error');
+    throw new Error(errors.join(' | '));
+  }
+
+  console.info(`Audyt UI OK: ${ids.length} id, ${tabButtons.length} zakładek, brak brakujących powiązań.`);
+  return { idCount: ids.length, tabCount: tabButtons.length };
+}
 
 function getSavedTheme() {
   try {
@@ -1170,6 +1206,107 @@ function normalizeKnownCategory(value, fallback = 'Inne') {
   const key = categoryKey(value);
   if (!key) return fallback;
   return getAllCategories().find(category => categoryKey(category) === key) || fallback;
+}
+
+
+const STANDARD_BILANS_CATEGORY_ALIASES = [
+  { category: 'Jedzenie', words: ['jedzenie', 'spożywka', 'spozywka', 'żywność', 'zywnosc', 'chleb', 'mleko', 'ser', 'mięso', 'mieso', 'wędlina', 'wedlina', 'warzywa', 'owoce', 'biedronka', 'lidl', 'dino', 'żabka', 'zabka', 'sklep spożywczy', 'paragon spożywczy'] },
+  { category: 'Chemia', words: ['chemia', 'proszek', 'płyn do prania', 'plyn do prania', 'płyn do naczyń', 'plyn do naczyn', 'domestos', 'papier toaletowy', 'ręcznik papierowy', 'recznik papierowy', 'środek czystości', 'srodek czystosci', 'detergent'] },
+  { category: 'Paliwo', words: ['paliwo', 'benzyna', 'diesel', 'ropa', 'lpg', 'orlen', 'bp', 'shell', 'stacja paliw'] },
+  { category: 'Części', words: ['części', 'czesci', 'część', 'czesc', 'filtr oleju', 'olej silnikowy', 'klocki', 'tarcze', 'akumulator', 'opona', 'opony', 'samochodowe'] },
+  { category: 'Narzędzia', words: ['narzędzia', 'narzedzia', 'wiertarka', 'wkrętarka', 'wkretarka', 'miernik', 'zaciskarka', 'tester', 'śrubokręt', 'srubokret', 'klucz', 'lutownica'] },
+  { category: 'Elektronika', words: ['elektronika', 'kamera', 'kamery', 'monitoring', 'rejestrator', 'router', 'switch', 'komputer', 'laptop', 'dysk', 'ssd', 'ram', 'telefon', 'tablet', 'kabel hdmi', 'ładowarka', 'ladowarka'] },
+  { category: 'Usługi', words: ['usługa', 'usluga', 'serwis', 'naprawa', 'montaż', 'montaz', 'instalacja', 'robocizna', 'konfiguracja', 'dojazd'] },
+  { category: 'Szkoła', words: ['szkoła', 'szkola', 'zeszyt', 'podręcznik', 'podrecznik', 'książka szkolna', 'ksiazka szkolna', 'składka szkolna', 'skladka szkolna', 'rada rodziców', 'rada rodzicow'] },
+  { category: 'Zdrowie', words: ['zdrowie', 'apteka', 'lek', 'leki', 'lekarz', 'badanie', 'dentysta', 'witamina', 'syrop', 'ibuprofen', 'paracetamol'] },
+  { category: 'Firma', words: ['firma', 'firmowe', 'na firmę', 'na firme', 'faktura', 'nip', 'vat', 'zus', 'podatek', 'księgowość', 'ksiegowosc', 'hurtownia'] },
+  { category: 'Inne', words: ['inne', 'pozostałe', 'pozostale'] }
+];
+
+const STANDARD_BILANS_CATEGORY_DIRECT = STANDARD_BILANS_CATEGORY_ALIASES.reduce((map, item) => {
+  map.set(categoryKey(item.category), item.category);
+  for (const word of item.words) map.set(categoryKey(word), item.category);
+  return map;
+}, new Map());
+
+function inferStandardBilansCategoryFromText(text = '') {
+  const normalized = normalizeText(text);
+  if (!normalized) return '';
+  let best = { category: '', score: 0 };
+  for (const item of STANDARD_BILANS_CATEGORY_ALIASES) {
+    let score = 0;
+    for (const word of item.words) {
+      const pattern = normalizeText(word);
+      if (pattern && normalized.includes(pattern)) score += pattern.length > 7 ? 3 : 2;
+    }
+    if (score > best.score) best = { category: item.category, score };
+  }
+  return best.score ? best.category : '';
+}
+
+function normalizeStandardBilansCategory(value = '', sourceText = '', fallback = 'Inne') {
+  const direct = STANDARD_BILANS_CATEGORY_DIRECT.get(categoryKey(value));
+  if (direct) return normalizeKnownCategory(direct, direct);
+
+  const inferred = inferStandardBilansCategoryFromText(`${value} ${sourceText}`);
+  if (inferred) return normalizeKnownCategory(inferred, inferred);
+
+  const known = normalizeKnownCategory(value, '');
+  if (known) return known;
+
+  return normalizeKnownCategory(fallback, 'Inne');
+}
+
+function detectReceiptLikeText(text = '') {
+  const normalized = normalizeText(text);
+  return /\b(paragon|faktura|rachunek|sklep|market|biedronka|lidl|dino|zabka|apteka|orlen|bp|shell)\b/.test(normalized);
+}
+
+function estimateBilansAiConfidence(entry = {}, sourceText = '') {
+  const normalized = normalizeText(sourceText);
+  let score = 0.55;
+  if (Number(entry.amount || 0) > 0) score += 0.15;
+  if (entry.entryDate && isValidDateISO(entry.entryDate)) score += 0.08;
+  if (entry.category && entry.category !== 'Inne') score += 0.08;
+  if (entry.scope && entry.scope !== 'nieokreślone') score += 0.05;
+  if (detectReceiptLikeText(sourceText)) score += 0.04;
+  if (/\b(nip|vat|faktura|firmow|na firme|na firme)\b/.test(normalized)) score += 0.04;
+  if (/\b(nieczytel|brak|nie wiem|chyba|moze|może)\b/.test(normalized)) score -= 0.18;
+  return Math.max(0.35, Math.min(0.98, score));
+}
+
+function applyBilansAiRules(entry = {}, sourceText = '') {
+  const normalized = normalizeText(sourceText);
+  const next = { ...entry };
+  const category = normalizeStandardBilansCategory(next.category, sourceText, next.category || 'Inne');
+  next.category = category;
+
+  if (detectExplicitEntryType(sourceText)) {
+    next.entryType = detectExplicitEntryType(sourceText);
+  } else if (detectReceiptLikeText(sourceText) || /\b(kupil|zakup|zaplacil|wydalem|koszt)\b/.test(normalized)) {
+    next.entryType = 'wydatek';
+  }
+
+  const firmSignal = /\b(firmow|firma|na firme|faktura|nip|vat|hurtownia|towar|klient|montaz|monitoring|kamera|antena|router|narzedz|czesci)\b/.test(normalized);
+  const homeSignal = /\b(domow|prywatn|jedzenie|spozyw|chemia|apteka|szkola|dziecko|biedronka|lidl|dino|zabka)\b/.test(normalized);
+  if (firmSignal && !homeSignal) next.scope = 'firmowe';
+  if (homeSignal && !firmSignal) next.scope = 'domowe';
+  if (next.entryType === 'przychód' && next.scope === 'nieokreślone') next.scope = 'firmowe';
+  if (category === 'Jedzenie' && !firmSignal) next.scope = 'domowe';
+  if (['Chemia', 'Szkoła', 'Zdrowie'].includes(category) && !firmSignal) next.scope = 'domowe';
+  if (['Narzędzia', 'Elektronika', 'Firma', 'Części'].includes(category) && firmSignal) next.scope = 'firmowe';
+
+  const confidence = estimateBilansAiConfidence(next, sourceText);
+  const notes = [];
+  if (detectReceiptLikeText(sourceText)) notes.push('paragon/faktura');
+  if (category !== entry.category) notes.push(`kategoria: ${category}`);
+  if (confidence < 0.75) notes.push('sprawdź ręcznie');
+
+  next.aiConfidence = confidence;
+  next.aiNotes = notes.join(' · ');
+  next.tags = normalizeTags([...(next.tags ?? []), 'ai', ...(detectReceiptLikeText(sourceText) ? ['paragon'] : [])].join(','));
+  next.updatedAt = new Date().toISOString();
+  return next;
 }
 
 function addCustomCategory(name) {
@@ -2072,8 +2209,15 @@ const CATEGORY_RULES = [
   { category: 'Komputerowe', weight: 3, words: ['router', 'tp-link', 'komputer', 'laptop', 'dysk', 'ssd', 'ram', 'plyta glowna', 'procesor', 'mysz', 'klawiatura', 'monitor', 'drukarka', 'toner'] },
   { category: 'Hurtownia', weight: 3, words: ['hurtownia', 'faktura', 'magazyn', 'towar'] },
   { category: 'Paliwo', weight: 6, words: ['paliwo', 'benzyna', 'diesel', 'ropa', 'lpg', 'orlen', 'bp', 'shell'] },
+  { category: 'Chemia', weight: 5, words: ['chemia', 'proszek', 'plyn do prania', 'plyn do naczyn', 'papier toaletowy', 'recznik papierowy', 'detergent', 'srodki czystosci'] },
+  { category: 'Części', weight: 5, words: ['czesci', 'czesc', 'filtr oleju', 'olej silnikowy', 'klocki', 'tarcze', 'akumulator', 'opona', 'opony', 'czesci auto'] },
+  { category: 'Narzędzia', weight: 5, words: ['narzedzia', 'wiertarka', 'wkretarka', 'miernik', 'zaciskarka', 'tester', 'srubokret', 'klucz', 'lutownica'] },
+  { category: 'Elektronika', weight: 5, words: ['elektronika', 'telefon', 'tablet', 'komputer', 'laptop', 'kamera', 'router', 'switch', 'dysk', 'ssd', 'ram', 'ladowarka'] },
+  { category: 'Szkoła', weight: 5, words: ['szkola', 'zeszyt', 'podrecznik', 'ksiazka szkolna', 'skladka szkolna', 'rada rodzicow'] },
+  { category: 'Zdrowie', weight: 5, words: ['zdrowie', 'apteka', 'lek', 'leki', 'lekarz', 'badanie', 'dentysta', 'syrop', 'witamina'] },
+  { category: 'Firma', weight: 4, words: ['firma', 'firmowe', 'na firme', 'vat', 'nip', 'ksiegowosc', 'zus', 'podatek'] },
   { category: 'Mechanik', weight: 4, words: ['mechanik', 'olej', 'opona', 'opony', 'czesci auto', 'naprawa auta', 'samochod'] },
-  { category: 'Jedzenie', weight: 5, words: ['makaron', 'chleb', 'mleko', 'hotdog', 'hot dog', 'hot-dog', 'jedzenie', 'obiad', 'kolacja', 'sniadanie', 'kebab', 'pizza', 'zabka', 'biedronka'] },
+  { category: 'Jedzenie', weight: 5, words: ['makaron', 'chleb', 'mleko', 'hotdog', 'hot dog', 'hot-dog', 'jedzenie', 'obiad', 'kolacja', 'sniadanie', 'kebab', 'pizza', 'zabka', 'biedronka', 'lidl', 'dino'] },
   { category: 'Dom', weight: 4, words: ['dom', 'do domu', 'czynsz', 'rachunek domowy', 'prad', 'gaz', 'woda', 'internet domowy', 'mieszkanie'] },
   { category: 'Bank', weight: 5, words: ['bank', 'konto', 'przelew', 'prowizja', 'odsetki', 'rata', 'kredyt'] },
   { category: 'Podatki/ZUS', weight: 6, words: ['zus', 'podatek', 'pit', 'vat', 'skarbowy'] }
@@ -2127,7 +2271,9 @@ function detectCategory(text) {
 
 function detectCategoryForParsedEntry(text, scope = 'nieokreślone', entryType = '') {
   const detected = detectCategoryFromRules(text, { entryType, scope });
-  if (detected) return detected;
+  if (detected) return normalizeStandardBilansCategory(detected, text, detected);
+  const standard = inferStandardBilansCategoryFromText(text);
+  if (standard) return normalizeKnownCategory(standard, standard);
   if (normalizeScope(scope) === 'domowe') return 'Dom';
   return 'Inne';
 }
@@ -2179,7 +2325,7 @@ function detectScope(text, entryType = 'wydatek', category = '') {
   if (['dom', 'jedzenie'].some(word => normalizedCategory.includes(word))) return 'domowe';
 
   if (entryType === 'przychód') return 'firmowe';
-  return el.entryScope?.value || 'nieokreślone';
+  return el.entryScope?.value || 'domowe';
 }
 
 function detectPaymentMethod(text) {
@@ -2424,10 +2570,11 @@ function parseNaturalText(rawText) {
       sourceText: `${description} ${context}`
     });
 
-    const explicitType = detectExplicitEntryType(`${description} ${context}`);
+    const sourceForRules = `${description} ${context}`;
+    const explicitType = detectExplicitEntryType(sourceForRules);
     if (explicitType) learnedEntry.entryType = explicitType;
 
-    return learnedEntry;
+    return applyBilansAiRules(learnedEntry, sourceForRules);
   });
 
   return drafts.filter(item => item.amount > 0 && item.description);
@@ -2514,7 +2661,7 @@ function collectParsedDraftsFromPreview() {
       weekday: getWeekday(entryDate),
       entryType: read('entryType') === 'przychód' ? 'przychód' : 'wydatek',
       scope: normalizeScope(read('scope')),
-      category: read('category') || 'Inne',
+      category: normalizeStandardBilansCategory(read('category') || current.category || 'Inne', `${description} ${read('originalText')}`, read('category') || 'Inne'),
       amount,
       unitAmount: current.unitAmount || amount,
       quantity,
@@ -2522,6 +2669,8 @@ function collectParsedDraftsFromPreview() {
       description,
       originalText: read('originalText'),
       tags: normalizeTags(read('tags')),
+      aiConfidence: current.aiConfidence || estimateBilansAiConfidence(current, `${description} ${read('originalText')}`),
+      aiNotes: current.aiNotes || '',
       updatedAt: new Date().toISOString()
     };
   });
@@ -2549,6 +2698,9 @@ function renderParsePreview() {
       const amountClass = entry.entryType === 'przychód' ? 'amount-income' : 'amount-expense';
       const learningInfo = entry.learningAppliedRuleId
         ? ` · nauczona reguła: ${escapeHtml(entry.learningSuggestionNote || '')} (${escapeHtml(entry.learningConfidence || '')}%)`
+        : '';
+      const aiInfo = entry.aiConfidence
+        ? ` · AI: ${escapeHtml(formatInventoryConfidence(entry.aiConfidence))}${entry.aiNotes ? ` · ${escapeHtml(entry.aiNotes)}` : ''}`
         : '';
       return `
         <article class="parse-card parse-card-editable" data-parse-index="${index}">
@@ -2588,7 +2740,7 @@ function renderParsePreview() {
               <textarea data-field="originalText" rows="2">${escapeHtml(entry.originalText || '')}</textarea>
             </label>
           </div>
-          <small>${escapeHtml(entry.weekday || '')} · grupa: ${escapeHtml(resolveReportGroup(entry))}${entry.quantity > 1 ? ` · ilość ${escapeHtml(entry.quantity)} · cena ${escapeHtml(formatMoney(entry.unitAmount))}` : ''}${learningInfo}</small>
+          <small>${escapeHtml(entry.weekday || '')} · grupa: ${escapeHtml(resolveReportGroup(entry))}${entry.quantity > 1 ? ` · ilość ${escapeHtml(entry.quantity)} · cena ${escapeHtml(formatMoney(entry.unitAmount))}` : ''}${learningInfo}${aiInfo}</small>
         </article>
       `;
     }).join('')}
@@ -2679,6 +2831,18 @@ function formatInventoryAction(action) {
     sprzedaż: 'Sprzedaż'
   };
   return labels[value] || value.replace(/_/g, ' ');
+}
+
+function normalizeInventoryConfidence(value = 0) {
+  const numeric = Number(value || 0);
+  if (!Number.isFinite(numeric)) return 0;
+  const normalized = numeric > 1 ? numeric / 100 : numeric;
+  return Math.max(0, Math.min(1, normalized));
+}
+
+function formatInventoryConfidence(value = 0) {
+  const normalized = normalizeInventoryConfidence(value);
+  return normalized ? `${Math.round(normalized * 100)}%` : '';
 }
 
 
@@ -3147,7 +3311,7 @@ function resetForm() {
   el.entryForm.reset();
   el.entryDate.value = todayISO();
   el.entryType.value = 'wydatek';
-  el.entryScope.value = 'nieokreślone';
+  el.entryScope.value = 'domowe';
   el.category.value = 'Inne';
   el.paymentMethod.value = 'gotówka';
 }
@@ -3172,7 +3336,7 @@ function makeEntryFromForm() {
     entryDate,
     weekday: getWeekday(entryDate),
     entryType: el.entryType.value,
-    scope: el.entryScope.value,
+    scope: el.entryScope.value || 'domowe',
     category: el.category.value,
     amount: parseAmount(el.amount.value),
     paymentMethod: el.paymentMethod.value,
@@ -4686,7 +4850,7 @@ function collectImportedEntries(payload) {
     }
   }
 
-  const ignoredKeys = new Set(['tagRules', 'learningRules', 'deletedEntries', 'walletMonths', 'customCategories', 'mainReportSettings', 'inventoryItems', 'inventoryMovements', 'inventoryAnalysis']);
+  const ignoredKeys = new Set(['tagRules', 'learningRules', 'deletedEntries', 'walletMonths', 'customCategories', 'mainReportSettings', 'inventoryItems', 'inventory', 'inventoryMovements', 'inventoryAnalysis', 'inventoryPending']);
   for (const [key, value] of Object.entries(payload)) {
     if (ignoredKeys.has(key)) continue;
     if (Array.isArray(value)) {
@@ -5042,6 +5206,7 @@ function makeExportPayload() {
     customCategories,
     mainReportSettings: getMainReportSettings(),
     inventoryItems: getInventoryItems(),
+    inventory: getInventoryItems(),
     inventoryMovements: getInventoryMovements(),
     inventoryAnalysis: getInventoryAnalysis(),
     inventoryPending: getInventoryPending(),
@@ -5109,14 +5274,129 @@ async function uploadLocalStateToDropbox(successMessage = '') {
   }
 }
 
+function hasImportableSettingsPayload(payload) {
+  if (!payload || typeof payload !== 'object') return false;
+  return Boolean(
+    payload.walletMonths || payload.wallet_months ||
+    payload.customCategories || payload.custom_categories ||
+    payload.mainReportSettings || payload.main_report_settings ||
+    payload.tagRules || payload.learningRules ||
+    payload.inventoryItems || payload.inventory || payload.inventoryMovements || payload.inventoryAnalysis || payload.inventoryPending
+  );
+}
+
+function buildImportPreview(payload, options = {}) {
+  const { replace = false, applyDeletions = true } = options;
+  const importedRaw = collectImportedEntries(payload);
+  const now = new Date().toISOString();
+  const cleanedEntries = Array.isArray(importedRaw)
+    ? importedRaw.map(item => normalizeImportedEntry(item, now)).filter(item => item.amount > 0 && ['przychód', 'wydatek'].includes(item.entryType))
+    : [];
+  const inventory = normalizeInventoryPayload(payload || {});
+  const pendingResults = Array.isArray(inventory.pending?.results) ? inventory.pending.results.length : 0;
+  const deletedEntries = applyDeletions ? collectDeletedEntries(payload).length : 0;
+  const customCategoriesRaw = payload?.customCategories || payload?.custom_categories;
+  const walletMonthsRaw = payload?.walletMonths || payload?.wallet_months;
+  return {
+    mode: replace ? 'replace' : 'merge',
+    entriesRaw: Array.isArray(importedRaw) ? importedRaw.length : 0,
+    entriesValid: cleanedEntries.length,
+    deletedEntries,
+    tagRules: Array.isArray(payload?.tagRules) ? payload.tagRules.length : 0,
+    learningRules: Array.isArray(payload?.learningRules) ? payload.learningRules.length : 0,
+    customCategories: Array.isArray(customCategoriesRaw) ? customCategoriesRaw.length : 0,
+    walletMonths: walletMonthsRaw && typeof walletMonthsRaw === 'object' && !Array.isArray(walletMonthsRaw) ? Object.keys(walletMonthsRaw).length : 0,
+    mainReportSettings: Boolean(payload?.mainReportSettings || payload?.main_report_settings),
+    inventoryItems: inventory.items.length,
+    inventoryMovements: inventory.movements.length,
+    inventoryPending: pendingResults,
+    hasInventory: inventory.hasItems || inventory.hasMovements || inventory.hasAnalysis || inventory.hasPending,
+    hasSettingsOnly: hasImportableSettingsPayload(payload)
+  };
+}
+
+function formatImportPreviewLines(preview) {
+  return [
+    `Wpisy bilansu: ${preview.entriesValid}${preview.entriesRaw !== preview.entriesValid ? ` poprawne z ${preview.entriesRaw}` : ''}`,
+    `Kategorie własne: ${preview.customCategories}`,
+    `Reguły tagów: ${preview.tagRules}`,
+    `Reguły uczenia: ${preview.learningRules}`,
+    `Miesiące portfela: ${preview.walletMonths}`,
+    `Ustawienia raportu: ${preview.mainReportSettings ? 'tak' : 'nie'}`,
+    `Magazyn — stany: ${preview.inventoryItems}`,
+    `Magazyn — ruchy: ${preview.inventoryMovements}`,
+    `Magazyn — do ręcznego sprawdzenia: ${preview.inventoryPending}`,
+    `Usunięcia z kopii: ${preview.deletedEntries}`
+  ];
+}
+
+function formatImportPreviewText(preview) {
+  const mode = preview.mode === 'replace'
+    ? 'ZASTĄPIENIE — obecne dane wpisów zostaną wyczyszczone i zastąpione plikiem.'
+    : 'SCALANIE — nowe dane zostaną dopisane, a starsze wersje tych samych wpisów mogą zostać zaktualizowane.';
+  return ['Podgląd importu JSON', mode, '', ...formatImportPreviewLines(preview), '', 'Kontynuować import?'].join('\n');
+}
+
+function renderImportPreview(preview, fileName = '') {
+  const title = fileName ? `Podgląd pliku: ${fileName}` : 'Podgląd importu';
+  const text = `${title}\n${formatImportPreviewLines(preview).join('\n')}`;
+  if (el.importPreviewBox) {
+    el.importPreviewBox.textContent = text;
+    el.importPreviewBox.classList.remove('hidden');
+  }
+  if (el.syncInfo) {
+    el.syncInfo.textContent = `${preview.mode === 'replace' ? 'Zastąpienie' : 'Scalanie'}: wpisy ${preview.entriesValid}, ruchy magazynowe ${preview.inventoryMovements}, do ręcznego sprawdzenia ${preview.inventoryPending}.`;
+  }
+}
+
+function getInventoryImportCounts() {
+  return {
+    inventoryItems: getInventoryItems().length,
+    inventoryMovements: getInventoryMovements().length,
+    inventoryPending: getInventoryPending().results.length
+  };
+}
+
+function formatImportResultMessage(result = {}) {
+  const inventory = result.inventory || {};
+  return `Zaimportowano ${result.added || 0} wpisów, zaktualizowano ${result.updated || 0}, pominięto ${result.skipped || 0}, usunięto ${result.deleted || 0}. Magazyn: ${inventory.inventoryItems || 0} pozycji, ${inventory.inventoryMovements || 0} ruchów, ${inventory.inventoryPending || 0} pozycji do sprawdzenia.`;
+}
+
+async function confirmImportPreview(preview, fileName = '') {
+  renderImportPreview(preview, fileName);
+  const raf = window.requestAnimationFrame || (callback => window.setTimeout(callback, 0));
+  await new Promise(resolve => raf(() => resolve()));
+  return window.confirm(formatImportPreviewText(preview));
+}
+
 async function importPayload(payload, options = {}) {
   const { replace = false, silent = false, applyDeletions = true, confirmReplace = true } = options;
+  const imported = collectImportedEntries(payload);
+  const now = new Date().toISOString();
+  const cleaned = Array.isArray(imported)
+    ? imported.map(item => normalizeImportedEntry(item, now)).filter(item => item.amount > 0 && ['przychód', 'wydatek'].includes(item.entryType))
+    : [];
+  const importedSettingsOnly = hasImportableSettingsPayload(payload);
+
+  if (Array.isArray(imported) && imported.length && !cleaned.length) {
+    throw new Error('Nie znaleziono poprawnych wpisów do importu. Sprawdź, czy rekordy mają kwotę oraz datę/opis.');
+  }
+
+  if ((!Array.isArray(imported) || !imported.length) && !importedSettingsOnly) {
+    throw new Error('Plik JSON nie zawiera listy wpisów ani danych programu. Obsługiwane pola: entries, items, data, records, rows, transactions, wpisy, lista oraz pola kopii Portfel PRO.');
+  }
+
+  if (replace && confirmReplace) {
+    const preview = buildImportPreview(payload, { replace, applyDeletions });
+    const shouldReplace = await confirmImportPreview(preview);
+    if (!shouldReplace) return { canceled: true, added: 0, updated: 0, skipped: 0, deleted: 0, inventory: getInventoryImportCounts() };
+  }
+
   const deletionResult = applyDeletions ? await applyImportedDeletions(payload) : { deleted: 0 };
   importCustomCategoriesFromPayload(payload, replace);
   await importLearningRulesFromPayload(payload, replace);
   importWalletMonthsFromPayload(payload, replace);
-  importInventoryFromPayload(payload, replace);
-  const imported = collectImportedEntries(payload);
+  const inventoryResult = importInventoryFromPayload(payload, replace);
 
   if (replace) {
     const importedSyncIds = new Set((Array.isArray(imported) ? imported : [])
@@ -5125,44 +5405,18 @@ async function importPayload(payload, options = {}) {
     const importedDeleted = collectDeletedEntries(payload)
       .filter(item => !importedSyncIds.has(item.syncId));
     saveDeletedEntries(importedDeleted);
+    await clearEntries();
   }
 
-  if (!Array.isArray(imported) || !imported.length) {
-    if (replace) {
-      const shouldReplace = !confirmReplace || window.confirm('Zastąpić wszystkie lokalne wpisy danymi z importowanego pliku?');
-      if (!shouldReplace) return { added: 0, updated: 0, skipped: 0, deleted: deletionResult.deleted };
-      await clearEntries();
-    }
-
+  if (!cleaned.length) {
     await reloadEntries();
-    const importedSettingsOnly = Boolean(
-      payload?.walletMonths || payload?.wallet_months ||
-      payload?.customCategories || payload?.custom_categories ||
-      payload?.mainReportSettings || payload?.main_report_settings ||
-      payload?.tagRules || payload?.learningRules || payload?.inventoryItems || payload?.inventoryMovements || payload?.inventoryAnalysis || payload?.inventoryPending
-    );
-    if (replace || deletionResult.deleted || importedSettingsOnly) {
-      if (!silent) showMessage(`Import zakończony. Dodano wpisy: 0, zaktualizowano: 0, usunięto: ${deletionResult.deleted}.`);
-      return { added: 0, updated: 0, skipped: 0, deleted: deletionResult.deleted };
-    }
-    throw new Error('Plik JSON nie zawiera listy wpisów. Obsługiwane pola: entries, items, data, records, rows, transactions, wpisy, lista.');
+    const result = { added: 0, updated: 0, skipped: 0, deleted: deletionResult.deleted, inventory: inventoryResult };
+    if (!silent) showMessage(formatImportResultMessage(result));
+    return result;
   }
-
-  const now = new Date().toISOString();
-  const cleaned = imported
-    .map(item => normalizeImportedEntry(item, now))
-    .filter(item => item.amount > 0 && ['przychód', 'wydatek'].includes(item.entryType));
-
-  if (!cleaned.length) throw new Error('Nie znaleziono poprawnych wpisów do importu. Sprawdź, czy rekordy mają kwotę oraz datę/opis.');
 
   if (!applyDeletions) {
     forgetDeletedEntriesForSyncIds(getImportedSyncIds(cleaned));
-  }
-
-  if (replace) {
-    const shouldReplace = !confirmReplace || window.confirm('Zastąpić wszystkie lokalne wpisy danymi z importowanego pliku?');
-    if (!shouldReplace) return { added: 0, updated: 0, skipped: 0, deleted: deletionResult.deleted };
-    await clearEntries();
   }
 
   allEntries = await getAllEntries();
@@ -5209,8 +5463,9 @@ async function importPayload(payload, options = {}) {
   }
 
   await reloadEntries();
-  if (!silent) showMessage(`Import zakończony. Dodano: ${added}, zaktualizowano: ${updated}, pominięto: ${skipped}, usunięto: ${deletionResult.deleted}.`);
-  return { added, updated, skipped, deleted: deletionResult.deleted };
+  const result = { added, updated, skipped, deleted: deletionResult.deleted, inventory: inventoryResult };
+  if (!silent) showMessage(formatImportResultMessage(result));
+  return result;
 }
 
 let dropboxSyncBusy = false;
@@ -5281,7 +5536,9 @@ function setupFirstRunMode() {
   if (!mode && el.startupModePanel) el.startupModePanel.classList.remove('hidden');
 }
 
-function exportJson() {
+async function exportJson() {
+  await reloadEntries();
+  migrateInventoryLocalStorage({ rebuild: true, skipSync: true });
   const payload = makeExportPayload();
 
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -5293,7 +5550,9 @@ function exportJson() {
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
-  showMessage(`Wyeksportowano plik JSON: ${link.download}`);
+  const preview = buildImportPreview(payload, { replace: false, applyDeletions: false });
+  renderImportPreview(preview, link.download);
+  showMessage(`Wyeksportowano kompletną kopię JSON: ${link.download}. Wpisy: ${preview.entriesValid}, ruchy magazynowe: ${preview.inventoryMovements}, do sprawdzenia: ${preview.inventoryPending}.`);
 }
 
 async function importJson(file, options = {}) {
@@ -5306,14 +5565,26 @@ async function importJson(file, options = {}) {
   } catch (error) {
     throw new Error(`Nie udało się odczytać JSON: ${error.message}`);
   }
+
+  const preview = buildImportPreview(payload, options);
+  const shouldContinue = options.showPreview === false ? true : await confirmImportPreview(preview, file?.name || 'wybrany plik JSON');
+  if (!shouldContinue) {
+    showMessage('Import anulowany. Dane nie zostały zmienione.', 'error');
+    return { canceled: true };
+  }
+
   window.clearTimeout(dropboxSyncTimer);
-  await importPayload(payload, options);
+  const result = await importPayload(payload, { ...options, silent: true, confirmReplace: false });
+  if (result?.canceled) return result;
   markDropboxForceLocalUpload(options.replace ? 'json-replace' : 'json-merge');
+  const finalMessage = formatImportResultMessage(result);
   if (getStorageMode() === 'dropbox' && hasDropboxConnection()) {
-    await uploadLocalStateToDropbox('Import JSON zapisany do Dropbox. Następne synchronizacje będą działały normalnie.');
+    await uploadLocalStateToDropbox(`${finalMessage} Import JSON zapisany do Dropbox.`);
   } else {
     updateCloudUi('Import JSON zakończony lokalnie. Po podłączeniu Dropboxa program jednorazowo wyśle tę bazę do chmury.');
+    showMessage(finalMessage);
   }
+  return result;
 }
 
 async function handleClearAll() {
@@ -5446,7 +5717,8 @@ async function runInstallPrompt(target = null) {
 }
 
 function openVoiceInstallPage() {
-  const url = new URL('./voice/index.html', window.location.href);
+  const url = new URL('./index.html', window.location.href);
+  url.searchParams.set('action', 'voice');
   url.searchParams.set('install', 'voice');
   url.searchParams.set('v', `${APP_VERSION}-${Date.now()}`);
   window.location.href = url.toString();
@@ -6392,14 +6664,44 @@ function buildInventoryAiPrompt(entries) {
     id_wpisu: inventoryEntryKey(entry),
     data: entry.entryDate,
     typ: entry.entryType,
-    firmowy: normalizeScope(entry.scope) === 'firmowe',
-    kategoria: entry.category || '',
+    obszar: normalizeScope(entry.scope),
+    kategoria: normalizeStandardBilansCategory(entry.category || '', `${entry.description || ''} ${entry.originalText || ''}`, entry.category || 'Inne'),
     kwota: Number(entry.amount || 0),
     opis: String(entry.description || ''),
     tekst_zrodlowy: String(entry.originalText || ''),
     tagi: Array.isArray(entry.tags) ? entry.tags.join(', ') : String(entry.tags || '')
   }));
-  return `Jesteś modułem magazynu w polskiej aplikacji Portfel PRO. Analizujesz wyłącznie firmowe przychody i firmowe wydatki. Zwróć tylko JSON zgodny ze schematem.\n\nZasady:\n- Wydatek firmowy dodaje towar do magazynu tylko wtedy, gdy opis oznacza zakup towaru/materiału na magazyn, do sprzedaży albo do zużycia przy montażu.\n- Przychód firmowy zdejmuje towar z magazynu tylko wtedy, gdy opis jasno mówi o sprzedaży, odsprzedaży, wydaniu z magazynu albo montażu i sprzedaży.\n- Sam montaż, instalacja, konfiguracja, serwis albo robocizna bez słowa sprzedaż nie zdejmuje towaru.\n- Paliwo, ZUS, podatki, księgowość, parking, telefon, internet i typowe koszty firmowe nie są ruchem magazynowym.\n- Liczby techniczne typu 5MP, 8 kanałów, 12V, 1TB nie są ilością.\n- Jeśli nie masz pewności, ustaw decyzja = wymaga_sprawdzenia.\n- Decyzje: dodaj_do_magazynu, zdejmij_z_magazynu, zwrot_do_magazynu, zwrot_do_sklepu, brak_ruchu, wymaga_sprawdzenia.\n- Jednostki: szt, m, rolka, komplet, opakowanie.\n\nWpisy:\n${JSON.stringify(compactEntries, null, 2)}`;
+  return `Jesteś modułem AI w polskiej aplikacji Portfel PRO. Masz przygotować uporządkowany wynik dla bilansu i magazynu. Zwróć wyłącznie JSON zgodny ze schematem.
+
+Standard wpisu do bilansu:
+- typ_bilansu: wydatek albo przychód.
+- obszar_bilansu: domowe, firmowe albo nieokreślone.
+- kategoria_bilansu wybieraj głównie z: Jedzenie, Chemia, Paliwo, Części, Narzędzia, Elektronika, Usługi, Szkoła, Zdrowie, Firma, Inne.
+- kwota, opis, data, pewnosc_wpisu i uwagi mają pomagać użytkownikowi sprawdzić wpis przed zapisem.
+
+Reguły bilansu:
+- Paragon spożywczy, market, Biedronka, Lidl, Dino, Żabka → zwykle wydatek / domowe / Jedzenie.
+- Chemia gospodarcza → zwykle wydatek / domowe / Chemia, chyba że opis jasno mówi o firmie.
+- Faktura na działalność, NIP, VAT, zakup do pracy, sprzęt do montażu → zwykle firmowe.
+- Paliwo, Orlen, BP, Shell → Paliwo.
+- Części samochodowe → Części.
+- Narzędzia → Narzędzia.
+- Elektronika, router, kamera, rejestrator, dysk, komputer → Elektronika albo właściwy ruch magazynowy.
+- Nie twórz dziwnych kategorii, jeśli pasuje jedna ze standardowych.
+- Jeżeli dane są nieczytelne albo niepewne, wpisz to w uwagi i obniż pewnosc_wpisu.
+
+Reguły magazynu:
+- Wydatek firmowy dodaje towar do magazynu tylko wtedy, gdy opis oznacza zakup towaru/materiału na magazyn, do sprzedaży albo do zużycia przy montażu.
+- Przychód firmowy zdejmuje towar z magazynu tylko wtedy, gdy opis jasno mówi o sprzedaży, odsprzedaży, wydaniu z magazynu albo montażu ze sprzedażą towaru.
+- Sam montaż, instalacja, konfiguracja, serwis albo robocizna bez słowa sprzedaż nie zdejmuje towaru.
+- Paliwo, ZUS, podatki, księgowość, parking, telefon, internet i typowe koszty firmowe nie są ruchem magazynowym.
+- Liczby techniczne typu 5MP, 8 kanałów, 12V, 1TB nie są ilością.
+- Jeśli nie masz pewności, ustaw decyzja = wymaga_sprawdzenia.
+- Decyzje: dodaj_do_magazynu, zdejmij_z_magazynu, zwrot_do_magazynu, zwrot_do_sklepu, brak_ruchu, wymaga_sprawdzenia.
+- Jednostki: szt, m, rolka, komplet, opakowanie.
+
+Wpisy:
+${JSON.stringify(compactEntries, null, 2)}`;
 }
 
 function getInventoryResponseSchema() {
@@ -6414,6 +6716,14 @@ function getInventoryResponseSchema() {
           additionalProperties: false,
           properties: {
             id_wpisu: { type: 'string' },
+            typ_bilansu: { type: 'string', enum: ['wydatek', 'przychód'] },
+            obszar_bilansu: { type: 'string', enum: ['domowe', 'firmowe', 'nieokreślone'] },
+            kategoria_bilansu: { type: 'string' },
+            kwota: { type: ['number', 'null'] },
+            opis: { type: ['string', 'null'] },
+            data: { type: ['string', 'null'] },
+            pewnosc_wpisu: { type: 'number' },
+            uwagi: { type: 'string' },
             decyzja: { type: 'string', enum: ['dodaj_do_magazynu', 'zdejmij_z_magazynu', 'zwrot_do_magazynu', 'zwrot_do_sklepu', 'brak_ruchu', 'wymaga_sprawdzenia'] },
             produkt: { type: ['string', 'null'] },
             ilosc: { type: ['number', 'null'] },
@@ -6422,7 +6732,7 @@ function getInventoryResponseSchema() {
             pewnosc: { type: 'number' },
             powod: { type: 'string' }
           },
-          required: ['id_wpisu', 'decyzja', 'produkt', 'ilosc', 'jednostka', 'cena_jednostkowa', 'pewnosc', 'powod']
+          required: ['id_wpisu', 'typ_bilansu', 'obszar_bilansu', 'kategoria_bilansu', 'kwota', 'opis', 'data', 'pewnosc_wpisu', 'uwagi', 'decyzja', 'produkt', 'ilosc', 'jednostka', 'cena_jednostkowa', 'pewnosc', 'powod']
         }
       }
     },
@@ -6492,7 +6802,12 @@ function normalizeAiDecision(raw, entryByKey) {
   const product = normalizeInventoryProductName(raw.produkt || '');
   const quantity = Number(raw.ilosc || 0);
   const unit = String(raw.jednostka || 'szt').trim() || 'szt';
-  const confidence = Math.max(0, Math.min(1, Number(raw.pewnosc || 0)));
+  const confidence = normalizeInventoryConfidence(raw.pewnosc);
+  const entryConfidence = normalizeInventoryConfidence(raw.pewnosc_wpisu ?? raw.pewnosc);
+  const sourceText = [raw.opis, raw.uwagi, raw.powod, entry.description, entry.originalText, entry.category].filter(Boolean).join(' ');
+  const bilansCategory = normalizeStandardBilansCategory(raw.kategoria_bilansu || entry.category || '', sourceText, entry.category || 'Inne');
+  const bilansType = raw.typ_bilansu === 'przychód' ? 'przychód' : 'wydatek';
+  const bilansScope = normalizeScope(raw.obszar_bilansu || entry.scope || 'nieokreślone');
   const unitCost = Number(raw.cena_jednostkowa || 0) || (quantity > 0 ? Number(entry.amount || 0) / quantity : 0);
   return {
     entry,
@@ -6500,11 +6815,22 @@ function normalizeAiDecision(raw, entryByKey) {
     entryHash: inventoryEntryHash(entry),
     decision,
     product,
+    category: normalizeInventoryCategory(inferInventoryCategory(product)),
     quantity,
     unit,
     unitCost,
     confidence,
-    reason: String(raw.powod || '').trim()
+    reason: String(raw.powod || raw.uwagi || '').trim(),
+    bilans: {
+      entryType: bilansType,
+      scope: bilansScope,
+      category: bilansCategory,
+      amount: Number(raw.kwota || entry.amount || 0),
+      description: String(raw.opis || entry.description || '').trim(),
+      entryDate: isValidDateISO(raw.data) ? raw.data : entry.entryDate,
+      confidence: entryConfidence,
+      notes: String(raw.uwagi || '').trim()
+    }
   };
 }
 
@@ -6557,6 +6883,194 @@ function getInventoryPending() {
 function saveInventoryPending(data, options = {}) {
   setJsonLocalStorage(INVENTORY_PENDING_KEY, data && typeof data === 'object' ? data : { results: [] });
   if (!options.skipSync) scheduleDropboxAutoSync();
+}
+
+function normalizeInventoryItemForStorage(raw = {}) {
+  if (!raw || typeof raw !== 'object') return null;
+  const product = normalizeInventoryProductName(raw.name || raw.product || raw.produkt || raw.nazwa || '');
+  if (!product) return null;
+  const quantity = Number(String(raw.quantity ?? raw.qty ?? raw.ilosc ?? raw.ilość ?? 0).replace(',', '.'));
+  const avgCost = Number(String(raw.avgCost ?? raw.unitCost ?? raw.cena ?? raw.cost ?? 0).replace(',', '.'));
+  const totalCost = Number(String(raw.totalCost ?? raw.value ?? raw.wartosc ?? raw.wartość ?? 0).replace(',', '.'));
+  const safeQuantity = Number.isFinite(quantity) ? quantity : 0;
+  const safeAvgCost = Number.isFinite(avgCost) ? avgCost : 0;
+  const safeTotalCost = Number.isFinite(totalCost) ? totalCost : safeQuantity * safeAvgCost;
+  return {
+    ...raw,
+    id: raw.id || `item-${inventoryProductKey(product, raw.unit || raw.jednostka || 'szt')}`,
+    name: product,
+    category: normalizeInventoryCategory(raw.category || raw.kategoria || inferInventoryCategory(product)),
+    unit: String(raw.unit || raw.jednostka || 'szt').trim() || 'szt',
+    quantity: safeQuantity,
+    avgCost: safeAvgCost,
+    totalCost: safeTotalCost,
+    value: Number.isFinite(Number(raw.value)) ? Number(raw.value) : safeTotalCost,
+    lastUpdated: raw.lastUpdated || raw.updatedAt || raw.createdAt || ''
+  };
+}
+
+function normalizeInventoryMovementForStorage(raw = {}) {
+  if (!raw || typeof raw !== 'object') return null;
+  const product = normalizeInventoryProductName(raw.product || raw.name || raw.produkt || raw.nazwa || '');
+  if (!product) return null;
+  const quantity = Number(String(raw.quantity ?? raw.qty ?? raw.ilosc ?? raw.ilość ?? 0).replace(',', '.'));
+  const unitCost = Number(String(raw.unitCost ?? raw.avgCost ?? raw.cena ?? raw.cost ?? 0).replace(',', '.'));
+  return {
+    ...raw,
+    id: raw.id || `mov-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    entryKey: raw.entryKey || raw.id_wpisu || raw.entrySyncId || '',
+    entryHash: raw.entryHash || '',
+    entryDate: raw.entryDate || raw.date || raw.data || todayISO(),
+    action: raw.action || raw.decision || 'korekta_reczna',
+    product,
+    category: normalizeInventoryCategory(raw.category || raw.kategoria || inferInventoryCategory(product)),
+    quantity: Number.isFinite(quantity) ? quantity : 0,
+    unit: String(raw.unit || raw.jednostka || 'szt').trim() || 'szt',
+    unitCost: Number.isFinite(unitCost) ? unitCost : 0,
+    confidence: normalizeInventoryConfidence(raw.confidence ?? raw.pewnosc ?? raw.pewność ?? 1),
+    reason: raw.reason || raw.uwagi || '',
+    sourceDescription: raw.sourceDescription || raw.description || raw.opis || '',
+    createdAt: raw.createdAt || raw.created_at || new Date().toISOString()
+  };
+}
+
+function normalizeInventoryAnalysisForStorage(raw = {}) {
+  if (!raw || typeof raw !== 'object') return {};
+  if (Array.isArray(raw)) {
+    return raw.reduce((acc, item) => {
+      const key = item?.id_wpisu || item?.entryKey || item?.entrySyncId || item?.syncId || '';
+      if (key) acc[key] = item;
+      return acc;
+    }, {});
+  }
+  return { ...raw };
+}
+
+function normalizePendingInventoryItemForStorage(raw = {}) {
+  if (!raw || typeof raw !== 'object') return null;
+  const product = normalizeInventoryProductName(raw.product || raw.name || raw.produkt || raw.nazwa || '');
+  const confidence = normalizeInventoryConfidence(raw.confidence ?? raw.pewnosc ?? raw.pewność ?? 0);
+  const decision = raw.decision || raw.action || raw.decyzja || 'wymaga_sprawdzenia';
+  const movementType = raw.movementType || decisionToMovementType(decision);
+  const quantity = Number(String(raw.quantity ?? raw.qty ?? raw.ilosc ?? raw.ilość ?? 0).replace(',', '.'));
+  const unitCost = Number(String(raw.unitCost ?? raw.avgCost ?? raw.cena ?? 0).replace(',', '.'));
+  return {
+    ...raw,
+    id_wpisu: raw.id_wpisu || raw.entryKey || raw.entrySyncId || raw.syncId || '',
+    entryHash: raw.entryHash || '',
+    decision,
+    product,
+    category: normalizeInventoryCategory(raw.category || raw.kategoria || (product ? inferInventoryCategory(product) : 'Inne')),
+    quantity: Number.isFinite(quantity) ? quantity : 0,
+    unit: String(raw.unit || raw.jednostka || 'szt').trim() || 'szt',
+    unitCost: Number.isFinite(unitCost) ? unitCost : 0,
+    confidence,
+    reason: raw.reason || raw.uwagi || '',
+    bilans: raw.bilans && typeof raw.bilans === 'object' ? {
+      ...raw.bilans,
+      category: normalizeStandardBilansCategory(raw.bilans.category || raw.bilans.kategoria_bilansu || '', `${raw.reason || ''} ${raw.uwagi || ''}`, raw.bilans.category || 'Inne'),
+      scope: normalizeScope(raw.bilans.scope || raw.bilans.obszar_bilansu || 'nieokreślone'),
+      entryType: raw.bilans.entryType === 'przychód' ? 'przychód' : 'wydatek',
+      confidence: normalizeInventoryConfidence(raw.bilans.confidence ?? raw.bilans.pewnosc_wpisu ?? confidence)
+    } : null,
+    movementType,
+    canApply: Boolean(raw.canApply && movementType && product && Number(quantity || 0) > 0),
+    manualReview: Boolean(raw.manualReview || !raw.canApply)
+  };
+}
+
+function normalizeInventoryPendingForStorage(raw = {}) {
+  const source = Array.isArray(raw) ? { results: raw } : (raw && typeof raw === 'object' ? raw : { results: [] });
+  const results = Array.isArray(source.results) ? source.results : [];
+  return {
+    ...source,
+    results: results.map(normalizePendingInventoryItemForStorage).filter(Boolean)
+  };
+}
+
+function normalizeInventoryItemsForStorage(raw) {
+  return Array.isArray(raw) ? raw.map(normalizeInventoryItemForStorage).filter(Boolean) : [];
+}
+
+function normalizeInventoryMovementsForStorage(raw) {
+  return Array.isArray(raw) ? raw.map(normalizeInventoryMovementForStorage).filter(Boolean) : [];
+}
+
+function readFirstLegacyInventoryItems() {
+  for (const key of INVENTORY_LEGACY_ITEMS_KEYS) {
+    const parsed = safeJsonParseLocalStorage(key, null);
+    const items = normalizeInventoryItemsForStorage(parsed);
+    if (items.length) return items;
+  }
+  return [];
+}
+
+function migrateInventoryLocalStorage(options = {}) {
+  const { rebuild = true, skipSync = true } = options;
+  const storedItemsRaw = safeJsonParseLocalStorage(INVENTORY_ITEMS_KEY, null);
+  const storedMovementsRaw = safeJsonParseLocalStorage(INVENTORY_MOVEMENTS_KEY, null);
+  const storedAnalysisRaw = safeJsonParseLocalStorage(INVENTORY_ANALYSIS_KEY, null);
+  const storedPendingRaw = safeJsonParseLocalStorage(INVENTORY_PENDING_KEY, null);
+
+  const items = storedItemsRaw === null
+    ? readFirstLegacyInventoryItems()
+    : normalizeInventoryItemsForStorage(storedItemsRaw);
+  const movements = normalizeInventoryMovementsForStorage(storedMovementsRaw);
+  const analysis = normalizeInventoryAnalysisForStorage(storedAnalysisRaw);
+  const pending = normalizeInventoryPendingForStorage(storedPendingRaw);
+
+  saveInventoryItems(items, { skipSync });
+  saveInventoryMovements(movements, { skipSync });
+  saveInventoryAnalysis(analysis, { skipSync });
+  saveInventoryPending(pending, { skipSync });
+
+  if (rebuild && movements.length && !items.length) rebuildInventoryItemsFromMovements(false, { skipSync });
+  return { inventoryItems: items.length, inventoryMovements: movements.length, inventoryPending: pending.results.length };
+}
+
+function getPayloadArray(payload, keys = []) {
+  for (const key of keys) {
+    if (Array.isArray(payload?.[key])) return { found: true, value: payload[key] };
+  }
+  return { found: false, value: [] };
+}
+
+function getPayloadObjectOrArray(payload, keys = []) {
+  for (const key of keys) {
+    const value = payload?.[key];
+    if (value && typeof value === 'object') return { found: true, value };
+  }
+  return { found: false, value: {} };
+}
+
+function normalizeInventoryPayload(payload = {}) {
+  const itemsRaw = getPayloadArray(payload, ['inventoryItems', 'inventory', 'magazyn']);
+  const movementsRaw = getPayloadArray(payload, ['inventoryMovements', 'inventory_movements', 'ruchyMagazynowe']);
+  const analysisRaw = getPayloadObjectOrArray(payload, ['inventoryAnalysis', 'inventory_analysis']);
+  const pendingRaw = getPayloadObjectOrArray(payload, ['inventoryPending', 'inventory_pending', 'doRecznegoSprawdzenia']);
+  return {
+    hasItems: itemsRaw.found,
+    hasMovements: movementsRaw.found,
+    hasAnalysis: analysisRaw.found,
+    hasPending: pendingRaw.found,
+    items: normalizeInventoryItemsForStorage(itemsRaw.value),
+    movements: normalizeInventoryMovementsForStorage(movementsRaw.value),
+    analysis: normalizeInventoryAnalysisForStorage(analysisRaw.value),
+    pending: normalizeInventoryPendingForStorage(pendingRaw.value)
+  };
+}
+
+function forceInventoryPendingManualReview(pending) {
+  const results = Array.isArray(pending?.results) ? pending.results : [];
+  return {
+    ...(pending && typeof pending === 'object' ? pending : {}),
+    manualReview: true,
+    results: results.map(item => ({
+      ...item,
+      canApply: false,
+      manualReview: true
+    }))
+  };
 }
 
 
@@ -6616,7 +7130,7 @@ function createInventoryMovement({ entryKey = '', entryHash = '', entry = null, 
     quantity: Number(quantity || 0),
     unit: unit || 'szt',
     unitCost: Number(unitCost || 0),
-    confidence: Number(confidence || 1),
+    confidence: normalizeInventoryConfidence(confidence || 1),
     reason,
     sourceDescription,
     createdAt: now
@@ -6812,7 +7326,7 @@ function applyPendingInventoryItem(index) {
     unit,
     unitCost,
     category,
-    confidence: item.confidence || 1,
+    confidence: normalizeInventoryConfidence(item.confidence || 1),
     reason: `Ręcznie zastosowano wynik AI: ${item.reason || ''}`,
     sourceDescription: item.entry?.description || item.entry?.originalText || 'Ręczne zastosowanie wyniku AI'
   });
@@ -6822,7 +7336,7 @@ function applyPendingInventoryItem(index) {
     checkedAt: new Date().toISOString(),
     decision: direction === '-' ? 'zdejmij_z_magazynu' : 'dodaj_do_magazynu',
     movementIds: [movement.id],
-    confidence: item.confidence || 1,
+    confidence: normalizeInventoryConfidence(item.confidence || 1),
     reason: 'Ręcznie zastosowano po analizie AI.'
   };
   saveInventoryAnalysis(analysis);
@@ -6842,7 +7356,7 @@ function markPendingInventoryNoMove(index) {
     checkedAt: new Date().toISOString(),
     decision: 'brak_ruchu',
     movementIds: [],
-    confidence: item.confidence || 0,
+    confidence: normalizeInventoryConfidence(item.confidence || 0),
     reason: 'Użytkownik oznaczył ręcznie jako bez ruchu magazynowego.'
   };
   saveInventoryAnalysis(analysis);
@@ -6866,56 +7380,60 @@ function applyInventoryMovementsFromPending(pending) {
   const now = new Date().toISOString();
   const movements = getInventoryMovements();
   const analysis = getInventoryAnalysis();
+  const sourceResults = Array.isArray(pending?.results) ? pending.results : [];
   let newMovements = movements.slice();
   let applied = 0;
-  let checkedNoMove = 0;
-  for (const item of pending.results || []) {
+  const unresolved = [];
+
+  for (const item of sourceResults) {
     const key = item.id_wpisu;
+    const isAutoMovement = Boolean(item.canApply && item.movementType && item.product && Number(item.quantity || 0) > 0);
+    if (!isAutoMovement) {
+      unresolved.push({ ...item, canApply: false, manualReview: true });
+      continue;
+    }
+
     const previousIds = new Set(analysis[key]?.movementIds || []);
     if (previousIds.size) newMovements = newMovements.filter(movement => !previousIds.has(movement.id));
-    const movementIds = [];
-    if (item.canApply) {
-      const quantity = item.movementType === 'out' ? -Math.abs(Number(item.quantity || 0)) : Math.abs(Number(item.quantity || 0));
-      const movement = {
-        id: `mov-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
-        entryKey: key,
-        entrySyncId: item.entry?.syncId || '',
-        entryLocalId: item.entry?.id || '',
-        entryHash: item.entryHash,
-        entryDate: item.entry?.entryDate || todayISO(),
-        entryType: item.entry?.entryType || '',
-        action: item.decision,
-        product: item.product,
-        category: normalizeInventoryCategory(item.category || inferInventoryCategory(item.product)),
-        quantity,
-        unit: item.unit || 'szt',
-        unitCost: Number(item.unitCost || 0),
-        confidence: Number(item.confidence || 0),
-        reason: item.reason || '',
-        sourceDescription: item.entry?.description || item.entry?.originalText || '',
-        createdAt: now
-      };
-      newMovements.push(movement);
-      movementIds.push(movement.id);
-      applied += 1;
-    } else {
-      checkedNoMove += 1;
-    }
+    const quantity = item.movementType === 'out' ? -Math.abs(Number(item.quantity || 0)) : Math.abs(Number(item.quantity || 0));
+    const movement = {
+      id: `mov-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+      entryKey: key,
+      entrySyncId: item.entry?.syncId || '',
+      entryLocalId: item.entry?.id || '',
+      entryHash: item.entryHash,
+      entryDate: item.entry?.entryDate || todayISO(),
+      entryType: item.entry?.entryType || '',
+      action: item.decision,
+      product: item.product,
+      category: normalizeInventoryCategory(item.category || inferInventoryCategory(item.product)),
+      quantity,
+      unit: item.unit || 'szt',
+      unitCost: Number(item.unitCost || 0),
+      confidence: normalizeInventoryConfidence(item.confidence),
+      reason: item.reason || '',
+      sourceDescription: item.entry?.description || item.entry?.originalText || '',
+      createdAt: now
+    };
+    newMovements.push(movement);
+    applied += 1;
     analysis[key] = {
       entryHash: item.entryHash,
       checkedAt: now,
       decision: item.decision,
-      movementIds,
-      confidence: item.confidence,
+      movementIds: [movement.id],
+      confidence: normalizeInventoryConfidence(item.confidence),
       reason: item.reason
     };
   }
+
   saveInventoryMovements(newMovements);
   saveInventoryAnalysis(analysis);
+  saveInventoryPending({ ...(pending && typeof pending === 'object' ? pending : {}), results: unresolved, updatedAt: now });
   rebuildInventoryItemsFromMovements(false, { skipSync: true });
   renderInventory();
   scheduleDropboxAutoSync();
-  return { applied, checkedNoMove };
+  return { applied, checkedNoMove: 0, pendingReview: unresolved.length };
 }
 
 function rebuildInventoryItemsFromMovements(show = true, options = {}) {
@@ -7042,17 +7560,18 @@ function renderInventory(editIndex = null) {
   }
   if (el.inventoryPendingBody) {
     const pending = getInventoryPending();
-    const rows = (pending.results || []).filter(item => !item.canApply || item.decision === 'wymaga_sprawdzenia');
+    const rows = Array.isArray(pending.results) ? pending.results : [];
     el.inventoryPendingBody.innerHTML = rows.length ? rows.slice(0, 200).map((item) => {
       const originalIndex = (pending.results || []).indexOf(item);
       const entryText = item.entry?.description || item.entry?.originalText || item.id_wpisu || '';
+      const bilansInfo = item.bilans ? `<br><small>Bilans AI: ${escapeHtml(item.bilans.entryType || '')} · ${escapeHtml(formatScope(item.bilans.scope || ''))} · ${escapeHtml(item.bilans.category || '')}${item.bilans.confidence ? ` · ${escapeHtml(formatInventoryConfidence(item.bilans.confidence))}` : ''}${item.bilans.notes ? ` · ${escapeHtml(item.bilans.notes)}` : ''}</small>` : '';
       return `
       <tr>
-        <td>${escapeHtml(entryText)}</td>
+        <td>${escapeHtml(entryText)}${bilansInfo}</td>
         <td>${escapeHtml(formatInventoryAction(item.decision) || item.decision || '')}</td>
         <td>${escapeHtml(item.product || '')}</td>
         <td>${item.quantity ? `${Number(item.quantity || 0).toLocaleString('pl-PL')} ${escapeHtml(item.unit || 'szt')}` : ''}</td>
-        <td>${Number(item.confidence || 0) ? `${(Number(item.confidence || 0) * 100).toFixed(0)}%` : ''}</td>
+        <td>${formatInventoryConfidence(item.confidence)}</td>
         <td>${escapeHtml(item.reason || '')}</td>
         <td class="inventory-actions">
           <button class="tiny-button" type="button" data-pending-action="apply" data-index="${originalIndex}">Zastosuj ręcznie</button>
@@ -7184,26 +7703,28 @@ function startInventoryCellEdit(cell) {
 
 
 function showInventoryPendingPopup(pending, skippedChecked = 0) {
-  const applicable = pending.results.filter(item => item.canApply);
-  const review = pending.results.filter(item => !item.canApply && item.decision === 'wymaga_sprawdzenia');
-  const noMove = pending.results.filter(item => !item.canApply && item.decision === 'brak_ruchu');
+  const results = Array.isArray(pending?.results) ? pending.results : [];
+  const applicable = results.filter(item => item.canApply);
+  const review = results.filter(item => !item.canApply);
+  const noMove = review.filter(item => item.decision === 'brak_ruchu');
   const lines = [];
-  lines.push(`Rozpoznano wpisów: ${pending.results.length}`);
-  lines.push(`Do zastosowania automatycznie: ${applicable.length}`);
-  lines.push(`Bez ruchu magazynowego: ${noMove.length}`);
+  lines.push(`Rozpoznano wpisów: ${results.length}`);
+  lines.push(`Pewne ruchy do automatycznego zastosowania: ${applicable.length}`);
   lines.push(`Do ręcznego sprawdzenia: ${review.length}`);
+  if (noMove.length) lines.push(`W tym sugestie „bez ruchu” do potwierdzenia ręcznie: ${noMove.length}`);
   lines.push(`Pominięte jako już sprawdzone: ${skippedChecked}`);
   if (applicable.length) {
     lines.push('');
-    lines.push('Zmiany:');
+    lines.push('Ruchy, które zostaną zastosowane automatycznie:');
     for (const item of applicable.slice(0, 12)) {
       const sign = item.movementType === 'out' ? '-' : '+';
-      lines.push(`${sign}${item.quantity} ${item.unit} · ${item.product} · ${(item.confidence * 100).toFixed(0)}%`);
+      lines.push(`${sign}${item.quantity} ${item.unit} · ${item.product} · ${formatInventoryConfidence(item.confidence)}`);
     }
     if (applicable.length > 12) lines.push(`...i jeszcze ${applicable.length - 12} pozycji.`);
   }
   lines.push('');
-  lines.push('Zastosować zaakceptowane zmiany magazynowe?');
+  lines.push('OK = zastosuj tylko pewne ruchy.');
+  lines.push('Anuluj = nic nie stosuj, wszystko zostaw do ręcznej kontroli.');
   return window.confirm(lines.join('\n'));
 }
 
@@ -7227,13 +7748,17 @@ async function runInventoryRecognition() {
     saveInventoryPending(pending);
     const accepted = showInventoryPendingPopup(pending, skippedChecked);
     if (!accepted) {
-      setInventoryStatus('Analiza AI została wykonana, ale zmiany nie zostały zapisane.', 'error');
-      showMessage('Analiza AI została przygotowana, ale nie zapisano zmian w magazynie.', 'error');
+      const manualPending = forceInventoryPendingManualReview(pending);
+      saveInventoryPending(manualPending);
+      renderInventory();
+      const cancelMessage = 'Analiza AI została wykonana. Nic nie zastosowano automatycznie — wszystkie pozycje zostają w panelu „Do ręcznego sprawdzenia”.';
+      setInventoryStatus(cancelMessage, 'ready');
+      showMessage(cancelMessage);
       return;
     }
     setInventoryStatus('Zapisuję zaakceptowane ruchy magazynowe...', 'working');
     const result = applyInventoryMovementsFromPending(pending);
-    const finalMessage = `Magazyn zaktualizowany. Zastosowano: ${result.applied}, zapisano bez ruchu: ${result.checkedNoMove}, pominięte jako wcześniej sprawdzone: ${skippedChecked}.`;
+    const finalMessage = `Magazyn zaktualizowany. Zastosowano automatycznie: ${result.applied}, do ręcznego sprawdzenia: ${result.pendingReview}, pominięte jako wcześniej sprawdzone: ${skippedChecked}.`;
     setInventoryStatus(finalMessage, 'ready');
     showMessage(finalMessage);
   } catch (error) {
@@ -7246,39 +7771,58 @@ async function runInventoryRecognition() {
 }
 
 function importInventoryFromPayload(payload, replace = false) {
-  if (!payload || typeof payload !== 'object') return;
+  if (!payload || typeof payload !== 'object') return migrateInventoryLocalStorage({ rebuild: false, skipSync: true });
+  const migrated = normalizeInventoryPayload(payload);
+
   if (replace) {
-    if (Array.isArray(payload.inventoryItems)) saveInventoryItems(payload.inventoryItems, { skipSync: true });
-    if (Array.isArray(payload.inventoryMovements)) saveInventoryMovements(payload.inventoryMovements, { skipSync: true });
-    if (payload.inventoryAnalysis && typeof payload.inventoryAnalysis === 'object') saveInventoryAnalysis(payload.inventoryAnalysis, { skipSync: true });
-    if (payload.inventoryPending && typeof payload.inventoryPending === 'object') saveInventoryPending(payload.inventoryPending, { skipSync: true });
-    rebuildInventoryItemsFromMovements(false, { skipSync: true });
-    return;
+    saveInventoryItems(migrated.hasItems ? migrated.items : [], { skipSync: true });
+    saveInventoryMovements(migrated.hasMovements ? migrated.movements : [], { skipSync: true });
+    saveInventoryAnalysis(migrated.hasAnalysis ? migrated.analysis : normalizeInventoryAnalysisForStorage(null), { skipSync: true });
+    saveInventoryPending(migrated.hasPending ? migrated.pending : normalizeInventoryPendingForStorage(null), { skipSync: true });
+    migrateInventoryLocalStorage({ rebuild: false, skipSync: true });
+    if (migrated.hasMovements) rebuildInventoryItemsFromMovements(false, { skipSync: true });
+    return getInventoryImportCounts();
   }
-  if (Array.isArray(payload.inventoryMovements)) {
+
+  if (migrated.hasItems && !getInventoryMovements().length) {
+    const currentItems = getInventoryItems();
+    const byKey = new Map(currentItems.map(item => [inventoryProductKey(item.name, item.unit), item]));
+    for (const item of migrated.items) {
+      const key = inventoryProductKey(item.name, item.unit);
+      if (!byKey.has(key)) byKey.set(key, item);
+    }
+    saveInventoryItems(Array.from(byKey.values()), { skipSync: true });
+  }
+
+  if (migrated.hasMovements) {
     const current = getInventoryMovements();
     const byId = new Map(current.map(item => [item.id, item]));
-    for (const movement of payload.inventoryMovements) {
+    for (const movement of migrated.movements) {
       if (movement?.id && !byId.has(movement.id)) byId.set(movement.id, movement);
     }
     saveInventoryMovements(Array.from(byId.values()), { skipSync: true });
   }
-  if (payload.inventoryAnalysis && typeof payload.inventoryAnalysis === 'object') {
-    saveInventoryAnalysis({ ...getInventoryAnalysis(), ...payload.inventoryAnalysis }, { skipSync: true });
+
+  if (migrated.hasAnalysis) {
+    saveInventoryAnalysis({ ...getInventoryAnalysis(), ...migrated.analysis }, { skipSync: true });
   }
-  if (payload.inventoryPending && typeof payload.inventoryPending === 'object') {
+
+  if (migrated.hasPending) {
     const localPending = getInventoryPending();
-    const remotePending = payload.inventoryPending;
+    const remotePending = migrated.pending;
     const localResults = Array.isArray(localPending.results) ? localPending.results : [];
     const remoteResults = Array.isArray(remotePending.results) ? remotePending.results : [];
-    const byKey = new Map(localResults.map(item => [`${item.id_wpisu || ''}|${item.entryHash || ''}|${item.decision || ''}`, item]));
+    const byKey = new Map(localResults.map(item => [`${item.id_wpisu || ''}|${item.entryHash || ''}|${item.decision || ''}|${item.product || ''}`, item]));
     for (const item of remoteResults) {
-      const key = `${item.id_wpisu || ''}|${item.entryHash || ''}|${item.decision || ''}`;
+      const key = `${item.id_wpisu || ''}|${item.entryHash || ''}|${item.decision || ''}|${item.product || ''}`;
       if (!byKey.has(key)) byKey.set(key, item);
     }
     saveInventoryPending({ ...localPending, ...remotePending, results: Array.from(byKey.values()) }, { skipSync: true });
   }
-  rebuildInventoryItemsFromMovements(false, { skipSync: true });
+
+  migrateInventoryLocalStorage({ rebuild: false, skipSync: true });
+  if (migrated.hasMovements) rebuildInventoryItemsFromMovements(false, { skipSync: true });
+  return getInventoryImportCounts();
 }
 
 function setupAiAndInventory() {
@@ -7319,7 +7863,9 @@ function setupAiAndInventory() {
   if (el.inventoryPendingButton) el.inventoryPendingButton.addEventListener('click', event => {
     event.preventDefault();
     renderInventory();
-    setInventoryStatus('Wyniki wymagające decyzji zostały zapisane jako sprawdzone bez ruchu. Widok magazynu jest uproszczony — użyj wyszukiwarki, żeby znaleźć produkty.', 'ready');
+    document.querySelector('#inventoryPendingPanel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const count = getInventoryPending().results.length;
+    setInventoryStatus(count ? `Do ręcznego sprawdzenia: ${count} pozycji.` : 'Brak pozycji do ręcznego sprawdzenia.', 'ready');
   });
   if (el.inventoryAddManualButton) el.inventoryAddManualButton.addEventListener('click', event => {
     event.preventDefault();
@@ -7528,6 +8074,12 @@ function bindEvents() {
     selectCalendarDate(button.dataset.date);
   });
   el.cancelEditButton.addEventListener('click', resetForm);
+  if (el.resetButton) {
+    el.resetButton.addEventListener('click', event => {
+      event.preventDefault();
+      resetForm();
+    });
+  }
   el.filterForm.addEventListener('submit', event => {
     event.preventDefault();
     applyFilters();
@@ -7550,8 +8102,8 @@ function bindEvents() {
   el.mobileEntries.addEventListener('click', handleEntriesClick);
   el.mobileEntries.addEventListener('dragstart', handleEntryDragStart);
   el.mobileEntries.addEventListener('dragend', handleEntryDragEnd);
-  el.exportButton.addEventListener('click', exportJson);
-  el.syncExportButton.addEventListener('click', exportJson);
+  el.exportButton.addEventListener('click', () => exportJson().catch(error => showMessage(error.message || 'Nie udało się wyeksportować kopii.', 'error')));
+  el.syncExportButton.addEventListener('click', () => exportJson().catch(error => showMessage(error.message || 'Nie udało się wyeksportować kopii.', 'error')));
   el.exportMonthPngButton.addEventListener('click', () => exportCalendarPng('month').catch(error => showMessage(error.message, 'error')));
   el.exportYearPngButton.addEventListener('click', () => exportCalendarPng('year').catch(error => showMessage(error.message, 'error')));
   el.printMonthPdfButton.addEventListener('click', () => printCalendarPdf('month'));
@@ -7647,7 +8199,8 @@ function bindEvents() {
 async function init() {
   const today = todayISO();
   document.title = 'Portfel PRO';
-  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.1 / 142';
+  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.1 / 151';
+  runUiBindingAudit();
   setTodayHeader('wczytywanie...');
   if (isFileProtocol()) {
     showMessage('Program został otwarty bezpośrednio z index.html. Do importu JSON, PWA i cache użyj serwera lokalnego albo GitHub Pages.', 'error');
@@ -7682,6 +8235,7 @@ async function init() {
   setupThemes();
   setupSmartTooltips();
   setupVoiceMode();
+  migrateInventoryLocalStorage({ rebuild: true, skipSync: true });
   setupAiAndInventory();
   window.setTimeout(updateTodayNamedays, 300);
   updateCloudUi();

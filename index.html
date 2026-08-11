@@ -11,11 +11,11 @@
     const __manifestFile = new URLSearchParams(location.search).get('action') === 'voice'
       ? 'manifest-voice.webmanifest'
       : 'manifest.webmanifest';
-    document.write(`<link id="appManifest" rel="manifest" href="./${__manifestFile}?v=142">`);
+    document.write(`<link id="appManifest" rel="manifest" href="./${__manifestFile}?v=151">`);
   </script>
-  <link rel="icon" href="./icons/icon-192.png?v=142">
-  <link rel="apple-touch-icon" href="./icons/icon-192.png?v=142">
-  <link rel="stylesheet" href="./src/styles.css?v=142">
+  <link rel="icon" href="./icons/icon-192.png?v=151">
+  <link rel="apple-touch-icon" href="./icons/icon-192.png?v=151">
+  <link rel="stylesheet" href="./src/styles.css?v=151">
 </head>
 <body data-theme="classic">
   <script>
@@ -26,15 +26,16 @@
   <main class="app-shell">
     <header class="app-header">
       <div class="brand-block">
-        <img class="app-logo" src="./icons/logo-portfel-pro.png?v=142" alt="Portfel PRO">
+        <img class="app-logo" src="./icons/logo-portfel-pro.png?v=151" alt="Portfel PRO">
         <div>
-          <h1>Portfel PRO <span id="appVersionBadge" class="version-badge">v. 1.1 / 142</span></h1>
+          <h1>Portfel PRO <span id="appVersionBadge" class="version-badge">v. 1.1 / 151</span></h1>
           <p id="todayLabel">Lokalna aplikacja webowa</p>
         </div>
       </div>
       <div class="header-actions">
         <button id="installButton" class="secondary hidden" type="button" data-help="Instaluje Portfel PRO jako aplikację na tym urządzeniu. Po instalacji można uruchamiać program z ikony, bez wchodzenia przez przeglądarkę.">Zainstaluj aplikację</button>
         <button id="installVoiceButton" class="secondary hidden" type="button" data-help="Tworzy osobny skrót do szybkiego dodawania głosem. Na telefonie otwiera mały panel mikrofonu zamiast całego programu.">Zainstaluj mikrofon</button>
+        <button id="voiceShortcutButton" class="secondary" type="button" data-help="Otwiera panel szybkiego dodawania wpisu głosem bez przechodzenia do osobnego skrótu.">🎙 Mikrofon</button>
         <button id="cacheResetButton" class="ghost" type="button" data-help="Czyści pamięć podręczną PWA i wymusza pobranie najnowszej wersji programu. Nie usuwa wpisów finansowych.">Odśwież program</button>
         <button id="exportButton" class="secondary" type="button" data-help="Zapisuje lokalną kopię danych do pliku JSON. Przydatne przed większymi zmianami albo testami.">Zapisz kopię danych</button>
         <button id="importButton" class="file-button" type="button" data-help="Wczytuje dane z pliku JSON i scala je z obecnymi wpisami.">Wczytaj dane</button>
@@ -43,12 +44,12 @@
     </header>
 
     <nav class="app-tabs" aria-label="Główne sekcje programu">
-      <button class="tab-button active" type="button" data-tab="start" data-help="Ekran główny: szybkie dodawanie, podsumowanie i najważniejszy raport.">Start</button>
+      <button class="tab-button active" type="button" data-tab="start" data-help="Bilans, szybkie dodawanie, ręczny wpis i najważniejszy raport.">Bilans</button>
       <button class="tab-button" type="button" data-tab="history" data-help="Lista wszystkich wpisów, filtrowanie, edycja, usuwanie i reset programu.">Historia</button>
       <button class="tab-button" type="button" data-tab="reports" data-help="Szczegółowe raporty kategorii i grup wydatków/przychodów.">Raporty</button>
       <button class="tab-button" type="button" data-tab="calendar" data-help="Widok miesięczny i roczny. Wpisy można przenosić między dniami.">Kalendarz</button>
       <button class="tab-button" type="button" data-tab="inventory" data-help="Magazyn sprzętu: stany, ruchy oraz automatyczne rozpoznawanie zakupów i sprzedaży przez AI.">Magazyn</button>
-      <button class="tab-button" type="button" data-tab="sync" data-help="Kopia danych, import, eksport i połączenie z Dropboxem.">Synchronizacja</button>
+      <button class="tab-button" type="button" data-tab="sync" data-help="Kopia danych, import, eksport i połączenie z Dropboxem.">Kopie</button>
       <button class="tab-button" type="button" data-tab="help" data-help="Instrukcja obsługi programu, instalacji PWA, synchronizacji Dropbox i resetowania danych.">Pomoc</button>
       <button class="tab-button" type="button" data-tab="settings" data-help="Motyw programu, baza tagów i reguły samouczenia kategorii.">Ustawienia</button>
     </nav>
@@ -98,28 +99,7 @@
     </section>
 
     <section class="tab-page active" data-tab-page="start">
-      <section class="panel quick-parser-panel main-task-panel">
-        <div class="panel-title-row">
-          <div>
-            <h2>Szybkie dodawanie</h2>
-            <p>Wpisz lub podyktuj tekst. Program rozpozna kwotę, typ wpisu, kategorię i rodzaj: firmowe albo domowe.</p>
-          </div>
-        </div>
-        <label>
-          Tekst do rozpoznania
-          <textarea id="quickText" data-help="Wpisz albo podyktuj tekst, np. „zarobek 100 zł ustawienie anteny” lub „domowe hotdog 12 zł”." rows="4" placeholder="np. zarobek 100 zł ustawienie anteny&#10;np. firmowe kupiłem 2 routery za 300 zł i antenę za 120 zł&#10;np. domowe hot-dog 12,50 zł"></textarea>
-        </label>
-        <div class="form-actions parser-actions">
-          <button id="parseButton" type="button" data-help="Analizuje wpisany tekst i przygotowuje pozycje do zapisania. Niczego jeszcze nie zapisuje.">Rozpoznaj</button>
-          <button id="addParsedButton" class="secondary" type="button" disabled data-help="Zapisuje rozpoznane pozycje do historii, raportów i kalendarza.">Zapisz wpisy</button>
-        </div>
-        <div id="parsePreview" class="parse-preview"></div>
-        <div id="parseBottomActions" class="form-actions parser-bottom-actions hidden">
-          <button id="addParsedBottomButton" class="secondary" type="button" disabled data-help="Zapisuje rozpoznane pozycje po sprawdzeniu propozycji, bez wracania do góry formularza.">Zapisz wpisy</button>
-        </div>
-      </section>
-
-      <section class="summary-grid" aria-label="Podsumowanie">
+      <section class="summary-grid dashboard-summary-grid" aria-label="Najważniejsze podsumowanie">
         <article class="summary-card wallet-start-card">
           <span>Stan portfela</span>
           <strong id="startWalletBalance">0,00 zł</strong>
@@ -142,32 +122,67 @@
         </article>
       </section>
 
+
+      <section class="dashboard-shortcuts" aria-label="Skróty do najważniejszych funkcji">
+        <button class="dashboard-shortcut" type="button" data-jump-tab="start">
+          <strong>Dodaj wpis</strong>
+          <span>Ręcznie albo przez szybkie AI</span>
+        </button>
+        <button class="dashboard-shortcut" type="button" data-jump-tab="inventory">
+          <strong>Magazyn</strong>
+          <span>Stany i ręczna kontrola</span>
+        </button>
+        <button class="dashboard-shortcut" type="button" data-jump-tab="history">
+          <strong>Ostatnie wpisy</strong>
+          <span>Historia, filtry i edycja</span>
+        </button>
+        <button class="dashboard-shortcut" type="button" data-jump-tab="sync">
+          <strong>Kopie</strong>
+          <span>Eksport, import i Dropbox</span>
+        </button>
+      </section>
+      <section class="panel quick-parser-panel main-task-panel">
+        <div class="panel-title-row">
+          <div>
+            <h2>Paragon / szybkie AI</h2>
+            <p>Wpisz, wklej albo podyktuj tekst. Program przygotuje wpis do bilansu, a Ty sprawdzisz go przed zapisem.</p>
+          </div>
+        </div>
+        <label>
+          Tekst do rozpoznania
+          <textarea id="quickText" data-help="Wpisz albo podyktuj tekst, np. „zarobek 100 zł ustawienie anteny” lub „domowe hotdog 12 zł”." rows="4" placeholder="np. zarobek 100 zł ustawienie anteny&#10;np. firmowe kupiłem 2 routery za 300 zł i antenę za 120 zł&#10;np. domowe hot-dog 12,50 zł"></textarea>
+        </label>
+        <div class="form-actions parser-actions">
+          <button id="parseButton" type="button" data-help="Analizuje wpisany tekst i przygotowuje pozycje do zapisania. Niczego jeszcze nie zapisuje.">Rozpoznaj</button>
+          <button id="addParsedButton" class="secondary" type="button" disabled data-help="Zapisuje rozpoznane pozycje do historii, raportów i kalendarza.">Zapisz wpisy</button>
+        </div>
+        <div id="parsePreview" class="parse-preview"></div>
+        <div id="parseBottomActions" class="form-actions parser-bottom-actions hidden">
+          <button id="addParsedBottomButton" class="secondary" type="button" disabled data-help="Zapisuje rozpoznane pozycje po sprawdzeniu propozycji, bez wracania do góry formularza.">Zapisz wpisy</button>
+        </div>
+      </section>
+
       <section class="start-grid">
-        <article class="panel report-panel start-report-card">
+        <article class="panel report-panel start-report-card emphasis-panel">
           <h2>Raport główny</h2>
           <p>Najważniejsze podsumowanie: komputerowe, montaże, wydatki domowe i wynik firmy bez odejmowania wydatków domowych.</p>
           <div id="mainReport" class="category-report main-report"></div>
         </article>
 
-        <article class="panel form-panel compact-manual-panel">
-          <details>
+        <article class="panel form-panel compact-manual-panel emphasis-panel">
+          <details open>
             <summary>Dodaj wpis ręcznie</summary>
             <div class="details-body">
               <div class="panel-title-row compact-title-row">
                 <div>
                   <h2 id="formTitle">Dodaj wpis</h2>
-                  <p>Użyj tego formularza, gdy nie chcesz korzystać z rozpoznawania tekstu.</p>
+                  <p>Najpierw wpisz typ, rodzaj, kategorię, kwotę i opis. Reszta pól jest pomocnicza.</p>
                 </div>
                 <button id="cancelEditButton" class="secondary hidden" type="button">Anuluj edycję</button>
               </div>
 
               <form id="entryForm" class="entry-form" autocomplete="off">
-                <label>
-                  Data
-                  <input id="entryDate" name="entryDate" type="date" required>
-                </label>
-
-                <label>
+                <label class="priority-field">
                   Typ
                   <select id="entryType" name="entryType" required>
                     <option value="wydatek">Wydatek</option>
@@ -175,54 +190,64 @@
                   </select>
                 </label>
 
-                <label>
+                <label class="priority-field">
                   Rodzaj
                   <select id="entryScope" name="entryScope" required>
-                    <option value="nieokreślone">Nie określono</option>
                     <option value="domowe">Domowe</option>
                     <option value="firmowe">Firmowe</option>
+                    <option value="nieokreślone">Nie określono</option>
                   </select>
                 </label>
 
-                <label>
+                <label class="priority-field">
                   Kategoria
                   <select id="category" name="category" required></select>
                 </label>
 
-                <label>
+                <label class="priority-field">
                   Kwota
                   <input id="amount" name="amount" type="text" inputmode="decimal" placeholder="np. 120,50" required>
                 </label>
 
-                <label>
-                  Płatność
-                  <select id="paymentMethod" name="paymentMethod" required>
-                    <option value="gotówka">Gotówka</option>
-                    <option value="karta">Karta</option>
-                    <option value="bank">Bank</option>
-                    <option value="blik">BLIK</option>
-                    <option value="inne">Inne</option>
-                  </select>
-                </label>
-
-                <label>
-                  Tagi
-                  <input id="tags" name="tags" type="text" placeholder="np. firma, auto, paragon">
-                </label>
-
-                <label class="wide">
+                <label class="wide priority-field">
                   Opis
                   <input id="description" name="description" type="text" placeholder="np. kamera, paliwo, zarobek za usługę">
                 </label>
 
-                <label class="wide">
-                  Tekst źródłowy
-                  <textarea id="originalText" name="originalText" rows="3" placeholder="Tu możesz wkleić pierwotną notatkę albo dyktowany tekst"></textarea>
+                <label class="priority-field">
+                  Data
+                  <input id="entryDate" name="entryDate" type="date" required>
                 </label>
 
-                <div class="form-actions wide">
+                <details class="manual-extra wide">
+                  <summary>Pola dodatkowe</summary>
+                  <div class="manual-extra-grid">
+                    <label>
+                      Płatność
+                      <select id="paymentMethod" name="paymentMethod" required>
+                        <option value="gotówka">Gotówka</option>
+                        <option value="karta">Karta</option>
+                        <option value="bank">Bank</option>
+                        <option value="blik">BLIK</option>
+                        <option value="inne">Inne</option>
+                      </select>
+                    </label>
+
+                    <label>
+                      Tagi
+                      <input id="tags" name="tags" type="text" placeholder="np. firma, auto, paragon">
+                    </label>
+
+                    <label class="wide">
+                      Tekst źródłowy
+                      <textarea id="originalText" name="originalText" rows="3" placeholder="Tu możesz wkleić pierwotną notatkę albo dyktowany tekst"></textarea>
+                    </label>
+                  </div>
+                </details>
+
+                <div class="form-actions wide entry-form-actions">
                   <button id="saveButton" type="submit">Dodaj wpis</button>
-                  <button id="resetButton" class="secondary" type="reset">Wyczyść formularz</button>
+                  <button id="resetButton" class="secondary" type="button">Wyczyść formularz</button>
                 </div>
               </form>
             </div>
@@ -429,7 +454,9 @@
             <p>Stan sprzętu i materiałów firmowych. Ruchy mogą być tworzone automatycznie z firmowych przychodów i wydatków.</p>
           </div>
           <div class="button-row">
-            <button id="inventoryRecognizeButton" type="button" data-help="Analizuje firmowe wpisy z wybranego okresu przez AI i przygotowuje ruchy magazynowe. Wpisy już sprawdzone nie są naliczane drugi raz.">Rozpoznaj zakupy i sprzedaż</button>
+            <button id="inventoryRecognizeButton" type="button" data-help="Analizuje firmowe wpisy z wybranego okresu przez AI i przygotowuje ruchy magazynowe. Pewne ruchy można zastosować automatycznie, a niepewne zostają do ręcznej kontroli.">Rozpoznaj zakupy i sprzedaż</button>
+            <button id="inventoryPendingButton" class="secondary" type="button" data-help="Przewija do panelu z pozycjami, które trzeba zatwierdzić ręcznie.">Do ręcznego sprawdzenia</button>
+            <button id="inventoryAddManualButton" class="secondary" type="button" data-help="Dodaje ręczny ruch magazynowy bez analizy AI.">Dodaj ręcznie do magazynu</button>
             <button id="inventoryRebuildButton" class="secondary" type="button" data-help="Przelicza aktualne stany z historii ruchów magazynowych.">Przelicz stany</button>
           </div>
         </div>
@@ -478,6 +505,51 @@
             <tbody id="inventoryItemsBody"></tbody>
           </table>
         </div>
+
+        <section id="inventoryPendingPanel" class="inventory-pending-panel">
+          <div class="section-heading compact-heading">
+            <h3>Do ręcznego sprawdzenia</h3>
+            <p>Tu zostają wyniki AI, których program nie powinien zastosować bez Twojej decyzji.</p>
+          </div>
+          <div class="table-wrap">
+            <table class="entries-table inventory-pending-table">
+              <thead>
+                <tr>
+                  <th>Wpis</th>
+                  <th>Decyzja AI</th>
+                  <th>Produkt</th>
+                  <th>Ilość</th>
+                  <th>Pewność</th>
+                  <th>Powód</th>
+                  <th>Działania</th>
+                </tr>
+              </thead>
+              <tbody id="inventoryPendingBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="inventory-movements-panel">
+          <div class="section-heading compact-heading">
+            <h3>Historia ruchów magazynowych</h3>
+            <p>Lista zmian, z których program przelicza aktualny stan magazynu.</p>
+          </div>
+          <div class="table-wrap">
+            <table class="entries-table inventory-movements-table">
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Ruch</th>
+                  <th>Produkt</th>
+                  <th>Kategoria</th>
+                  <th>Ilość</th>
+                  <th>Źródło</th>
+                </tr>
+              </thead>
+              <tbody id="inventoryMovementsBody"></tbody>
+            </table>
+          </div>
+        </section>
       </section>
     </section>
 
@@ -485,8 +557,8 @@
       <section class="panel export-sync-panel">
         <div class="panel-title-row">
           <div>
-            <h2>Synchronizacja i eksport</h2>
-            <p>Tu są funkcje, których nie używa się codziennie: kopia danych, import, scalanie i eksport kalendarza.</p>
+            <h2>Kopie, import i eksport</h2>
+            <p>Tu są funkcje, których nie używa się codziennie: kopia danych, import, scalanie, Dropbox i eksport kalendarza.</p>
           </div>
         </div>
         <div class="export-sync-grid">
@@ -534,6 +606,7 @@
               <input id="replaceImportInput" class="hidden-file-input" type="file" accept="application/json,.json">
             </div>
             <small id="syncInfo" class="sync-info">Tryb scalania dopisuje nowe wpisy i aktualizuje starsze wersje tych samych wpisów.</small>
+            <pre id="importPreviewBox" class="import-preview-box hidden" aria-live="polite"></pre>
           </article>
           <article class="mini-panel">
             <h3>Eksport kalendarza</h3>
@@ -556,7 +629,7 @@
         <div class="panel-title-row">
           <div>
             <h2>Pomoc i instrukcja obsługi</h2>
-            <p>Krótka instrukcja dla pierwszej wersji testowej Portfel PRO v. 1.1 / 142.</p>
+            <p>Krótka instrukcja dla wersji testowej Portfel PRO v. 1.1 / 151.</p>
           </div>
         </div>
 
@@ -585,7 +658,7 @@
           </article>
 
           <article class="help-card">
-            <h3>3. Dodawanie ręczne</h3>
+            <h3>3. AI i paragony</h3>
             <p>Użyj sekcji <strong>Dodaj wpis ręcznie</strong>, gdy parser źle rozpozna tekst albo chcesz od razu wpisać dokładne dane.</p>
             <ul>
               <li><strong>Typ</strong>: przychód albo wydatek.</li>
@@ -658,7 +731,7 @@
             <ol>
               <li>Kliknij <strong>Odśwież program</strong>.</li>
               <li>Odśwież stronę w przeglądarce.</li>
-              <li>Jeżeli dalej widzisz starą wersję, otwórz adres z dopiskiem <code>?v=142</code>.</li>
+              <li>Jeżeli dalej widzisz starą wersję, otwórz adres z dopiskiem <code>?v=151</code>.</li>
             </ol>
           </article>
         </div>
@@ -819,7 +892,7 @@
     </section>
   </main>
 
-  <script src="./src/config.js?v=142"></script>
-  <script src="./src/app.js?v=142" type="module"></script>
+  <script src="./src/config.js?v=151"></script>
+  <script src="./src/app.js?v=151" type="module"></script>
 </body>
 </html>

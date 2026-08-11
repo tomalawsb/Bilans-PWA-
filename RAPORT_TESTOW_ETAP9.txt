@@ -1,0 +1,19 @@
+Portfel PRO v. 1.1 / 151 — raport testów etapu 9
+
+Wykonano technicznie:
+- node --check src/app.js — OK
+- node --check service-worker.js — OK
+- walidacja manifest.webmanifest — OK
+- walidacja manifest-voice.webmanifest — OK
+- kontrola wersji 1.1 / 151 w HTML, JS, manifestach, SW i README — OK
+- kontrola cache portfel-pro-v1-1-v151 — OK
+- kontrola wymaganych ID Magazynu, Kopii, Mikrofonu i formularza — OK
+- kontrola braku zdublowanych ID w index.html — OK
+- kontrola zgodności zakładek data-tab i data-tab-page — OK
+- test archiwum ZIP — OK
+
+Ograniczenia testu:
+- Nie wykonano ręcznego klikania każdego przycisku w prawdziwej przeglądarce.
+- Nie potwierdzono działania mikrofonu na Androidzie/PWA.
+- Nie potwierdzono działania zewnętrznego API AI na realnym paragonie.
+- Nie potwierdzono importu/eksportu na urządzeniu użytkownika.
