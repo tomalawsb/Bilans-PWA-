@@ -11,11 +11,11 @@
     const __manifestFile = new URLSearchParams(location.search).get('action') === 'voice'
       ? 'manifest-voice.webmanifest'
       : 'manifest.webmanifest';
-    document.write(`<link id="appManifest" rel="manifest" href="./${__manifestFile}?v=153">`);
+    document.write(`<link id="appManifest" rel="manifest" href="./${__manifestFile}?v=154">`);
   </script>
-  <link rel="icon" href="./icons/icon-192.png?v=153">
-  <link rel="apple-touch-icon" href="./icons/icon-192.png?v=153">
-  <link rel="stylesheet" href="./src/styles.css?v=153">
+  <link rel="icon" href="./icons/icon-192.png?v=154">
+  <link rel="apple-touch-icon" href="./icons/icon-192.png?v=154">
+  <link rel="stylesheet" href="./src/styles.css?v=154">
 </head>
 <body data-theme="classic">
   <script>
@@ -26,9 +26,9 @@
   <main class="app-shell">
     <header class="app-header">
       <div class="brand-block">
-        <img class="app-logo" src="./icons/logo-portfel-pro.png?v=153" alt="Portfel PRO">
+        <img class="app-logo" src="./icons/logo-portfel-pro.png?v=154" alt="Portfel PRO">
         <div>
-          <h1>Portfel PRO <span id="appVersionBadge" class="version-badge">v. 1.1 / 153</span></h1>
+          <h1>Portfel PRO <span id="appVersionBadge" class="version-badge">v. 1.1 / 154</span></h1>
           <p id="todayLabel">Lokalna aplikacja webowa</p>
         </div>
       </div>
@@ -46,6 +46,7 @@
     </nav>
 
     <section id="messageBox" class="message hidden" role="status"></section>
+    <aside id="networkStatus" class="network-status hidden" role="status" aria-live="polite"></aside>
 
     <section id="startupModePanel" class="startup-mode-panel hidden" aria-label="Pierwsze uruchomienie">
       <div class="startup-mode-card">
@@ -58,7 +59,7 @@
           </button>
           <button id="chooseDropboxModeButton" class="mode-choice-card" type="button">
             <strong>Pracuj z Dropbox</strong>
-            <span>Telefon i komputer korzystają z jednego pliku JSON w Dropboxie.</span>
+            <span>Program nadal zapisuje lokalnie, a Dropbox synchronizuje dane, gdy internet jest dostępny.</span>
           </button>
         </div>
       </div>
@@ -512,7 +513,7 @@
         <div class="export-sync-grid">
           <article class="mini-panel cloud-panel">
             <h3>Tryb danych</h3>
-            <p>Wybierz, czy program ma pracować lokalnie, czy na jednym pliku JSON w Dropboxie.</p>
+            <p>Dane zawsze zapisują się najpierw lokalnie. Dropbox jest opcjonalną synchronizacją po odzyskaniu internetu.</p>
             <label>
               Tryb pracy
               <select id="storageModeSelect" data-help="Lokalnie zapisuje dane tylko w tej przeglądarce. Dropbox pozwala korzystać z jednego pliku na telefonie i komputerze.">
@@ -577,7 +578,7 @@
         <div class="panel-title-row">
           <div>
             <h2>Pomoc i instrukcja obsługi</h2>
-            <p>Krótka instrukcja dla Portfel PRO v. 1.1 / 153.</p>
+            <p>Krótka instrukcja dla Portfel PRO v. 1.1 / 154.</p>
           </div>
         </div>
 
@@ -640,7 +641,7 @@
 
           <article class="help-card important-help">
             <h3>6. Jak połączyć z Dropbox</h3>
-            <p>Dropbox pozwala używać jednego pliku JSON na telefonie i komputerze.</p>
+            <p>Program zawsze zapisuje dane lokalnie. Dropbox przechowuje dodatkową kopię i synchronizuje ją, kiedy internet jest dostępny.</p>
             <ol>
               <li>Wejdź na stronę <strong>Dropbox Developers</strong> i utwórz nową aplikację.</li>
               <li>Wybierz <strong>Scoped access</strong>.</li>
@@ -648,15 +649,15 @@
               <li>Po utworzeniu aplikacji skopiuj <strong>App key</strong>.</li>
               <li>W ustawieniach aplikacji Dropbox dodaj adres programu jako <strong>Redirect URI</strong>, np. adres z GitHub Pages.</li>
               <li>W zakładce <strong>Permissions</strong> włącz uprawnienia do odczytu i zapisu plików, czyli minimum: <code>files.content.read</code>, <code>files.content.write</code> oraz odczyt metadanych plików.</li>
-              <li>W Portfel PRO przejdź do <strong>Synchronizacja</strong>.</li>
+              <li>W Portfel PRO przejdź do zakładki <strong>Kopie</strong>.</li>
               <li>Ustaw <strong>Tryb pracy: Dropbox</strong>.</li>
               <li>Wklej <strong>Dropbox App key</strong>.</li>
               <li>Zostaw ścieżkę pliku albo wpisz własną, np. <code>/Apps/PortfelPRO/portfel_dane.json</code>.</li>
               <li>Kliknij <strong>Połącz z Dropbox</strong>.</li>
               <li>Zaloguj się do Dropboxa i zatwierdź dostęp.</li>
-              <li>Po powrocie do programu kliknij <strong>Synchronizuj teraz</strong>.</li>
+              <li>Po powrocie program wykona pierwszą synchronizację; później robi to automatycznie.</li>
             </ol>
-            <p><strong>Ważne:</strong> ten sam App key i ta sama ścieżka pliku muszą być ustawione na telefonie i komputerze.</p>
+            <p><strong>Bez internetu:</strong> aplikacja nadal się uruchamia i zapisuje zmiany na urządzeniu. Po odzyskaniu połączenia oczekujące dane są synchronizowane automatycznie.</p>
           </article>
 
           <article class="help-card">
@@ -679,7 +680,7 @@
             <ol>
               <li>W zakładce <strong>Ustawienia</strong> kliknij <strong>Odśwież program</strong>.</li>
               <li>Odśwież stronę w przeglądarce.</li>
-              <li>Jeżeli dalej widzisz starą wersję, otwórz adres z dopiskiem <code>?v=153</code>.</li>
+              <li>Jeżeli dalej widzisz starą wersję, otwórz adres z dopiskiem <code>?v=154</code>.</li>
             </ol>
           </article>
         </div>
@@ -855,7 +856,7 @@
     </section>
   </main>
 
-  <script src="./src/config.js?v=153"></script>
-  <script src="./src/app.js?v=153" type="module"></script>
+  <script src="./src/config.js?v=154"></script>
+  <script src="./src/app.js?v=154" type="module"></script>
 </body>
 </html>

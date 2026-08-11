@@ -1,6 +1,6 @@
 const DB_NAME = 'bilans-pwa-etap1';
 const DB_VERSION = 4;
-const APP_VERSION = '1.1-153';
+const APP_VERSION = '1.1-154';
 const RAW_DROPBOX_DEFAULT_APP_KEY = String(window.PORTFEL_PRO_CONFIG?.dropboxAppKey || '').trim();
 const DROPBOX_DEFAULT_APP_KEY = /^WSTAW_TUTAJ/i.test(RAW_DROPBOX_DEFAULT_APP_KEY) ? '' : RAW_DROPBOX_DEFAULT_APP_KEY; // Ustaw w src/config.js, wtedy użytkownik klika tylko Połącz z Dropbox.
 const MAIN_INSTALL_KEY = 'portfel-pro-main-installed';
@@ -18,6 +18,7 @@ const DROPBOX_TOKEN_KEY = 'bilans-pwa-dropbox-token';
 const DROPBOX_OAUTH_KEY = 'bilans-pwa-dropbox-oauth';
 const DELETED_ENTRIES_KEY = 'bilans-pwa-deleted-entries';
 const DROPBOX_FORCE_LOCAL_UPLOAD_KEY = 'portfel-pro-dropbox-force-local-upload-v1';
+const DROPBOX_SYNC_STATE_KEY = 'portfel-pro-dropbox-sync-state-v1';
 const DELETE_TOMBSTONE_RETENTION_DAYS = 365;
 const MAIN_REPORT_SETTINGS_KEY = 'portfel-pro-main-report-settings-v1';
 const CUSTOM_CATEGORIES_KEY = 'portfel-pro-custom-categories-v1';
@@ -618,6 +619,10 @@ function setTodayHeader(namedays = '') {
 
 async function updateTodayNamedays() {
   setTodayHeader(getLocalNamedays() || 'wczytywanie...');
+  if (!isNetworkAvailable()) {
+    setTodayHeader(getLocalNamedays());
+    return;
+  }
   for (const url of NAME_DAY_API_URLS) {
     try {
       const response = await fetch(url, { cache: 'no-store' });
@@ -656,6 +661,7 @@ let voiceInterimText = "";
 const el = {
   todayLabel: document.querySelector('#todayLabel'),
   messageBox: document.querySelector('#messageBox'),
+  networkStatus: document.querySelector('#networkStatus'),
   installButton: document.querySelector('#installButton'),
   installVoiceButton: document.querySelector('#installVoiceButton'),
   installStatus: document.querySelector('#installStatus'),
@@ -1536,13 +1542,15 @@ function learningStem(token) {
   return value;
 }
 
+const LEARNING_STOP_STEMS = new Set(Array.from(LEARNING_STOP_WORDS, learningStem));
+
 function learningTokens(value) {
   return normalizeText(value)
     .replace(new RegExp(`\\b${MONEY_NUMBER_PATTERN}\\s*(?:${ZLOTY_WORDS}|${GROSZ_WORDS})?\\b`, 'gi'), ' ')
     .replace(/[^a-z0-9]+/g, ' ')
     .split(/\s+/)
     .map(learningStem)
-    .filter(token => token.length >= 3 && !LEARNING_STOP_WORDS.has(token))
+    .filter(token => token.length >= 3 && !LEARNING_STOP_STEMS.has(token))
     .filter((token, index, array) => array.indexOf(token) === index);
 }
 
@@ -1648,16 +1656,20 @@ function scoreLearningRule(rule, text, context = {}) {
 
   let score = Math.round(phraseScore * learningConfidence(rule));
   const explicitType = context.explicitType || detectExplicitEntryType(text);
+  const explicitScope = context.explicitScope || detectExplicitScope(text);
   const currentType = context.entryType || explicitType || '';
   const currentScope = context.scope ? normalizeScope(context.scope) : '';
 
   // Jawny przychód/wydatek ma bezwzględny priorytet. Reguła sprzeczna z tekstem odpada.
   if (explicitType && rule.entryType && rule.entryType !== explicitType) return 0;
+  if (explicitScope && rule.scope && normalizeScope(rule.scope) !== normalizeScope(explicitScope)) return 0;
   // Bez jawnego słowa „przychód/wydatek” bieżący typ jest tylko domyślną
   // propozycją parsera, więc nie może blokować nauczonej decyzji użytkownika.
   if (rule.entryType && currentType && rule.entryType === currentType) score += 12;
   if (rule.scope && currentScope && rule.scope === currentScope) score += 8;
-  if (rule.scope && currentScope && rule.scope !== currentScope && currentScope !== 'nieokreślone') score -= 12;
+  // Rodzaj nadany domyślnie przez parser nie jest decyzją użytkownika i nie
+  // może obniżać wyniku zapisanej korekty.
+  if (phraseScore === 1) score += 10;
   if (Number(rule.misses || 0) > 0) score -= Number(rule.misses || 0) * 5;
 
   return Math.max(0, Math.min(99, Math.round(score)));
@@ -1667,7 +1679,9 @@ function findBestLearningRule(text, context = {}) {
   const candidates = learningRules
     .map(rule => ({ rule, score: scoreLearningRule(rule, text, context) }))
     .filter(item => item.score > 0)
-    .sort((a, b) => b.score - a.score || Number(b.rule.confirmations || 0) - Number(a.rule.confirmations || 0));
+    .sort((a, b) => b.score - a.score
+      || Number(b.rule.confirmations || 0) - Number(a.rule.confirmations || 0)
+      || parseDateTimeMs(b.rule.updatedAt) - parseDateTimeMs(a.rule.updatedAt));
   return candidates[0] || null;
 }
 
@@ -1687,6 +1701,14 @@ function findSimilarLearningRuleForTraining(phrase, category, entryType = '', sc
     .map(rule => ({ rule, score: trainingSimilarity(rule, phrase) }))
     .filter(item => item.score >= 0.55)
     .sort((a, b) => b.score - a.score || Number(b.rule.confirmations || 0) - Number(a.rule.confirmations || 0))[0]?.rule || null;
+}
+
+function findLearningRuleToCorrect(phrase) {
+  return learningRules
+    .map(rule => ({ rule, score: trainingSimilarity(rule, phrase) }))
+    .filter(item => item.score >= 0.82)
+    .sort((a, b) => b.score - a.score
+      || parseDateTimeMs(b.rule.updatedAt) - parseDateTimeMs(a.rule.updatedAt))[0]?.rule || null;
 }
 
 function isGenericLearningSource(text) {
@@ -1721,10 +1743,12 @@ function applyLearningToEntry(entry, options = {}) {
   const sourceText = options.sourceText || [entry.description, entry.originalText].filter(Boolean).join(' ');
   const originalCategory = options.originalCategory || entry.category || 'Inne';
   const explicitType = detectExplicitEntryType(sourceText);
+  const explicitScope = detectExplicitScope(sourceText);
   const match = findBestLearningRule(sourceText, {
     entryType: entry.entryType,
     scope: entry.scope,
-    explicitType
+    explicitType,
+    explicitScope
   });
 
   const updated = {
@@ -1755,13 +1779,12 @@ function applyLearningToEntry(entry, options = {}) {
       applied = true;
     }
 
-    const explicitScope = detectExplicitScope(sourceText);
     if (rule.scope && !explicitScope && match.score >= 70 && normalizeScope(rule.scope) !== normalizeScope(updated.scope)) {
       updated.scope = normalizeScope(rule.scope);
       applied = true;
     }
 
-    if (rule.paymentMethod && (!updated.paymentMethod || updated.paymentMethod === 'gotówka')) {
+    if (rule.paymentMethod && match.score >= 70 && rule.paymentMethod !== updated.paymentMethod) {
       updated.paymentMethod = rule.paymentMethod;
       applied = true;
     }
@@ -1891,8 +1914,12 @@ async function learnFromCorrection(entry, previousCategory) {
   if (!categoryChanged && !typeChanged && !scopeChanged && !paymentChanged) return null;
 
   const id = `learn-${normalizedPhrase.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}-${normalizeAlias(nextCategory)}-${normalizeAlias(nextType || 'typ')}-${normalizeAlias(nextScope || 'scope')}`;
+  // Korekta użytkownika ma zastąpić wcześniejszą decyzję dla praktycznie tego
+  // samego sformułowania. Dzięki temu nie zostają dwie sprzeczne reguły, z
+  // których starsza mogłaby ponownie wygrać remisem.
+  const correctedRule = findLearningRuleToCorrect(normalizedPhrase);
   const similar = findSimilarLearningRuleForTraining(normalizedPhrase, nextCategory, nextType, nextScope);
-  const existing = similar || learningRules.find(rule => rule.id === id) || null;
+  const existing = correctedRule || similar || learningRules.find(rule => rule.id === id) || null;
   const now = new Date().toISOString();
   const examples = [...(existing?.examples ?? []), entry.description || entry.originalText || phrase]
     .filter(Boolean)
@@ -1905,9 +1932,9 @@ async function learnFromCorrection(entry, previousCategory) {
     phrase: existing?.phrase || phrase,
     normalizedPhrase: existing?.normalizedPhrase || normalizedPhrase,
     category: nextCategory,
-    entryType: nextType || existing?.entryType || '',
-    scope: nextScope || existing?.scope || '',
-    paymentMethod: nextPayment || existing?.paymentMethod || '',
+    entryType: nextType,
+    scope: nextScope,
+    paymentMethod: nextPayment,
     reportGroup: resolveReportGroup(entry),
     confirmations: Number(existing?.confirmations || 0) + 1,
     misses: Math.max(0, Number(existing?.misses || 0) - 1),
@@ -2284,9 +2311,9 @@ function detectExplicitEntryType(text) {
   const normalized = ` ${normalizeText(text)} `;
 
   const incomePatterns = [
-    /\bprzychod(?:y|u|em)?\b/, /\bdochod(?:y|u|em)?\b/, /\bzarobek\b/, /\bzarobilem\b/, /\bzarobilam\b/,
+    /\bprzychod\w*\b/, /\bdochod\w*\b/, /\bzarobek\b/, /\bzarobilem\b/, /\bzarobilam\b/,
     /\bzysk\b/, /\butarg\b/, /\bwynagrodzeni(?:e|a|u|em)\b/, /\bpensj(?:a|e|i)\b/,
-    /\bwplyw\b/, /\bwplata\b/, /\bdostalem\b/, /\bdostalam\b/,
+    /\bwplyw\w*\b/, /\bwplata\b/, /\bwplynelo\b/, /\bzaplata\s+od\b/, /\bdostalem\b/, /\bdostalam\b/,
     /\botrzymalem\b/, /\botrzymalam\b/, /\bklient\s+zaplacil\b/,
     /\bzaplacono\s+mi\b/, /\bzaplata\s+za\b/, /\bfaktura\s+sprzedaz/,
     /\bsprzedaz\b/, /\bsprzedalem\b/, /\bsprzedalam\b/, /\busluga\s+dla\b/
@@ -2890,7 +2917,7 @@ async function handleParseText() {
     parsedDrafts = parseNaturalText(el.quickText.value);
     renderParsePreview();
     const settings = getAiSettings();
-    if (settings.apiKey && getSelectedAiModel(settings)) {
+    if (settings.apiKey && getSelectedAiModel(settings) && isNetworkAvailable()) {
       if (el.parseButton) {
         el.parseButton.disabled = true;
         el.parseButton.textContent = 'Analizuję przez AI…';
@@ -2907,7 +2934,10 @@ async function handleParseText() {
         showMessage(`Użyto parsera lokalnego. AI nie odpowiedziała: ${aiError.message || 'nieznany błąd'}`, 'error');
       }
     } else {
-      showMessage(`Rozpoznano lokalnie pozycji: ${parsedDrafts.length}. Sprawdź podgląd i zapisz. Klucz AI możesz dodać w Ustawieniach.`);
+      const suffix = !isNetworkAvailable()
+        ? ' Tryb offline — zewnętrzne AI zostało pominięte.'
+        : ' Klucz AI możesz dodać w Ustawieniach.';
+      showMessage(`Rozpoznano lokalnie pozycji: ${parsedDrafts.length}. Sprawdź podgląd i zapisz.${suffix}`);
     }
   } catch (error) {
     parsedDrafts = [];
@@ -3014,6 +3044,33 @@ function showMessage(text, type = 'success') {
   el.messageBox.classList.remove('hidden');
   window.clearTimeout(showMessage.timer);
   showMessage.timer = window.setTimeout(() => el.messageBox.classList.add('hidden'), 4200);
+}
+
+function isNetworkAvailable() {
+  return navigator.onLine !== false;
+}
+
+function updateNetworkUi() {
+  if (!el.networkStatus) return;
+  const offline = !isNetworkAvailable();
+  el.networkStatus.classList.toggle('hidden', !offline);
+  el.networkStatus.textContent = offline ? 'Offline — dane zapisują się lokalnie' : '';
+}
+
+function setupNetworkLifecycle() {
+  updateNetworkUi();
+  window.addEventListener('offline', () => {
+    window.clearTimeout(dropboxSyncTimer);
+    updateNetworkUi();
+    updateCloudUi();
+  });
+  window.addEventListener('online', () => {
+    updateNetworkUi();
+    updateCloudUi();
+    if (getStorageMode() === 'dropbox' && hasDropboxConnection()) {
+      scheduleDropboxAutoSync({ delay: 500, reason: 'connection-restored' });
+    }
+  });
 }
 
 
@@ -5120,6 +5177,47 @@ function setStorageMode(mode) {
   updateCloudUi();
 }
 
+function getDropboxSyncState() {
+  try {
+    const state = JSON.parse(localStorage.getItem(DROPBOX_SYNC_STATE_KEY) || 'null');
+    return state && typeof state === 'object' ? state : { pending: false, changedAt: '', lastSyncedAt: '' };
+  } catch (_) {
+    return { pending: false, changedAt: '', lastSyncedAt: '' };
+  }
+}
+
+function saveDropboxSyncState(state) {
+  const normalized = {
+    pending: Boolean(state?.pending),
+    changedAt: String(state?.changedAt || ''),
+    lastSyncedAt: String(state?.lastSyncedAt || '')
+  };
+  try { localStorage.setItem(DROPBOX_SYNC_STATE_KEY, JSON.stringify(normalized)); } catch (_) {}
+  return normalized;
+}
+
+function markDropboxSyncPending() {
+  const current = getDropboxSyncState();
+  return saveDropboxSyncState({
+    ...current,
+    pending: true,
+    changedAt: new Date().toISOString()
+  });
+}
+
+function markDropboxSynced() {
+  return saveDropboxSyncState({
+    pending: false,
+    changedAt: '',
+    lastSyncedAt: new Date().toISOString()
+  });
+}
+
+function formatLastDropboxSync(value) {
+  const time = Date.parse(value || '');
+  return Number.isFinite(time) ? new Date(time).toLocaleString('pl-PL') : '';
+}
+
 function hasBuiltInDropboxAppKey() {
   return Boolean(DROPBOX_DEFAULT_APP_KEY);
 }
@@ -5171,6 +5269,8 @@ function updateCloudUi(statusText = '') {
   const config = getDropboxConfig();
   const connected = hasDropboxConnection();
   const forceUpload = getDropboxForceLocalUpload();
+  const syncState = getDropboxSyncState();
+  const online = isNetworkAvailable();
   if (el.storageModeSelect) el.storageModeSelect.value = mode;
   if (el.dropboxAppKeyInput && !el.dropboxAppKeyInput.value) el.dropboxAppKeyInput.value = config.appKey;
   if (el.dropboxAppKeyLabel) {
@@ -5180,14 +5280,23 @@ function updateCloudUi(statusText = '') {
 
   if (el.dropboxConnectButton) el.dropboxConnectButton.disabled = connected || dropboxSyncBusy;
   if (el.dropboxDisconnectButton) el.dropboxDisconnectButton.disabled = !connected || dropboxSyncBusy;
-  if (el.dropboxSyncNowButton) el.dropboxSyncNowButton.disabled = mode !== 'dropbox' || !connected || dropboxSyncBusy;
+  if (el.dropboxSyncNowButton) el.dropboxSyncNowButton.disabled = mode !== 'dropbox' || !connected || dropboxSyncBusy || !online;
 
   if (el.cloudStatus) {
     if (statusText) el.cloudStatus.textContent = statusText;
     else if (mode === 'dropbox') {
-      el.cloudStatus.textContent = connected
-        ? `Dropbox połączony. Plik danych: ${config.path}${forceUpload ? ' · oczekuje jednorazowy zapis lokalnej bazy do chmury.' : ''}`
-        : 'Tryb Dropbox wybrany, ale konto nie jest jeszcze połączone.';
+      if (!connected) {
+        el.cloudStatus.textContent = 'Tryb Dropbox wybrany, ale konto nie jest jeszcze połączone.';
+      } else if (!online) {
+        el.cloudStatus.textContent = 'Offline — wszystkie zmiany są zapisywane lokalnie. Synchronizacja ruszy automatycznie po odzyskaniu internetu.';
+      } else if (dropboxSyncBusy) {
+        el.cloudStatus.textContent = 'Synchronizuję lokalne dane z Dropbox…';
+      } else if (forceUpload || syncState.pending) {
+        el.cloudStatus.textContent = `Dane są zapisane lokalnie i oczekują na synchronizację z Dropbox (${config.path}).`;
+      } else {
+        const lastSync = formatLastDropboxSync(syncState.lastSyncedAt);
+        el.cloudStatus.textContent = `Dropbox połączony. Plik danych: ${config.path}${lastSync ? ` · ostatnia synchronizacja: ${lastSync}` : ''}.`;
+      }
     } else {
       el.cloudStatus.textContent = 'Tryb lokalny. Dane są zapisane tylko w tej przeglądarce.';
     }
@@ -5211,6 +5320,10 @@ async function sha256Base64Url(value) {
 }
 
 async function startDropboxAuth() {
+  if (!isNetworkAvailable()) {
+    showMessage('Połączenie z Dropbox wymaga internetu. Dane programu nadal działają lokalnie.', 'error');
+    return;
+  }
   setStorageMode('dropbox');
   const config = saveDropboxConfig();
   if (!config.appKey) {
@@ -5272,6 +5385,7 @@ async function handleDropboxOAuthReturn() {
   url.searchParams.delete('state');
   window.history.replaceState({}, document.title, url.pathname + url.search + url.hash);
   await handleDropboxInitialSync();
+  markDropboxSynced();
   updateCloudUi();
   return true;
 }
@@ -5346,6 +5460,7 @@ async function handleDropboxInitialSync() {
 }
 
 async function getDropboxAccessToken() {
+  if (!isNetworkAvailable()) throw new Error('Brak internetu. Dane pozostają zapisane lokalnie.');
   const token = getDropboxTokenData();
   if (!token) throw new Error('Dropbox nie jest połączony.');
   if (token.access_token && Number(token.expires_at || 0) > Date.now() + 60000) return token.access_token;
@@ -5395,6 +5510,7 @@ function makeExportPayload() {
 }
 
 async function dropboxDownloadPayload() {
+  if (!isNetworkAvailable()) throw new Error('Brak internetu. Dane pozostają zapisane lokalnie.');
   const accessToken = await getDropboxAccessToken();
   const { path } = getDropboxConfig();
   const response = await fetch('https://content.dropboxapi.com/2/files/download', {
@@ -5410,6 +5526,7 @@ async function dropboxDownloadPayload() {
 }
 
 async function dropboxUploadPayload(payload) {
+  if (!isNetworkAvailable()) throw new Error('Brak internetu. Dane pozostają zapisane lokalnie.');
   const accessToken = await getDropboxAccessToken();
   const { path } = getDropboxConfig();
   const response = await fetch('https://content.dropboxapi.com/2/files/upload', {
@@ -5427,6 +5544,11 @@ async function dropboxUploadPayload(payload) {
 
 async function uploadLocalStateToDropbox(successMessage = '') {
   if (getStorageMode() !== 'dropbox' || !hasDropboxConnection()) return;
+  if (!isNetworkAvailable()) {
+    markDropboxSyncPending();
+    updateCloudUi();
+    return { offline: true };
+  }
   if (dropboxSyncBusy) {
     dropboxForceUploadPending = true;
     updateCloudUi('Dropbox kończy poprzednią operację. Po jej zakończeniu program automatycznie zapisze lokalną bazę do chmury.');
@@ -5439,6 +5561,7 @@ async function uploadLocalStateToDropbox(successMessage = '') {
     await reloadEntries();
     await dropboxUploadPayload(makeExportPayload());
     clearDropboxForceLocalUpload();
+    markDropboxSynced();
     finalMessage = successMessage || `Dropbox zapisany lokalnymi danymi: ${new Date().toLocaleString('pl-PL')}.`;
     updateCloudUi(finalMessage);
   } finally {
@@ -5646,28 +5769,48 @@ let dropboxSyncBusy = false;
 let dropboxForceUploadPending = false;
 let dropboxSyncTimer = null;
 
-function reportDropboxSyncError(error) {
+function reportDropboxSyncError(error, options = {}) {
+  const manual = Boolean(options.manual);
+  markDropboxSyncPending();
+  if (!isNetworkAvailable() || error?.name === 'AbortError' || /failed to fetch|network|brak internetu|load failed|offline/i.test(String(error?.message || ''))) {
+    updateCloudUi();
+    if (manual) showMessage('Nie udało się połączyć z Dropbox. Dane pozostają bezpiecznie zapisane lokalnie.');
+    return;
+  }
   const message = `Błąd synchronizacji Dropbox: ${error?.message || 'nieznany błąd'}`;
   updateCloudUi(message);
   showMessage(message, 'error');
 }
 
-function scheduleDropboxAutoSync() {
+function scheduleDropboxAutoSync(options = {}) {
   if (getStorageMode() !== 'dropbox' || !hasDropboxConnection()) return;
+  markDropboxSyncPending();
   window.clearTimeout(dropboxSyncTimer);
-  dropboxSyncTimer = window.setTimeout(() => syncDropboxNow().catch(reportDropboxSyncError), 1200);
+  if (!isNetworkAvailable()) {
+    updateCloudUi();
+    return;
+  }
+  const delay = Math.max(250, Number(options.delay || 1200));
+  dropboxSyncTimer = window.setTimeout(() => syncDropboxNow().catch(reportDropboxSyncError), delay);
 }
 
-async function syncDropboxNow() {
+async function syncDropboxNow(options = {}) {
+  const manual = Boolean(options.manual);
   if (getStorageMode() !== 'dropbox') {
     updateCloudUi('Tryb lokalny. Dropbox nie jest używany.');
-    showMessage('Tryb lokalny. Dropbox nie jest używany.', 'error');
-    return;
+    if (manual) showMessage('Program pracuje lokalnie. Wybierz tryb Dropbox, aby synchronizować.', 'error');
+    return { skipped: true };
   }
   if (!hasDropboxConnection()) {
     updateCloudUi('Tryb Dropbox wybrany, ale konto nie jest jeszcze połączone.');
-    showMessage('Dropbox nie jest połączony.', 'error');
-    return;
+    if (manual) showMessage('Dropbox nie jest połączony.', 'error');
+    return { skipped: true };
+  }
+  if (!isNetworkAvailable()) {
+    markDropboxSyncPending();
+    updateCloudUi();
+    if (manual) showMessage('Brak internetu. Dane są bezpiecznie zapisane lokalnie i zsynchronizują się później.');
+    return { offline: true };
   }
   if (hasDropboxForceLocalUpload()) {
     window.clearTimeout(dropboxSyncTimer);
@@ -5682,7 +5825,8 @@ async function syncDropboxNow() {
     const remotePayload = await dropboxDownloadPayload();
     if (remotePayload) await importPayload(remotePayload, { replace: false, silent: true });
     await dropboxUploadPayload(makeExportPayload());
-    finalMessage = `Dropbox zsynchronizowany: ${new Date().toLocaleString('pl-PL')}.`;
+    markDropboxSynced();
+    finalMessage = '';
     updateCloudUi(finalMessage);
   } finally {
     dropboxSyncBusy = false;
@@ -5692,6 +5836,8 @@ async function syncDropboxNow() {
     dropboxForceUploadPending = false;
     await uploadLocalStateToDropbox('Po zakończeniu poprzedniej synchronizacji zapisano lokalną bazę do Dropbox.');
   }
+  if (manual) showMessage('Synchronizacja Dropbox zakończona.');
+  return { synced: true };
 }
 
 function disconnectDropbox() {
@@ -5703,6 +5849,7 @@ function disconnectDropbox() {
   window.clearTimeout(dropboxSyncTimer);
   localStorage.removeItem(DROPBOX_TOKEN_KEY);
   localStorage.removeItem(DROPBOX_OAUTH_KEY);
+  localStorage.removeItem(DROPBOX_SYNC_STATE_KEY);
   clearDropboxForceLocalUpload();
   setStorageMode('local');
   updateCloudUi('Dropbox odłączony. Program pracuje lokalnie.');
@@ -6684,6 +6831,7 @@ function renderAiSettings() {
 }
 
 async function testAiKey() {
+  if (!isNetworkAvailable()) throw new Error('Sprawdzenie klucza AI wymaga internetu.');
   const settings = saveAiSettingsFromForm();
   if (!settings.apiKey) throw new Error('Wpisz klucz API.');
   const provider = settings.provider;
@@ -6934,6 +7082,7 @@ function extractJsonObject(text) {
 }
 
 async function callJsonAi({ prompt, schema, schemaName = 'structured_response' }) {
+  if (!isNetworkAvailable()) throw new Error('Funkcja zewnętrznego AI wymaga internetu. Pozostałe dane programu nadal działają lokalnie.');
   const settings = getAiSettings();
   const model = getSelectedAiModel(settings);
   if (!settings.apiKey) throw new Error('Brak klucza API. Wpisz go w Ustawieniach AI.');
@@ -8332,8 +8481,8 @@ function bindEvents() {
   });
   if (el.dropboxConnectButton) el.dropboxConnectButton.addEventListener('click', () => startDropboxAuth().catch(error => showMessage(error.message, 'error')));
   if (el.dropboxDisconnectButton) el.dropboxDisconnectButton.addEventListener('click', disconnectDropbox);
-  if (el.dropboxSyncNowButton) el.dropboxSyncNowButton.addEventListener('click', () => syncDropboxNow().catch(error => {
-    reportDropboxSyncError(error);
+  if (el.dropboxSyncNowButton) el.dropboxSyncNowButton.addEventListener('click', () => syncDropboxNow({ manual: true }).catch(error => {
+    reportDropboxSyncError(error, { manual: true });
   }));
 
 }
@@ -8341,7 +8490,7 @@ function bindEvents() {
 async function init() {
   const today = todayISO();
   document.title = 'Portfel PRO';
-  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.1 / 153';
+  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.1 / 154';
   runUiBindingAudit();
   setTodayHeader('wczytywanie...');
   if (isFileProtocol()) {
@@ -8376,6 +8525,7 @@ async function init() {
   setupTabs();
   setupThemes();
   setupSmartTooltips();
+  setupNetworkLifecycle();
   setupVoiceMode();
   migrateInventoryLocalStorage({ rebuild: true, skipSync: true });
   setupAiAndInventory();
@@ -8388,7 +8538,7 @@ async function init() {
   } catch (error) {
     showMessage(error.message || 'Nie udało się zakończyć logowania Dropbox.', 'error');
   }
-  if (!handledDropboxReturn && getStorageMode() === 'dropbox' && hasDropboxConnection() && !new URL(window.location.href).searchParams.get('code')) {
+  if (!handledDropboxReturn && isNetworkAvailable() && getStorageMode() === 'dropbox' && hasDropboxConnection() && !new URL(window.location.href).searchParams.get('code')) {
     window.setTimeout(() => {
       syncDropboxNow().catch(reportDropboxSyncError);
     }, 2000);

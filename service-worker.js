@@ -1,15 +1,16 @@
-const CACHE_NAME = 'portfel-pro-v1-1-v153';
-const APP_VERSION = '1.1-153';
+const CACHE_NAME = 'portfel-pro-v1-1-v154';
+const APP_VERSION = '1.1-154';
 const APP_SHELL = [
   './',
   './index.html',
-  './index.html?v=153',
-  './voice/index.html?v=153',
-  './manifest.webmanifest?v=153',
-  './manifest-voice.webmanifest?v=153',
-  './src/styles.css?v=153',
-  './src/config.js?v=153',
-  './src/app.js?v=153',
+  './index.html?v=154',
+  './voice/index.html',
+  './voice/index.html?v=154',
+  './manifest.webmanifest?v=154',
+  './manifest-voice.webmanifest?v=154',
+  './src/styles.css?v=154',
+  './src/config.js?v=154',
+  './src/app.js?v=154',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/logo-portfel-pro.png',
@@ -28,10 +29,32 @@ self.addEventListener('install', event => {
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(keys.filter(key => (key.startsWith('bilans-pwa-') || key.startsWith('portfel-pro-')) && key !== CACHE_NAME).map(key => caches.delete(key))))
+      .then(keys => Promise.all(
+        keys
+          .filter(key => (key.startsWith('bilans-pwa-') || key.startsWith('portfel-pro-')) && key !== CACHE_NAME)
+          .map(key => caches.delete(key))
+      ))
       .then(() => self.clients.claim())
   );
 });
+
+async function fetchAndCache(request) {
+  const response = await fetch(request);
+  if (response && (response.ok || response.type === 'opaque')) {
+    const cache = await caches.open(CACHE_NAME);
+    await cache.put(request, response.clone());
+  }
+  return response;
+}
+
+async function navigationFallback(requestUrl) {
+  const cache = await caches.open(CACHE_NAME);
+  if (requestUrl.pathname.endsWith('/voice/') || requestUrl.pathname.endsWith('/voice/index.html')) {
+    return await cache.match('./voice/index.html?v=154', { ignoreSearch: true })
+      || await cache.match('./index.html?v=154', { ignoreSearch: true });
+  }
+  return cache.match('./index.html?v=154', { ignoreSearch: true });
+}
 
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
@@ -39,31 +62,30 @@ self.addEventListener('fetch', event => {
   const requestUrl = new URL(event.request.url);
   if (requestUrl.origin !== self.location.origin) return;
 
-  event.respondWith(
-    fetch(event.request)
-      .then(response => {
-        if (!response || (!response.ok && response.type !== 'opaque')) return response;
+  event.respondWith((async () => {
+    const cache = await caches.open(CACHE_NAME);
+    const cached = await cache.match(event.request, { ignoreSearch: true });
 
-        const clone = response.clone();
-        caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
-        return response;
-      })
-      .catch(async () => {
-        const cached = await caches.match(event.request);
-        if (cached) return cached;
+    // Pliki programu i nawigacje otwieramy od razu z urządzenia. Aktualna
+    // wersja jest jednocześnie pobierana w tle, gdy sieć jest dostępna.
+    if (cached) {
+      event.waitUntil(fetchAndCache(event.request).catch(() => undefined));
+      return cached;
+    }
 
-        if (event.request.mode === 'navigate') {
-          if (requestUrl.pathname.endsWith('/voice/') || requestUrl.pathname.endsWith('/voice/index.html')) {
-            return await caches.match('./voice/index.html?v=153') || await caches.match('./voice/index.html') || await caches.match('./index.html?v=153');
-          }
-          return await caches.match('./index.html?v=153') || await caches.match('./index.html');
-        }
+    try {
+      return await fetchAndCache(event.request);
+    } catch (_) {
+      if (event.request.mode === 'navigate') {
+        const fallback = await navigationFallback(requestUrl);
+        if (fallback) return fallback;
+      }
 
-        return new Response('Brak połączenia i brak pliku w cache.', {
-          status: 503,
-          statusText: 'Offline',
-          headers: { 'Content-Type': 'text/plain; charset=utf-8' }
-        });
-      })
-  );
+      return new Response('Brak połączenia i brak pliku w pamięci aplikacji.', {
+        status: 503,
+        statusText: 'Offline',
+        headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+      });
+    }
+  })());
 });

@@ -194,14 +194,37 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .tab-page.active { display: block; }
 
 .message {
-  margin: 10px 0;
+  position: fixed;
+  top: max(12px, env(safe-area-inset-top));
+  right: max(12px, env(safe-area-inset-right));
+  z-index: 3000;
+  width: min(440px, calc(100vw - 24px));
+  margin: 0;
   padding: 10px 12px;
   border-radius: 12px;
   border: 1px solid #c8dccf;
   background: #eef9f1;
   color: #195335;
+  box-shadow: 0 14px 38px rgba(15, 23, 42, .20);
+  overflow-wrap: anywhere;
 }
 .message.error { background: var(--danger-bg); color: var(--danger); border-color: #efb5ae; }
+
+.network-status {
+  position: fixed;
+  right: max(12px, env(safe-area-inset-right));
+  bottom: max(12px, env(safe-area-inset-bottom));
+  z-index: 2500;
+  max-width: calc(100vw - 24px);
+  padding: 8px 12px;
+  border: 1px solid #d9b86c;
+  border-radius: 999px;
+  background: #fff8df;
+  color: #6b4a00;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, .16);
+  font-size: 12px;
+  font-weight: 750;
+}
 
 .panel,
 .summary-card,
@@ -340,7 +363,7 @@ input:focus, select:focus, textarea:focus {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
-.sync-info { display:block; color: var(--muted); margin-top: 8px; }
+.sync-info { display:block; color: var(--muted); margin-top: 8px; overflow-wrap: anywhere; }
 .import-preview-box {
   display: block;
   white-space: pre-wrap;
@@ -1845,6 +1868,7 @@ body[data-theme="dark"] #todayLabel[data-status="missing"] {
 
 .entry-edit-dialog {
   width: min(760px, calc(100% - 24px));
+  max-width: calc(100vw - 24px);
   max-height: calc(100dvh - 24px);
   margin: auto;
   padding: 18px;
@@ -2302,6 +2326,9 @@ body[data-theme="dark"] #todayLabel[data-status="missing"] {
 }
 
 @media (max-width: 980px) {
+  .export-sync-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 @media (max-width: 640px) {
@@ -2327,6 +2354,23 @@ body[data-theme="dark"] #todayLabel[data-status="missing"] {
     max-height: calc(100dvh - 12px);
     padding: 12px;
     border-radius: 14px;
+  }
+
+  .entry-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .entry-form .wide,
+  .entry-form .wide.priority-field,
+  .entry-form .wide:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .export-sync-grid .button-row > button,
+  .export-sync-grid .button-row > .file-button {
+    flex: 1 1 150px;
+    min-width: 0;
+    white-space: normal;
   }
 
   .dialog-title-row {
