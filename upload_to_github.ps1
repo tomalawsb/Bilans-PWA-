@@ -100,5 +100,5 @@ Set-Location $ProjectPath
 
 Write-Host "========================================"
 Ok "Gotowe. Projekt zostal wyslany na GitHub."
-Write-Host "Adres strony: https://tomalawsb.github.io/Bilans-PWA-/?v=154"
+Write-Host "Adres strony: https://tomalawsb.github.io/Bilans-PWA-/?v=155"
 Write-Host "========================================"

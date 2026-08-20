@@ -1,8 +1,19 @@
-# Portfel PRO v. 1.1 / 154
+# Portfel PRO v. 1.1 / 155
 
 Lokalna aplikacja PWA do prowadzenia bilansu, historii, raportów, kalendarza i magazynu. Dane są zapisywane w IndexedDB, opcjonalnie mogą być synchronizowane przez Dropbox.
 
-## Najważniejsze zmiany wersji 154
+## Najważniejsze zmiany wersji 155
+
+- kafelek „Całość” zastąpiono „Wypłatą” z bieżącego miesiąca: przychody firmowe minus koszty firmowe, bez wydatków domowych;
+- raport główny można konfigurować z pełnej listy kategorii, a kolejność widocznych kafelków zmieniać długim przytrzymaniem i przeciągnięciem;
+- dodano zwykłe kategorie `Telewizja`, `Internetowe` i `Kamery`, bez usuwania dotychczasowych `TV` i `Monitoring`;
+- raport kategorii i raport grup mają własny wybór miesiąca i nie dziedziczą filtrów Historii;
+- Historia pozwala zaznaczyć interesujące lata, pobierając archiwalne lata dopiero wtedy, gdy są potrzebne;
+- synchronizacja Dropbox używa osobnego pliku ustawień, ciągłego pliku magazynu i osobnego pliku wpisów dla każdego roku;
+- starszy `bilans_dane.json` pozostaje nietkniętą kopią migracyjną, a nowe pliki są scalane z kontrolą rewizji Dropbox;
+- poprawiono kafelki raportu na telefonach: opis zawija się po lewej, a kwota pozostaje widoczna po prawej bez poziomego przewijania.
+
+## Zmiany odziedziczone z wersji 154
 
 - działanie local-first: uruchomienie, przeglądanie, dodawanie i edycja danych nie wymagają internetu;
 - Dropbox nie blokuje startu, nie zgłasza błędu przy braku sieci i synchronizuje oczekujące zmiany automatycznie po odzyskaniu połączenia;
@@ -31,7 +42,7 @@ Lokalna aplikacja PWA do prowadzenia bilansu, historii, raportów, kalendarza i 
 Uruchom `run_local_windows.bat`, a następnie otwórz:
 
 ```text
-http://localhost:8000/?v=154
+http://localhost:8000/?v=155
 ```
 
 Nie otwieraj `index.html` bezpośrednio z dysku, jeśli chcesz testować PWA, cache, import lub instalację.
@@ -57,4 +68,4 @@ node --check src/app.js
 node --check service-worker.js
 ```
 
-Manifesty `manifest.webmanifest` i `manifest-voice.webmanifest` muszą pozostać poprawnym JSON-em, a wszystkie zasoby PWA powinny używać wersji `v=154`.
+Manifesty `manifest.webmanifest` i `manifest-voice.webmanifest` muszą pozostać poprawnym JSON-em, a wszystkie zasoby PWA powinny używać wersji `v=155`.

@@ -356,7 +356,32 @@ input:focus, select:focus, textarea:focus {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
-.report-layout .wallet-panel { grid-column: 1 / -1; }
+.report-layout .wallet-panel,
+.report-layout .report-period-panel { grid-column: 1 / -1; }
+.report-month-control { min-width: min(230px, 100%); }
+
+.history-years-fieldset {
+  min-width: 0;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px;
+  background: var(--panel-soft);
+}
+.history-years-fieldset legend { padding: 0 5px; font-weight: 700; }
+.history-year-filters { display: flex; flex-wrap: wrap; gap: 8px; }
+.history-year-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--control-bg);
+  padding: 6px 11px;
+  cursor: pointer;
+}
+.history-year-option input { width: 16px; height: 16px; margin: 0; }
 
 .export-sync-grid {
   display: grid;
@@ -524,6 +549,46 @@ input:focus, select:focus, textarea:focus {
 .company-result-row { border-color: #b8d8c3; background: #f4fff7; }
 .home-report-row { border-color: #f0c5c0; background: #fff8f7; }
 .compact-row span, .main-report-row span { color: var(--muted); font-size: 12px; }
+.main-report-row {
+  position: relative;
+  padding-left: 30px;
+  touch-action: pan-y;
+  cursor: grab;
+  transition: opacity .15s ease, box-shadow .15s ease, transform .15s ease;
+}
+.main-report-drag-handle {
+  position: absolute;
+  z-index: 2;
+  inset-block: 0;
+  left: 1px;
+  width: 27px;
+  min-width: 27px;
+  min-height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.main-report-drag-handle:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+.main-report-row-dragging .main-report-drag-handle { cursor: grabbing; }
+.main-report-row-armed { outline: 2px solid color-mix(in srgb, var(--accent) 42%, transparent); }
+.main-report-row-dragging {
+  position: relative;
+  z-index: 4;
+  opacity: .78;
+  cursor: grabbing;
+  box-shadow: 0 8px 24px rgb(15 23 42 / 18%);
+  transform: scale(.995);
+  touch-action: none;
+}
+body.main-report-reordering { user-select: none; }
+.main-report-order-hint { margin: 10px 2px 0; }
 .tag-list { display:flex; gap:5px; flex-wrap:wrap; margin-top:7px; }
 .tag { display:inline-flex; border:1px solid #d8d0bd; background:#fffaf0; border-radius:999px; padding:2px 7px; font-size:12px; color:#475569; }
 .row-actions { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
@@ -2380,6 +2445,44 @@ body[data-theme="dark"] #todayLabel[data-status="missing"] {
 
   .app-settings-actions > button {
     flex: 1 1 100%;
+  }
+
+  /* Raport główny: na telefonie całą dostępną szerokość oddaj opisowi,
+     ale zachowaj nieściśniętą kwotę w prawej kolumnie. */
+  .main-report {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .main-report .main-report-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) max-content;
+    column-gap: clamp(5px, 2vw, 9px);
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    padding: 10px 10px 10px 30px;
+  }
+
+  .main-report .main-report-row > div {
+    min-width: 0;
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: normal;
+    hyphens: auto;
+  }
+
+  .main-report .main-report-row > strong {
+    min-width: max-content;
+    max-width: none;
+    justify-self: end;
+    align-self: center;
+    margin: 0;
+    font-size: clamp(13px, 4.1vw, 16px);
+    line-height: 1.15;
+    font-variant-numeric: tabular-nums;
   }
 }
 

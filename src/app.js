@@ -1,6 +1,6 @@
 const DB_NAME = 'bilans-pwa-etap1';
 const DB_VERSION = 4;
-const APP_VERSION = '1.1-154';
+const APP_VERSION = '1.1-155';
 const RAW_DROPBOX_DEFAULT_APP_KEY = String(window.PORTFEL_PRO_CONFIG?.dropboxAppKey || '').trim();
 const DROPBOX_DEFAULT_APP_KEY = /^WSTAW_TUTAJ/i.test(RAW_DROPBOX_DEFAULT_APP_KEY) ? '' : RAW_DROPBOX_DEFAULT_APP_KEY; // Ustaw w src/config.js, wtedy użytkownik klika tylko Połącz z Dropbox.
 const MAIN_INSTALL_KEY = 'portfel-pro-main-installed';
@@ -10,8 +10,11 @@ let activeInstallTarget = null;
 const STORE = 'entries';
 const TAG_RULE_STORE = 'tagRules';
 const LEARNING_RULE_STORE = 'learningRules';
+const TAG_RULES_UPDATED_AT_KEY = 'portfel-pro-tag-rules-updated-at-v1';
+const LEARNING_RULES_UPDATED_AT_KEY = 'portfel-pro-learning-rules-updated-at-v1';
 const DEVICE_ID_KEY = 'bilans-pwa-device-id';
 const THEME_KEY = 'bilans-pwa-theme';
+const THEME_UPDATED_AT_KEY = 'portfel-pro-theme-updated-at-v1';
 const STORAGE_MODE_KEY = 'bilans-pwa-storage-mode';
 const DROPBOX_CONFIG_KEY = 'bilans-pwa-dropbox-config';
 const DROPBOX_TOKEN_KEY = 'bilans-pwa-dropbox-token';
@@ -19,18 +22,33 @@ const DROPBOX_OAUTH_KEY = 'bilans-pwa-dropbox-oauth';
 const DELETED_ENTRIES_KEY = 'bilans-pwa-deleted-entries';
 const DROPBOX_FORCE_LOCAL_UPLOAD_KEY = 'portfel-pro-dropbox-force-local-upload-v1';
 const DROPBOX_SYNC_STATE_KEY = 'portfel-pro-dropbox-sync-state-v1';
-const DELETE_TOMBSTONE_RETENTION_DAYS = 365;
 const MAIN_REPORT_SETTINGS_KEY = 'portfel-pro-main-report-settings-v1';
 const CUSTOM_CATEGORIES_KEY = 'portfel-pro-custom-categories-v1';
+const CUSTOM_CATEGORIES_UPDATED_AT_KEY = 'portfel-pro-custom-categories-updated-at-v1';
 const WALLET_STATE_KEY = 'portfel-pro-wallet-state-v2';
 const LEGACY_WALLET_MONTHS_KEY = 'portfel-pro-wallet-months-v1';
+const WALLET_YEAR_SUMMARIES_KEY = 'portfel-pro-wallet-year-summaries-v1';
+const HISTORY_YEARS_KEY = 'portfel-pro-history-years-v1';
+const LAST_ACTIVE_YEAR_KEY = 'portfel-pro-last-active-year-v1';
+const KNOWN_DATA_YEARS_KEY = 'portfel-pro-known-data-years-v1';
+const CACHED_DATA_YEARS_KEY = 'portfel-pro-cached-data-years-v1';
+const DIRTY_DATA_YEARS_KEY = 'portfel-pro-dirty-data-years-v1';
+const ENTRY_SYNC_BACKFILL_KEY = 'portfel-pro-entry-sync-backfill-v1';
+const DROPBOX_YEARLY_MIGRATION_KEY = 'portfel-pro-dropbox-yearly-migration-v1';
+const DROPBOX_SETTINGS_FILE = 'portfel-pro-ustawienia.json';
+const DROPBOX_INVENTORY_FILE = 'portfel-pro-magazyn.json';
+const DROPBOX_YEAR_FILE_PREFIX = 'portfel-pro-wpisy-';
+const DROPBOX_YEARLY_SCHEMA = 'portfel-pro-yearly-v1';
 const LEARNING_AUTO_CONFIRMATIONS = 1;
 const LEARNING_MAX_EXAMPLES = 8;
 const AI_SETTINGS_KEY = 'portfel-pro-ai-settings-v1';
 const INVENTORY_ITEMS_KEY = 'portfel-pro-inventory-items-v1';
 const INVENTORY_MOVEMENTS_KEY = 'portfel-pro-inventory-movements-v1';
+const INVENTORY_MOVEMENT_TOMBSTONES_KEY = 'portfel-pro-inventory-movement-tombstones-v1';
 const INVENTORY_ANALYSIS_KEY = 'portfel-pro-inventory-analysis-v1';
 const INVENTORY_PENDING_KEY = 'portfel-pro-inventory-pending-v1';
+const INVENTORY_UPDATED_AT_KEY = 'portfel-pro-inventory-updated-at-v1';
+const INVENTORY_SOURCE_DEVICE_KEY = 'portfel-pro-inventory-source-device-v1';
 const INVENTORY_LEGACY_ITEMS_KEYS = ['portfel-pro-inventory-v1', 'portfel-pro-inventory', 'inventory'];
 
 const THEMES = {
@@ -60,6 +78,10 @@ const CATEGORIES = [
   'Antenowe',
   'Montaże',
   'Monitoring',
+  'TV',
+  'Telewizja',
+  'Internetowe',
+  'Kamery',
   'Mechanik',
   'Dom',
   'Bank',
@@ -652,7 +674,11 @@ let customCategories = loadCustomCategories();
 let calendarMonth = todayISO().slice(0, 7);
 let selectedCalendarDate = todayISO();
 let calendarYear = Number(todayISO().slice(0, 4));
+let reportMonth = todayISO().slice(0, 7);
+let availableDataYears = new Set([todayISO().slice(0, 4)]);
 let draggedEntryId = null;
+let mainReportReorderState = null;
+const dataYearDirtyGenerations = new Map();
 let voiceRecognition = null;
 let voiceIsRecording = false;
 let voiceFinalText = "";
@@ -757,6 +783,7 @@ const el = {
   mainReport: document.querySelector('#mainReport'),
   mainReportSettings: document.querySelector('#mainReportSettings'),
   mainReportResetButton: document.querySelector('#mainReportResetButton'),
+  reportMonth: document.querySelector('#reportMonth'),
   categoryForm: document.querySelector('#categoryForm'),
   newCategoryName: document.querySelector('#newCategoryName'),
   customCategoriesList: document.querySelector('#customCategoriesList'),
@@ -777,6 +804,7 @@ const el = {
   filterScope: document.querySelector('#filterScope'),
   filterCategory: document.querySelector('#filterCategory'),
   filterPayment: document.querySelector('#filterPayment'),
+  historyYearFilters: document.querySelector('#historyYearFilters'),
   clearFiltersButton: document.querySelector('#clearFiltersButton'),
   clearAllButton: document.querySelector('#clearAllButton'),
   factoryResetButton: document.querySelector('#factoryResetButton'),
@@ -845,7 +873,11 @@ function getSavedTheme() {
   }
 }
 
-function applyTheme(themeName, save = true) {
+function getThemeUpdatedAt() {
+  try { return String(localStorage.getItem(THEME_UPDATED_AT_KEY) || ''); } catch (_) { return ''; }
+}
+
+function applyTheme(themeName, save = true, options = {}) {
   const safeTheme = THEMES[themeName] ? themeName : 'classic';
   document.body.dataset.theme = safeTheme;
   const metaTheme = document.querySelector('meta[name="theme-color"]');
@@ -856,7 +888,30 @@ function applyTheme(themeName, save = true) {
   }
   if (save) {
     try { localStorage.setItem(THEME_KEY, safeTheme); } catch (_) {}
+    try {
+      localStorage.setItem(
+        THEME_UPDATED_AT_KEY,
+        options.preserveTimestamp && options.updatedAt ? options.updatedAt : new Date().toISOString()
+      );
+    } catch (_) {}
+    if (!options.skipSync) scheduleDropboxAutoSync();
   }
+}
+
+function importThemeFromPayload(payload, replace = false) {
+  const theme = String(payload?.theme || '');
+  if (!THEMES[theme]) return;
+  const incomingUpdatedAt = String(payload?.themeUpdatedAt || payload?.theme_updated_at || '');
+  const currentUpdatedAt = getThemeUpdatedAt();
+  const shouldApply = replace
+    || (parseDateTimeMs(incomingUpdatedAt) && parseDateTimeMs(incomingUpdatedAt) >= parseDateTimeMs(currentUpdatedAt))
+    || (!incomingUpdatedAt && !currentUpdatedAt);
+  if (!shouldApply) return;
+  applyTheme(theme, true, {
+    skipSync: true,
+    preserveTimestamp: Boolean(incomingUpdatedAt) && !replace,
+    updatedAt: replace ? '' : incomingUpdatedAt
+  });
 }
 
 function setupThemes() {
@@ -903,8 +958,14 @@ function normalizeDeletedEntry(item) {
   return {
     syncId,
     deletedAt,
-    sourceDeviceId: item?.sourceDeviceId || item?.source_device_id || getDeviceId()
+    sourceDeviceId: item?.sourceDeviceId || item?.source_device_id || getDeviceId(),
+    entryYear: normalizeDataYear(item?.entryYear || item?.entry_year || item?.year)
   };
+}
+
+function deletedEntryKey(item) {
+  const normalized = normalizeDeletedEntry(item);
+  return normalized ? `${normalized.entryYear || '*'}:${normalized.syncId}` : '';
 }
 
 function getDeletedEntries() {
@@ -918,21 +979,20 @@ function getDeletedEntries() {
 }
 
 function saveDeletedEntries(items) {
-  const latestBySyncId = new Map();
-  const minTime = Date.now() - DELETE_TOMBSTONE_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+  const latestByKey = new Map();
 
   for (const raw of items || []) {
     const item = normalizeDeletedEntry(raw);
     if (!item) continue;
     const deletedTime = parseDateTimeMs(item.deletedAt);
-    if (deletedTime < minTime) continue;
-    const previous = latestBySyncId.get(item.syncId);
+    const key = deletedEntryKey(item);
+    const previous = latestByKey.get(key);
     if (!previous || deletedTime > parseDateTimeMs(previous.deletedAt)) {
-      latestBySyncId.set(item.syncId, item);
+      latestByKey.set(key, item);
     }
   }
 
-  const cleaned = Array.from(latestBySyncId.values())
+  const cleaned = Array.from(latestByKey.values())
     .sort((a, b) => parseDateTimeMs(b.deletedAt) - parseDateTimeMs(a.deletedAt));
 
   localStorage.setItem(DELETED_ENTRIES_KEY, JSON.stringify(cleaned));
@@ -941,22 +1001,31 @@ function saveDeletedEntries(items) {
 
 function rememberDeletedEntry(entry, deletedAt = new Date().toISOString()) {
   if (!entry?.syncId) return;
+  const entryYear = normalizeDataYear(String(entry.entryDate || '').slice(0, 4));
   saveDeletedEntries([
     ...getDeletedEntries(),
     {
       syncId: entry.syncId,
       deletedAt,
-      sourceDeviceId: getDeviceId()
+      sourceDeviceId: getDeviceId(),
+      entryYear
     }
   ]);
+  markDataYearDirty(entryYear);
 }
 
 function rememberDeletedEntries(entries, deletedAt = new Date().toISOString()) {
   const tombstones = (entries || [])
     .filter(entry => entry?.syncId)
-    .map(entry => ({ syncId: entry.syncId, deletedAt, sourceDeviceId: getDeviceId() }));
+    .map(entry => ({
+      syncId: entry.syncId,
+      deletedAt,
+      sourceDeviceId: getDeviceId(),
+      entryYear: normalizeDataYear(String(entry.entryDate || '').slice(0, 4))
+    }));
   if (!tombstones.length) return;
   saveDeletedEntries([...getDeletedEntries(), ...tombstones]);
+  tombstones.forEach(item => markDataYearDirty(item.entryYear));
 }
 
 function collectDeletedEntries(payload) {
@@ -973,23 +1042,32 @@ function collectDeletedEntries(payload) {
 }
 
 function deletedEntriesMap() {
-  return new Map(getDeletedEntries().map(item => [item.syncId, item]));
+  return new Map(getDeletedEntries().map(item => [deletedEntryKey(item), item]));
 }
 
 function isEntryBlockedByDeletion(entry, deletions = deletedEntriesMap()) {
   if (!entry?.syncId) return false;
-  const tombstone = deletions.get(entry.syncId);
+  const year = normalizeDataYear(String(entry.entryDate || '').slice(0, 4));
+  const tombstone = deletions.get(`${year}:${entry.syncId}`) || deletions.get(`*:${entry.syncId}`);
   if (!tombstone) return false;
   const deletedTime = parseDateTimeMs(tombstone.deletedAt);
   const entryTime = parseDateTimeMs(entry.updatedAt || entry.createdAt);
   return Boolean(deletedTime && (!entryTime || deletedTime >= entryTime));
 }
 
-function forgetDeletedEntriesForSyncIds(syncIds) {
-  const ids = new Set([...syncIds].map(id => String(id || '').trim()).filter(Boolean));
-  if (!ids.size) return 0;
+function forgetDeletedEntriesForImportedEntries(entries) {
+  const normalizedEntries = Array.isArray(entries) ? entries : [];
+  const ids = new Set(normalizedEntries.map(item => String(item?.syncId || item?.sync_id || '').trim()).filter(Boolean));
+  const shardKeys = new Set(normalizedEntries.map(item => {
+    const syncId = String(item?.syncId || item?.sync_id || '').trim();
+    const year = normalizeDataYear(String(item?.entryDate || item?.entry_date || item?.date || '').slice(0, 4));
+    return syncId && year ? `${year}:${syncId}` : '';
+  }).filter(Boolean));
+  if (!ids.size && !shardKeys.size) return 0;
   const before = getDeletedEntries();
-  const after = before.filter(item => !ids.has(item.syncId));
+  const after = before.filter(item => item.entryYear
+    ? !shardKeys.has(`${item.entryYear}:${item.syncId}`)
+    : !ids.has(item.syncId));
   if (after.length !== before.length) saveDeletedEntries(after);
   return before.length - after.length;
 }
@@ -1027,26 +1105,20 @@ function clearDropboxForceLocalUpload() {
   try { localStorage.removeItem(DROPBOX_FORCE_LOCAL_UPLOAD_KEY); } catch (_) {}
 }
 
-async function applyImportedDeletions(payload) {
-  const importedEntries = collectImportedEntries(payload);
-  const presentSyncIds = new Set((Array.isArray(importedEntries) ? importedEntries : [])
-    .map(item => String(item?.syncId || item?.sync_id || '').trim())
-    .filter(Boolean));
-
-  const incomingDeleted = collectDeletedEntries(payload)
-    .filter(item => !presentSyncIds.has(item.syncId));
+async function applyImportedDeletions(payload, options = {}) {
+  const incomingDeleted = collectDeletedEntries(payload);
   if (!incomingDeleted.length) return { deleted: 0 };
 
-  const localDeleted = getDeletedEntries()
-    .filter(item => !presentSyncIds.has(item.syncId));
+  const localDeleted = getDeletedEntries();
   const mergedDeleted = saveDeletedEntries([...localDeleted, ...incomingDeleted]);
-  const deletedBySyncId = new Map(mergedDeleted.map(item => [item.syncId, item]));
+  if (!options.skipDirty) incomingDeleted.forEach(item => markDataYearDirty(item.entryYear));
+  const deletedBySyncId = new Map(mergedDeleted.map(item => [deletedEntryKey(item), item]));
   const entries = await getAllEntries();
   let deleted = 0;
 
   for (const entry of entries) {
     if (!isEntryBlockedByDeletion(entry, deletedBySyncId)) continue;
-    await deleteEntry(entry.id);
+    await deleteEntry(entry.id, { skipDirty: Boolean(options.skipDirty), entry });
     deleted += 1;
   }
 
@@ -1110,6 +1182,112 @@ function getWeekday(dateISO) {
 
 function monthKey(dateISO) {
   return String(dateISO || '').slice(0, 7);
+}
+
+function normalizeDataYear(value) {
+  const year = String(value ?? '').trim();
+  return /^(19|20|21)\d{2}$/.test(year) ? year : '';
+}
+
+function readYearSet(key, fallback = []) {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(key) || '[]');
+    const source = Array.isArray(parsed) ? parsed : [];
+    const years = source.map(normalizeDataYear).filter(Boolean);
+    return new Set(years.length ? years : fallback.map(normalizeDataYear).filter(Boolean));
+  } catch (_) {
+    return new Set(fallback.map(normalizeDataYear).filter(Boolean));
+  }
+}
+
+function writeYearSet(key, values) {
+  const years = Array.from(values || [])
+    .map(normalizeDataYear)
+    .filter(Boolean)
+    .sort((a, b) => b.localeCompare(a));
+  try { localStorage.setItem(key, JSON.stringify(years)); } catch (_) {}
+  return new Set(years);
+}
+
+function getSelectedHistoryYears() {
+  return readYearSet(HISTORY_YEARS_KEY, [todayISO().slice(0, 4)]);
+}
+
+function saveSelectedHistoryYears(values) {
+  return writeYearSet(HISTORY_YEARS_KEY, values);
+}
+
+function applyCalendarYearRollover() {
+  const currentYear = todayISO().slice(0, 4);
+  let lastActiveYear = '';
+  try { lastActiveYear = normalizeDataYear(localStorage.getItem(LAST_ACTIVE_YEAR_KEY)); } catch (_) {}
+  if (lastActiveYear && lastActiveYear !== currentYear) {
+    saveSelectedHistoryYears([currentYear]);
+  }
+  try { localStorage.setItem(LAST_ACTIVE_YEAR_KEY, currentYear); } catch (_) {}
+  return Boolean(lastActiveYear && lastActiveYear !== currentYear);
+}
+
+async function handlePossibleYearRollover() {
+  if (!applyCalendarYearRollover() || !db) return;
+  const today = todayISO();
+  reportMonth = today.slice(0, 7);
+  calendarMonth = reportMonth;
+  calendarYear = Number(today.slice(0, 4));
+  selectedCalendarDate = today;
+  if (el.reportMonth) el.reportMonth.value = reportMonth;
+  if (el.filterFrom) el.filterFrom.value = '';
+  if (el.filterTo) el.filterTo.value = '';
+  renderHistoryYearFilters();
+  await reloadEntries();
+  scheduleDropboxAutoSync({ delay: 250, reason: 'calendar-year-rollover' });
+  showMessage(`Rozpoczął się rok ${calendarYear}. Utworzono nowy bieżący okres, a starsze lata możesz dołączyć w Historii.`);
+}
+
+function getKnownDataYears() {
+  return readYearSet(KNOWN_DATA_YEARS_KEY, [todayISO().slice(0, 4)]);
+}
+
+function registerKnownDataYears(values) {
+  const merged = new Set([...getKnownDataYears(), ...(values || [])]);
+  merged.add(todayISO().slice(0, 4));
+  availableDataYears = writeYearSet(KNOWN_DATA_YEARS_KEY, merged);
+  return availableDataYears;
+}
+
+function getCachedDataYears() {
+  return readYearSet(CACHED_DATA_YEARS_KEY, []);
+}
+
+function markDataYearsCached(values) {
+  return writeYearSet(CACHED_DATA_YEARS_KEY, new Set([...getCachedDataYears(), ...(values || [])]));
+}
+
+function getDirtyDataYears() {
+  return readYearSet(DIRTY_DATA_YEARS_KEY, []);
+}
+
+function markDataYearDirty(value) {
+  const year = normalizeDataYear(value);
+  if (!year) return;
+  dataYearDirtyGenerations.set(year, (dataYearDirtyGenerations.get(year) || 0) + 1);
+  registerKnownDataYears([year]);
+  markDataYearsCached([year]);
+  writeYearSet(DIRTY_DATA_YEARS_KEY, new Set([...getDirtyDataYears(), year]));
+}
+
+function clearDirtyDataYears(values = []) {
+  const cleared = new Set(Array.from(values || []).map(normalizeDataYear).filter(Boolean));
+  writeYearSet(DIRTY_DATA_YEARS_KEY, new Set([...getDirtyDataYears()].filter(year => !cleared.has(year))));
+}
+
+function getRequiredLoadedYears() {
+  const years = getSelectedHistoryYears();
+  years.add(todayISO().slice(0, 4));
+  years.add(normalizeDataYear((el.reportMonth?.value || reportMonth).slice(0, 4)));
+  years.add(normalizeDataYear(calendarMonth.slice(0, 4)));
+  years.add(normalizeDataYear(calendarYear));
+  return new Set([...years].filter(Boolean));
 }
 
 function formatMoney(value) {
@@ -1176,12 +1354,23 @@ function loadCustomCategories() {
   }
 }
 
-function saveCustomCategories(categories = customCategories) {
+function saveCustomCategories(categories = customCategories, options = {}) {
   const defaults = new Set(CATEGORIES.map(categoryKey));
   customCategories = uniqueCategoryList(categories)
     .filter(name => !defaults.has(categoryKey(name)))
     .sort((a, b) => a.localeCompare(b, 'pl'));
   try { localStorage.setItem(CUSTOM_CATEGORIES_KEY, JSON.stringify(customCategories)); } catch (_) {}
+  try {
+    localStorage.setItem(
+      CUSTOM_CATEGORIES_UPDATED_AT_KEY,
+      options.preserveTimestamp && options.updatedAt ? options.updatedAt : new Date().toISOString()
+    );
+  } catch (_) {}
+  if (!options.skipSync) scheduleDropboxAutoSync();
+}
+
+function getCustomCategoriesUpdatedAt() {
+  try { return String(localStorage.getItem(CUSTOM_CATEGORIES_UPDATED_AT_KEY) || ''); } catch (_) { return ''; }
 }
 
 function getAllCategories() {
@@ -1321,18 +1510,18 @@ function addCustomCategory(name) {
   return category;
 }
 
-function canDeleteCustomCategory(category) {
+function canDeleteCustomCategory(category, entries = allEntries) {
   const key = categoryKey(category);
   if (!key) return false;
   if (CATEGORIES.some(item => categoryKey(item) === key)) return false;
-  const usedInEntries = (allEntries || []).some(entry => categoryKey(entry.category) === key);
+  const usedInEntries = (entries || []).some(entry => categoryKey(entry.category) === key);
   const usedInTagRules = (tagRules || []).some(rule => categoryKey(rule.category) === key);
   const usedInLearningRules = (learningRules || []).some(rule => categoryKey(rule.category) === key);
   return !usedInEntries && !usedInTagRules && !usedInLearningRules;
 }
 
-function deleteCustomCategory(category) {
-  if (!canDeleteCustomCategory(category)) {
+function deleteCustomCategory(category, entries = allEntries) {
+  if (!canDeleteCustomCategory(category, entries)) {
     throw new Error('Nie można usunąć tej kategorii, bo jest użyta we wpisach, regułach tagów albo nauce programu.');
   }
   const key = categoryKey(category);
@@ -1405,13 +1594,16 @@ async function handleCategoryFormSubmit(event) {
   showMessage(`Dodano kategorię: ${category}.`);
 }
 
-function handleCustomCategoryClick(event) {
+async function handleCustomCategoryClick(event) {
   const button = event.target.closest('button[data-category-action="delete"]');
   if (!button) return;
   const category = button.dataset.category;
   if (!window.confirm(`Usunąć kategorię: ${category}?`)) return;
   try {
-    deleteCustomCategory(category);
+    // allEntries zawiera wyłącznie aktualnie podpięte lata. Przed usunięciem
+    // sprawdzamy pełne IndexedDB, aby nie osierocić wpisów archiwalnych.
+    const completeEntries = await getAllEntries();
+    deleteCustomCategory(category, completeEntries);
     refreshCategorySelects();
     renderCustomCategoriesList();
     renderMainReportSettings();
@@ -1450,6 +1642,17 @@ function normalizeRule(rule) {
     createdAt: rule?.createdAt || rule?.created_at || new Date().toISOString(),
     updatedAt: rule?.updatedAt || rule?.updated_at || new Date().toISOString()
   };
+}
+
+function getRuleSectionUpdatedAt(kind) {
+  const key = kind === 'learning' ? LEARNING_RULES_UPDATED_AT_KEY : TAG_RULES_UPDATED_AT_KEY;
+  try { return String(localStorage.getItem(key) || ''); } catch (_) { return ''; }
+}
+
+function touchRuleSection(kind, updatedAt = new Date().toISOString()) {
+  const key = kind === 'learning' ? LEARNING_RULES_UPDATED_AT_KEY : TAG_RULES_UPDATED_AT_KEY;
+  try { localStorage.setItem(key, String(updatedAt || new Date().toISOString())); } catch (_) {}
+  return String(updatedAt || '');
 }
 
 function findTagRule(text) {
@@ -1805,14 +2008,17 @@ function applyLearningToEntry(entry, options = {}) {
   return updated;
 }
 
-async function saveLearningRule(rule) {
+async function saveLearningRule(rule, options = {}) {
   const normalized = normalizeLearningRule(rule);
   const hasLearnedDecision = normalized.category !== 'Inne'
     || Boolean(normalized.entryType || normalized.scope || normalized.paymentMethod || normalized.reportGroup);
   if (!normalized.normalizedPhrase || !hasLearnedDecision) return null;
   return new Promise((resolve, reject) => {
     const request = txNamedStore(LEARNING_RULE_STORE, 'readwrite').put(normalized);
-    request.onsuccess = () => resolve(normalized);
+    request.onsuccess = () => {
+      if (!options.skipSectionTouch) touchRuleSection('learning', normalized.updatedAt || new Date().toISOString());
+      resolve(normalized);
+    };
     request.onerror = event => reject(event.target.error);
   });
 }
@@ -1825,18 +2031,24 @@ function getAllLearningRules() {
   });
 }
 
-function deleteLearningRule(id) {
+function deleteLearningRule(id, options = {}) {
   return new Promise((resolve, reject) => {
     const request = txNamedStore(LEARNING_RULE_STORE, 'readwrite').delete(id);
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      if (!options.skipSectionTouch) touchRuleSection('learning');
+      resolve();
+    };
     request.onerror = event => reject(event.target.error);
   });
 }
 
-function clearLearningRulesStore() {
+function clearLearningRulesStore(options = {}) {
   return new Promise((resolve, reject) => {
     const request = txNamedStore(LEARNING_RULE_STORE, 'readwrite').clear();
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      if (!options.skipSectionTouch) touchRuleSection('learning');
+      resolve();
+    };
     request.onerror = event => reject(event.target.error);
   });
 }
@@ -1851,15 +2063,32 @@ async function reloadLearningRules() {
 
 async function importLearningRulesFromPayload(payload, replace = false) {
   if (!Array.isArray(payload?.learningRules)) return;
-  if (replace) await clearLearningRulesStore();
+  const incomingUpdatedAt = String(payload.learningRulesUpdatedAt || payload.learning_rules_updated_at || '');
+  const currentUpdatedAt = getRuleSectionUpdatedAt('learning');
+  const incomingTime = parseDateTimeMs(incomingUpdatedAt);
+  const currentTime = parseDateTimeMs(currentUpdatedAt);
+  const authoritative = replace || (incomingTime && incomingTime >= currentTime);
+
+  if (authoritative) {
+    await clearLearningRulesStore({ skipSectionTouch: true });
+    for (const incoming of payload.learningRules) {
+      await saveLearningRule(normalizeLearningRule(incoming), { skipSectionTouch: true });
+    }
+    touchRuleSection('learning', replace ? new Date().toISOString() : (incomingUpdatedAt || new Date().toISOString()));
+    await reloadLearningRules();
+    return;
+  }
+
+  if (currentTime && (!incomingTime || incomingTime < currentTime)) return;
   const existing = new Map((await getAllLearningRules()).map(rule => [rule.id, normalizeLearningRule(rule)]));
   for (const incoming of payload.learningRules) {
     const normalized = normalizeLearningRule(incoming);
     const current = existing.get(normalized.id);
     if (!current || Date.parse(normalized.updatedAt || '') >= Date.parse(current.updatedAt || '')) {
-      await saveLearningRule(normalized);
+      await saveLearningRule(normalized, { skipSectionTouch: true });
     }
   }
+  touchRuleSection('learning', incomingUpdatedAt || new Date().toISOString());
   await reloadLearningRules();
 }
 
@@ -3071,6 +3300,14 @@ function setupNetworkLifecycle() {
       scheduleDropboxAutoSync({ delay: 500, reason: 'connection-restored' });
     }
   });
+  window.addEventListener('focus', () => {
+    handlePossibleYearRollover().catch(error => showMessage(error.message, 'error'));
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      handlePossibleYearRollover().catch(error => showMessage(error.message, 'error'));
+    }
+  });
 }
 
 
@@ -3358,6 +3595,43 @@ function deleteTagRule(id) {
   });
 }
 
+function clearTagRulesStore() {
+  return new Promise((resolve, reject) => {
+    const request = txNamedStore(TAG_RULE_STORE, 'readwrite').clear();
+    request.onsuccess = () => resolve();
+    request.onerror = event => reject(event.target.error);
+  });
+}
+
+async function importTagRulesFromPayload(payload, replace = false) {
+  if (!Array.isArray(payload?.tagRules)) return;
+  const incomingUpdatedAt = String(payload.tagRulesUpdatedAt || payload.tag_rules_updated_at || '');
+  const currentUpdatedAt = getRuleSectionUpdatedAt('tag');
+  const incomingTime = parseDateTimeMs(incomingUpdatedAt);
+  const currentTime = parseDateTimeMs(currentUpdatedAt);
+  const authoritative = replace || (incomingTime && incomingTime >= currentTime);
+
+  if (authoritative) {
+    await clearTagRulesStore();
+    for (const rawRule of payload.tagRules) await saveTagRule(normalizeRule(rawRule));
+    touchRuleSection('tag', replace ? new Date().toISOString() : (incomingUpdatedAt || new Date().toISOString()));
+    await reloadTagRules();
+    return;
+  }
+
+  if (currentTime && (!incomingTime || incomingTime < currentTime)) return;
+  const existingRules = new Map((await getAllTagRules()).map(rule => [rule.id, normalizeRule(rule)]));
+  for (const rawRule of payload.tagRules) {
+    const rule = normalizeRule(rawRule);
+    const current = existingRules.get(rule.id);
+    const ruleTime = Date.parse(rule.updatedAt || '') || 0;
+    const currentRuleTime = Date.parse(current?.updatedAt || '') || 0;
+    if (!current || ruleTime >= currentRuleTime) await saveTagRule(rule);
+  }
+  touchRuleSection('tag', incomingUpdatedAt || new Date().toISOString());
+  await reloadTagRules();
+}
+
 async function seedDefaultTagRules() {
   const existing = await getAllTagRules();
   if (existing.length) {
@@ -3386,19 +3660,73 @@ function getAllEntries() {
   });
 }
 
-function saveEntry(entry, options = {}) {
+function getEntriesForYear(year) {
+  const normalizedYear = normalizeDataYear(year);
+  if (!normalizedYear) return Promise.resolve([]);
   return new Promise((resolve, reject) => {
-    const prepared = prepareEntryForStorage(entry, options);
-    const request = txStore('readwrite').put(prepared);
-    request.onsuccess = () => resolve(request.result);
+    const range = IDBKeyRange.bound(`${normalizedYear}-01-01`, `${normalizedYear}-12-31`);
+    const request = txStore().index('entryDate').getAll(range);
+    request.onsuccess = () => resolve(request.result ?? []);
     request.onerror = event => reject(event.target.error);
   });
 }
 
-function deleteEntry(id) {
+async function getEntriesForYears(years) {
+  const normalized = Array.from(years || []).map(normalizeDataYear).filter(Boolean);
+  const groups = await Promise.all(normalized.map(getEntriesForYear));
+  const unique = new Map();
+  for (const entry of groups.flat()) unique.set(Number(entry.id), entry);
+  return Array.from(unique.values());
+}
+
+function getAvailableEntryYears() {
+  return new Promise((resolve, reject) => {
+    const years = new Set();
+    const request = txStore().index('entryDate').openKeyCursor();
+    request.onsuccess = event => {
+      const cursor = event.target.result;
+      if (!cursor) {
+        resolve(years);
+        return;
+      }
+      const year = normalizeDataYear(String(cursor.key || '').slice(0, 4));
+      if (year) years.add(year);
+      cursor.continue();
+    };
+    request.onerror = event => reject(event.target.error);
+  });
+}
+
+function saveEntry(entry, options = {}) {
+  return new Promise((resolve, reject) => {
+    const prepared = prepareEntryForStorage(entry, options);
+    const request = txStore('readwrite').put(prepared);
+    request.onsuccess = () => {
+      if (!options.skipDirty) markDataYearDirty(String(prepared.entryDate || '').slice(0, 4));
+      resolve(request.result);
+    };
+    request.onerror = event => reject(event.target.error);
+  });
+}
+
+function getEntryFromDatabase(id) {
+  return new Promise((resolve, reject) => {
+    const request = txStore().get(Number(id));
+    request.onsuccess = () => resolve(request.result || null);
+    request.onerror = event => reject(event.target.error);
+  });
+}
+
+async function deleteEntry(id, options = {}) {
+  const existing = options.entry
+    || allEntries.find(entry => Number(entry.id) === Number(id))
+    || await getEntryFromDatabase(id);
   return new Promise((resolve, reject) => {
     const request = txStore('readwrite').delete(Number(id));
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      if (!options.skipDirty && existing) markDataYearDirty(String(existing.entryDate || '').slice(0, 4));
+      resolve();
+    };
     request.onerror = event => reject(event.target.error);
   });
 }
@@ -3436,6 +3764,7 @@ async function moveEntryToDate(id, newDateISO) {
     updatedAt: new Date().toISOString()
   });
 
+  if (String(entry.entryDate || '').slice(0, 4) !== String(newDateISO).slice(0, 4)) rememberDeletedEntry(entry);
   await saveEntry(updated);
   selectedCalendarDate = newDateISO;
   calendarMonth = newDateISO.slice(0, 7);
@@ -3446,6 +3775,7 @@ async function moveEntryToDate(id, newDateISO) {
     el.filterTo.value = newDateISO;
   }
 
+  renderHistoryYearFilters();
   await reloadEntries();
   showMessage(`Wpis przeniesiony na ${newDateISO}.`);
   scheduleDropboxAutoSync();
@@ -3506,13 +3836,38 @@ function clearEntries() {
   });
 }
 
+function clearEntriesForYear(year) {
+  const normalizedYear = normalizeDataYear(year);
+  if (!normalizedYear) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORE, 'readwrite');
+    const index = transaction.objectStore(STORE).index('entryDate');
+    const range = IDBKeyRange.bound(`${normalizedYear}-01-01`, `${normalizedYear}-12-31`);
+    const request = index.openCursor(range);
+    request.onsuccess = event => {
+      const cursor = event.target.result;
+      if (!cursor) return;
+      cursor.delete();
+      cursor.continue();
+    };
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = event => reject(event.target.error);
+    transaction.onabort = event => reject(event.target.error || new Error('Nie udało się wyczyścić danych roku.'));
+  });
+}
+
 async function addManyEntries(entries) {
   const database = await ensureDatabaseReady();
   return new Promise((resolve, reject) => {
     const transaction = database.transaction(STORE, 'readwrite');
     const store = transaction.objectStore(STORE);
     entries.forEach(entry => store.put(prepareEntryForStorage(entry, { forceNewId: true })));
-    transaction.oncomplete = () => resolve();
+    transaction.oncomplete = () => {
+      new Set(entries.map(entry => normalizeDataYear(String(entry?.entryDate || '').slice(0, 4))).filter(Boolean))
+        .forEach(markDataYearDirty);
+      renderHistoryYearFilters();
+      resolve();
+    };
     transaction.onerror = event => reject(event.target.error);
   });
 }
@@ -3536,11 +3891,12 @@ function resetForm() {
 }
 
 async function reloadEntries() {
-  allEntries = await getAllEntries();
+  allEntries = await getEntriesForYears(getRequiredLoadedYears());
   allEntries.sort((a, b) => {
     if (a.entryDate !== b.entryDate) return b.entryDate.localeCompare(a.entryDate);
     return String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? ''));
   });
+  await refreshWalletYearSummariesFromDatabase();
   applyFilters({ deferHeavy: true });
 }
 
@@ -3603,33 +3959,68 @@ const DEFAULT_MAIN_REPORT_SETTINGS = {
     companyResult: true
   },
   categoryRows: [],
-  customGroups: []
+  tileOrder: [
+    'row:computers',
+    'row:installations',
+    'row:homeExpense',
+    'row:companyResult'
+  ]
 };
+
+const MAIN_REPORT_FIXED_KEYS = Object.freeze([
+  'row:computers',
+  'row:installations',
+  'row:homeExpense',
+  'row:companyResult'
+]);
+
+function mainReportCategoryKey(category) {
+  return `category:${String(category || '').trim()}`;
+}
+
+function normalizeMainReportTileOrder(rawOrder, categoryRows = []) {
+  const selectedCategoryKeys = categoryRows.map(mainReportCategoryKey);
+  const allowed = new Set([...MAIN_REPORT_FIXED_KEYS, ...selectedCategoryKeys]);
+  const normalized = [];
+  for (const key of Array.isArray(rawOrder) ? rawOrder : []) {
+    const value = String(key || '').trim();
+    if (allowed.has(value) && !normalized.includes(value)) normalized.push(value);
+  }
+  for (const key of [...MAIN_REPORT_FIXED_KEYS, ...selectedCategoryKeys]) {
+    if (!normalized.includes(key)) normalized.push(key);
+  }
+  return normalized;
+}
 
 function getMainReportSettings() {
   try {
     const parsed = JSON.parse(localStorage.getItem(MAIN_REPORT_SETTINGS_KEY) || '{}');
+    const categoryRows = Array.isArray(parsed.categoryRows)
+      ? parsed.categoryRows.map(item => normalizeKnownCategory(item, String(item))).filter(Boolean)
+      : [];
     return {
       rows: {
         ...DEFAULT_MAIN_REPORT_SETTINGS.rows,
         ...(parsed.rows && typeof parsed.rows === 'object' ? parsed.rows : {})
       },
-      categoryRows: Array.isArray(parsed.categoryRows)
-        ? parsed.categoryRows.map(item => normalizeKnownCategory(item, String(item))).filter(Boolean)
-        : [],
-      customGroups: Array.isArray(parsed.customGroups)
-        ? parsed.customGroups.map(item => String(item)).filter(Boolean)
-        : []
+      categoryRows,
+      tileOrder: normalizeMainReportTileOrder(parsed.tileOrder || parsed.order, categoryRows),
+      updatedAt: String(parsed.updatedAt || '')
     };
   } catch (_) {
     return structuredClone(DEFAULT_MAIN_REPORT_SETTINGS);
   }
 }
 
-function saveMainReportSettings(settings) {
+function saveMainReportSettings(settings, options = {}) {
+  const value = {
+    ...settings,
+    updatedAt: options.preserveTimestamp && settings.updatedAt ? settings.updatedAt : new Date().toISOString()
+  };
   try {
-    localStorage.setItem(MAIN_REPORT_SETTINGS_KEY, JSON.stringify(settings));
+    localStorage.setItem(MAIN_REPORT_SETTINGS_KEY, JSON.stringify(value));
   } catch (_) {}
+  if (!options.skipSync) scheduleDropboxAutoSync();
 }
 
 function resetMainReportSettings() {
@@ -3639,27 +4030,6 @@ function resetMainReportSettings() {
   showMessage('Przywrócono domyślny raport główny.');
 }
 
-function availableCustomReportGroups() {
-  const ignored = new Set(['Komputerowe', 'Montaże', 'Antenowe', 'Monitoring', 'Usługi', 'Dom', 'Jedzenie']);
-  const groups = new Map();
-
-  for (const rule of tagRules || []) {
-    const name = String(rule.name || '').trim();
-    if (name && !ignored.has(name)) groups.set(name, rule.category || 'Reguła tagu');
-  }
-
-  for (const entry of allEntries || []) {
-    const group = String(resolveReportGroup(entry) || '').trim();
-    if (group && !ignored.has(group) && group !== (entry.category || '')) {
-      groups.set(group, entry.category || 'Wpis');
-    }
-  }
-
-  return Array.from(groups.entries())
-    .map(([name, source]) => ({ name, source }))
-    .sort((a, b) => a.name.localeCompare(b.name, 'pl'));
-}
-
 function summarizeGroup(entries, groupName) {
   return summarize(entries.filter(entry => resolveReportGroup(entry) === groupName));
 }
@@ -3667,8 +4037,6 @@ function summarizeGroup(entries, groupName) {
 function renderMainReportSettings() {
   if (!el.mainReportSettings) return;
   const settings = getMainReportSettings();
-  const groups = availableCustomReportGroups();
-  const selected = new Set(settings.customGroups);
   const selectedCategories = new Set(settings.categoryRows || []);
   const categories = getAllCategories();
 
@@ -3693,13 +4061,6 @@ function renderMainReportSettings() {
     </label>
   `).join('');
 
-  const groupsHtml = groups.length ? groups.map(group => `
-    <label class="report-option compact-report-option">
-      <input type="checkbox" data-report-group="${escapeHtml(group.name)}" ${selected.has(group.name) ? 'checked' : ''}>
-      <span><b>${escapeHtml(group.name)}</b><small>${escapeHtml(group.source)}</small></span>
-    </label>
-  `).join('') : '<div class="empty-state small-empty">Brak własnych grup. Dodaj regułę w bazie tagów albo dodaj wpis pasujący do reguły.</div>';
-
   el.mainReportSettings.innerHTML = `
     <div class="report-settings-block">
       <h3>Stałe podsumowania</h3>
@@ -3710,11 +4071,7 @@ function renderMainReportSettings() {
       <p class="muted-small">Tu wybierasz pełnoprawne kategorie, które mają mieć osobny kafelek w raporcie głównym.</p>
       <div class="report-option-grid">${categoryHtml}</div>
     </div>
-    <div class="report-settings-block">
-      <h3>Własne grupy/tagi w raporcie głównym</h3>
-      <p class="muted-small">Grupy/tagi są podgrupami opisów, np. Hotdog, Kia, Orlen. Kategoria dalej zostaje kategorią nadrzędną.</p>
-      <div class="report-option-grid">${groupsHtml}</div>
-    </div>
+    <p class="muted-small main-report-order-hint">Kolejność zmienisz na stronie Start: na telefonie przytrzymaj uchwyt ⠿ kafelka, a myszką możesz przytrzymać cały kafelek, po czym przeciągnij go w wybrane miejsce.</p>
   `;
 }
 
@@ -3733,14 +4090,7 @@ function handleMainReportSettingsChange(event) {
     if (input.checked) selectedCategories.add(category);
     else selectedCategories.delete(category);
     settings.categoryRows = Array.from(selectedCategories).sort((a, b) => a.localeCompare(b, 'pl'));
-  }
-
-  if (input.dataset.reportGroup) {
-    const group = input.dataset.reportGroup;
-    const selected = new Set(settings.customGroups);
-    if (input.checked) selected.add(group);
-    else selected.delete(group);
-    settings.customGroups = Array.from(selected).sort((a, b) => a.localeCompare(b, 'pl'));
+    settings.tileOrder = normalizeMainReportTileOrder(settings.tileOrder, settings.categoryRows);
   }
 
   saveMainReportSettings(settings);
@@ -3832,10 +4182,98 @@ function getWalletState() {
   return migrated || normalizeWalletState();
 }
 
-function saveWalletState(state) {
-  const normalized = normalizeWalletState({ ...state, updatedAt: new Date().toISOString() });
+function saveWalletState(state, options = {}) {
+  const normalized = normalizeWalletState({
+    ...state,
+    updatedAt: options.preserveTimestamp && state?.updatedAt ? state.updatedAt : new Date().toISOString()
+  });
   try { localStorage.setItem(WALLET_STATE_KEY, JSON.stringify(normalized)); } catch (_) {}
+  if (!options.skipSync) scheduleDropboxAutoSync();
   return normalized;
+}
+
+function getWalletYearSummaries() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(WALLET_YEAR_SUMMARIES_KEY) || '{}');
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function saveWalletYearSummaries(summaries) {
+  const safe = summaries && typeof summaries === 'object' && !Array.isArray(summaries) ? summaries : {};
+  try { localStorage.setItem(WALLET_YEAR_SUMMARIES_KEY, JSON.stringify(safe)); } catch (_) {}
+  return safe;
+}
+
+function importWalletYearSummaries(payload, replace = false) {
+  const incoming = payload?.walletYearSummaries || payload?.wallet_year_summaries;
+  if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming)) return;
+  const merged = replace ? {} : { ...getWalletYearSummaries() };
+  const replacementTime = replace ? new Date().toISOString() : '';
+  for (const [rawYear, rawSummary] of Object.entries(incoming)) {
+    const year = normalizeDataYear(rawYear);
+    if (!year || !rawSummary || typeof rawSummary !== 'object') continue;
+    const current = merged[year];
+    const incomingTime = Date.parse(rawSummary.updatedAt || '') || 0;
+    const currentTime = Date.parse(current?.updatedAt || '') || 0;
+    if (replace || !current || incomingTime >= currentTime) {
+      merged[year] = replace ? { ...rawSummary, updatedAt: replacementTime } : rawSummary;
+    }
+  }
+  saveWalletYearSummaries(merged);
+}
+
+function getCashEntriesFromDatabase() {
+  return new Promise((resolve, reject) => {
+    const index = txStore().index('paymentMethod');
+    const variants = ['gotówka', 'Gotówka', 'gotowka'];
+    const requests = variants.map(value => index.getAll(value));
+    const results = [];
+    let remaining = requests.length;
+    for (const request of requests) {
+      request.onsuccess = () => {
+        results.push(...(request.result || []));
+        remaining -= 1;
+        if (!remaining) {
+          const unique = new Map(results.map(entry => [Number(entry.id), entry]));
+          resolve(Array.from(unique.values()).filter(isCashPayment));
+        }
+      };
+      request.onerror = event => reject(event.target.error);
+    }
+  });
+}
+
+async function refreshWalletYearSummariesFromDatabase(years = null) {
+  const state = getWalletState();
+  const cachedYears = getCachedDataYears();
+  if (!cachedYears.size) return getWalletYearSummaries();
+  const currentSummaries = getWalletYearSummaries();
+  const requestedYears = years === null
+    ? new Set([
+        ...getDirtyDataYears(),
+        ...[...cachedYears].filter(year => !currentSummaries[year])
+      ])
+    : new Set(Array.from(years || []).map(normalizeDataYear).filter(Boolean));
+  const yearsToRefresh = new Set([...requestedYears].filter(year => cachedYears.has(year)));
+  if (!yearsToRefresh.size) return currentSummaries;
+  const cashEntries = (await getEntriesForYears(yearsToRefresh)).filter(isCashPayment);
+  const next = { ...currentSummaries };
+  const now = new Date().toISOString();
+  for (const year of yearsToRefresh) {
+    const entries = cashEntries.filter(entry => String(entry.entryDate || '').startsWith(`${year}-`) && walletEntryIsAfterBaseline(entry, state));
+    const summary = summarize(entries);
+    next[year] = {
+      cashIncome: summary.income,
+      cashExpense: summary.expense,
+      count: entries.length,
+      baselineAt: state.baselineAt,
+      updatedAt: now
+    };
+  }
+  return saveWalletYearSummaries(next);
 }
 
 function importWalletStateFromPayload(payload, replace = false) {
@@ -3865,33 +4303,65 @@ function importWalletStateFromPayload(payload, replace = false) {
   const current = getWalletState();
   const incomingTime = Date.parse(next.updatedAt || '') || 0;
   const currentTime = Date.parse(current.updatedAt || '') || 0;
-  if (replace || !current.configured || incomingTime >= currentTime) saveWalletState(next);
+  if (replace || !current.configured || incomingTime >= currentTime) {
+    saveWalletState(next, { skipSync: true, preserveTimestamp: !replace });
+  }
 }
 
 function importCustomCategoriesFromPayload(payload, replace = false) {
-  const incoming = payload?.customCategories || payload?.custom_categories || [];
-  if (!Array.isArray(incoming)) return;
-  const next = replace ? [] : [...customCategories];
-  const defaultKeys = new Set(CATEGORIES.map(categoryKey));
-  const seen = new Set(next.map(categoryKey));
-  for (const item of incoming) {
-    const name = sanitizeCategoryName(item);
-    const key = categoryKey(name);
-    if (name && key && !defaultKeys.has(key) && !seen.has(key)) {
-      next.push(name);
-      seen.add(key);
+  const incoming = Array.isArray(payload?.customCategories)
+    ? payload.customCategories
+    : Array.isArray(payload?.custom_categories)
+      ? payload.custom_categories
+      : null;
+  if (incoming) {
+    const incomingUpdatedAt = String(payload?.customCategoriesUpdatedAt || payload?.custom_categories_updated_at || '');
+    const currentUpdatedAt = getCustomCategoriesUpdatedAt();
+    const incomingIsAuthoritative = replace
+      || (parseDateTimeMs(incomingUpdatedAt) && parseDateTimeMs(incomingUpdatedAt) >= parseDateTimeMs(currentUpdatedAt));
+    const next = incomingIsAuthoritative ? [] : [...customCategories];
+    const defaultKeys = new Set(CATEGORIES.map(categoryKey));
+    const seen = new Set(next.map(categoryKey));
+    for (const item of incoming) {
+      const name = sanitizeCategoryName(item);
+      const key = categoryKey(name);
+      if (name && key && !defaultKeys.has(key) && !seen.has(key)) {
+        next.push(name);
+        seen.add(key);
+      }
+    }
+    if (incomingIsAuthoritative || !incomingUpdatedAt || !currentUpdatedAt) {
+      saveCustomCategories(next, {
+        skipSync: true,
+        preserveTimestamp: Boolean(incomingUpdatedAt) && !replace,
+        updatedAt: replace ? '' : incomingUpdatedAt
+      });
     }
   }
-  saveCustomCategories(next);
 
   const importedSettings = payload?.mainReportSettings || payload?.main_report_settings || null;
   if (importedSettings && typeof importedSettings === 'object') {
     const currentSettings = replace ? structuredClone(DEFAULT_MAIN_REPORT_SETTINGS) : getMainReportSettings();
-    const categoryRows = Array.isArray(importedSettings.categoryRows) ? importedSettings.categoryRows : [];
-    currentSettings.categoryRows = uniqueCategoryList([...(currentSettings.categoryRows || []), ...categoryRows])
-      .filter(category => isKnownCategory(category));
-    saveMainReportSettings(currentSettings);
+    const incomingTime = Date.parse(importedSettings.updatedAt || '') || 0;
+    const currentTime = Date.parse(currentSettings.updatedAt || '') || 0;
+    if (replace || incomingTime >= currentTime) {
+      const categoryRows = uniqueCategoryList(Array.isArray(importedSettings.categoryRows) ? importedSettings.categoryRows : [])
+        .filter(category => isKnownCategory(category));
+      const nextSettings = {
+        ...currentSettings,
+        rows: importedSettings.rows && typeof importedSettings.rows === 'object'
+          ? { ...DEFAULT_MAIN_REPORT_SETTINGS.rows, ...Object.fromEntries(Object.entries(importedSettings.rows).map(([key, value]) => [key, Boolean(value)])) }
+          : currentSettings.rows,
+        categoryRows,
+        tileOrder: normalizeMainReportTileOrder(importedSettings.tileOrder || importedSettings.order, categoryRows),
+        updatedAt: replace ? new Date().toISOString() : (importedSettings.updatedAt || currentSettings.updatedAt)
+      };
+      saveMainReportSettings(nextSettings, { skipSync: true, preserveTimestamp: !replace });
+    }
   }
+
+  const importedYears = payload?.dataYears || payload?.data_years || payload?.years || [];
+  if (Array.isArray(importedYears)) registerKnownDataYears(importedYears);
 
   refreshCategorySelects();
   renderCustomCategoriesList();
@@ -3911,14 +4381,10 @@ function walletEntryIsAfterBaseline(entry, state) {
 function summarizeWallet() {
   const state = getWalletState();
   const cashEntries = (allEntries || []).filter(entry => isCashPayment(entry) && walletEntryIsAfterBaseline(entry, state));
-  let cashIncome = 0;
-  let cashExpense = 0;
-
-  for (const entry of cashEntries) {
-    const amount = Number(entry.amount) || 0;
-    if (entry.entryType === 'przychód') cashIncome += amount;
-    else cashExpense += amount;
-  }
+  const summaries = Object.values(getWalletYearSummaries())
+    .filter(summary => summary && summary.baselineAt === state.baselineAt);
+  const cashIncome = summaries.reduce((sum, summary) => sum + (Number(summary.cashIncome) || 0), 0);
+  const cashExpense = summaries.reduce((sum, summary) => sum + (Number(summary.cashExpense) || 0), 0);
 
   const balance = state.initialBalance + cashIncome - cashExpense + state.adjustment;
   return { ...state, cashIncome, cashExpense, balance, entries: cashEntries };
@@ -4187,10 +4653,11 @@ function renderRecurringReport() {
   `).join('');
 }
 
-function mainReportRow(title, note, value, extraClass = '') {
+function mainReportRow(key, title, note, value, extraClass = '') {
   const amountClass = value >= 0 ? 'amount-income' : 'amount-expense';
   return `
-    <div class="category-row main-report-row ${extraClass}">
+    <div class="category-row main-report-row ${extraClass}" data-main-report-key="${escapeHtml(key)}">
+      <button class="main-report-drag-handle" type="button" aria-label="Zmień kolejność kafelka ${escapeHtml(title)}">⠿</button>
       <div>
         <b>${escapeHtml(title)}</b><br>
         <span>${escapeHtml(note)}</span>
@@ -4200,20 +4667,7 @@ function mainReportRow(title, note, value, extraClass = '') {
   `;
 }
 
-function hasActiveMainReportFilters() {
-  return Boolean(
-    el.searchQuery?.value ||
-    el.filterFrom?.value ||
-    el.filterTo?.value ||
-    el.filterType?.value ||
-    el.filterScope?.value ||
-    el.filterCategory?.value ||
-    el.filterPayment?.value
-  );
-}
-
 function getMainReportEntries() {
-  if (hasActiveMainReportFilters()) return filteredEntries;
   const currentMonth = monthKey(todayISO());
   return allEntries.filter(entry => monthKey(entry.entryDate) === currentMonth);
 }
@@ -4234,10 +4688,11 @@ function renderMainReport() {
 
   const settings = getMainReportSettings();
   const report = summarizeMainReport(reportEntries);
-  const rows = [];
+  const rows = new Map();
 
   if (settings.rows.computers) {
-    rows.push(mainReportRow(
+    rows.set('row:computers', mainReportRow(
+      'row:computers',
       'Komputerowe',
       `Przychody ${formatMoney(report.computers.income)} · koszty ${formatMoney(report.computers.expense)}`,
       report.computers.balance
@@ -4245,7 +4700,8 @@ function renderMainReport() {
   }
 
   if (settings.rows.installations) {
-    rows.push(mainReportRow(
+    rows.set('row:installations', mainReportRow(
+      'row:installations',
       'Montaże',
       `Przychody ${formatMoney(report.installations.income)} · koszty ${formatMoney(report.installations.expense)} · obejmuje: Montaże, Antenowe, Monitoring, Usługi`,
       report.installations.balance
@@ -4253,7 +4709,8 @@ function renderMainReport() {
   }
 
   if (settings.rows.homeExpense) {
-    rows.push(mainReportRow(
+    rows.set('row:homeExpense', mainReportRow(
+      'row:homeExpense',
       'Wydatki domowe',
       'Nie są odejmowane od wyniku firmy.',
       -report.homeExpense,
@@ -4262,7 +4719,8 @@ function renderMainReport() {
   }
 
   if (settings.rows.companyResult) {
-    rows.push(mainReportRow(
+    rows.set('row:companyResult', mainReportRow(
+      'row:companyResult',
       'Wynik firmy / wypłata',
       `Przychody firmowe ${formatMoney(report.company.income)} - koszty firmowe ${formatMoney(report.company.expense)}. Wydatki domowe pominięte.`,
       report.company.balance,
@@ -4273,7 +4731,9 @@ function renderMainReport() {
   for (const categoryName of settings.categoryRows || []) {
     const categorySummary = summarize(reportEntries.filter(entry => entry.category === categoryName));
     if (!categorySummary.income && !categorySummary.expense) continue;
-    rows.push(mainReportRow(
+    const key = mainReportCategoryKey(categoryName);
+    rows.set(key, mainReportRow(
+      key,
       categoryName,
       `Kategoria · przychody ${formatMoney(categorySummary.income)} · koszty ${formatMoney(categorySummary.expense)}`,
       categorySummary.balance,
@@ -4281,20 +4741,93 @@ function renderMainReport() {
     ));
   }
 
-  for (const groupName of settings.customGroups || []) {
-    const groupSummary = summarizeGroup(reportEntries, groupName);
-    if (!groupSummary.income && !groupSummary.expense) continue;
-    rows.push(mainReportRow(
-      groupName,
-      `Własna grupa/tag · przychody ${formatMoney(groupSummary.income)} · koszty ${formatMoney(groupSummary.expense)}`,
-      groupSummary.balance,
-      'custom-report-row'
-    ));
+  const orderedRows = normalizeMainReportTileOrder(settings.tileOrder, settings.categoryRows)
+    .map(key => rows.get(key))
+    .filter(Boolean);
+
+  el.mainReport.innerHTML = orderedRows.length
+    ? orderedRows.join('')
+    : '<div class="empty-state">Wszystkie kafelki raportu głównego są ukryte. Zmień to w Ustawieniach.</div>';
+}
+
+function saveVisibleMainReportOrder() {
+  const visibleKeys = Array.from(el.mainReport?.querySelectorAll('[data-main-report-key]') || [])
+    .map(node => node.dataset.mainReportKey)
+    .filter(Boolean);
+  if (!visibleKeys.length) return;
+
+  const settings = getMainReportSettings();
+  const visibleSet = new Set(visibleKeys);
+  let visibleIndex = 0;
+  const merged = settings.tileOrder.map(key => visibleSet.has(key) ? visibleKeys[visibleIndex++] : key);
+  while (visibleIndex < visibleKeys.length) merged.push(visibleKeys[visibleIndex++]);
+  settings.tileOrder = normalizeMainReportTileOrder(merged, settings.categoryRows);
+  saveMainReportSettings(settings);
+}
+
+function clearMainReportReorderState() {
+  if (mainReportReorderState?.timer) window.clearTimeout(mainReportReorderState.timer);
+  mainReportReorderState?.source?.classList.remove('main-report-row-dragging', 'main-report-row-armed');
+  document.body.classList.remove('main-report-reordering');
+  mainReportReorderState = null;
+}
+
+function handleMainReportPointerDown(event) {
+  const handle = event.target.closest('.main-report-drag-handle');
+  if (event.pointerType !== 'mouse' && !handle) return;
+  const source = (handle || event.target).closest('[data-main-report-key]');
+  if (!source || (event.pointerType === 'mouse' && event.button !== 0)) return;
+  clearMainReportReorderState();
+  const state = {
+    pointerId: event.pointerId,
+    source,
+    startX: event.clientX,
+    startY: event.clientY,
+    active: false,
+    timer: 0
+  };
+  source.classList.add('main-report-row-armed');
+  state.timer = window.setTimeout(() => {
+    if (mainReportReorderState !== state) return;
+    state.active = true;
+    source.classList.remove('main-report-row-armed');
+    source.classList.add('main-report-row-dragging');
+    document.body.classList.add('main-report-reordering');
+    try { source.setPointerCapture(state.pointerId); } catch (_) {}
+    if (navigator.vibrate) navigator.vibrate(20);
+  }, 450);
+  mainReportReorderState = state;
+}
+
+function handleMainReportPointerMove(event) {
+  const state = mainReportReorderState;
+  if (!state || event.pointerId !== state.pointerId) return;
+  if (!state.active) {
+    if (Math.hypot(event.clientX - state.startX, event.clientY - state.startY) > 10) clearMainReportReorderState();
+    return;
   }
 
-  el.mainReport.innerHTML = rows.length
-    ? rows.join('')
-    : '<div class="empty-state">Wszystkie kafelki raportu głównego są ukryte. Zmień to w Ustawieniach.</div>';
+  event.preventDefault();
+  const target = document.elementFromPoint(event.clientX, event.clientY)?.closest?.('[data-main-report-key]');
+  if (!target || target === state.source || target.parentElement !== state.source.parentElement) return;
+  const targetRect = target.getBoundingClientRect();
+  const insertAfter = event.clientY > targetRect.top + targetRect.height / 2;
+  target.parentElement.insertBefore(state.source, insertAfter ? target.nextSibling : target);
+}
+
+function handleMainReportPointerEnd(event) {
+  const state = mainReportReorderState;
+  if (!state || event.pointerId !== state.pointerId) return;
+  const wasActive = state.active;
+  if (wasActive) {
+    event.preventDefault();
+    saveVisibleMainReportOrder();
+  }
+  clearMainReportReorderState();
+  if (wasActive) {
+    renderMainReport();
+    showMessage('Zapisano nową kolejność kafelków raportu głównego.');
+  }
 }
 
 function renderSummary() {
@@ -4303,7 +4836,7 @@ function renderSummary() {
 
   const todaySummary = summarize(allEntries.filter(entry => entry.entryDate === today));
   const monthSummary = summarize(allEntries.filter(entry => monthKey(entry.entryDate) === currentMonth));
-  const totalSummary = summarize(allEntries);
+  const payoutSummary = summarize(allEntries.filter(entry => monthKey(entry.entryDate) === currentMonth && isFirmEntry(entry)));
 
   el.todayBalance.textContent = formatMoney(todaySummary.balance);
   el.todayDetails.textContent = `Przychody ${formatMoney(todaySummary.income)} · Wydatki ${formatMoney(todaySummary.expense)}`;
@@ -4311,8 +4844,8 @@ function renderSummary() {
   el.monthBalance.textContent = formatMoney(monthSummary.balance);
   el.monthDetails.textContent = `Przychody ${formatMoney(monthSummary.income)} · Wydatki ${formatMoney(monthSummary.expense)}`;
 
-  el.allBalance.textContent = formatMoney(totalSummary.balance);
-  el.allDetails.textContent = `Przychody ${formatMoney(totalSummary.income)} · Wydatki ${formatMoney(totalSummary.expense)}`;
+  el.allBalance.textContent = formatMoney(payoutSummary.balance);
+  el.allDetails.textContent = `Bieżący miesiąc · przychody firmowe ${formatMoney(payoutSummary.income)} · koszty firmowe ${formatMoney(payoutSummary.expense)}`;
 }
 
 const CALENDAR_MONTHS_PL = [
@@ -4335,10 +4868,39 @@ function buildMonthKey(year, monthIndex) {
   return `${fixedYear}-${fixedMonth}`;
 }
 
-function shiftCalendarMonth(offset) {
+async function ensureDataYearAvailable(year, context = 'dane') {
+  const normalizedYear = normalizeDataYear(year);
+  if (!normalizedYear) return false;
+  if (getCachedDataYears().has(normalizedYear)) return true;
+
+  if (getStorageMode() !== 'dropbox') {
+    markDataYearsCached([normalizedYear]);
+    return true;
+  }
+
+  if (hasDropboxConnection() && isNetworkAvailable()) {
+    await downloadDropboxYear(normalizedYear, { silent: true });
+    if (getCachedDataYears().has(normalizedYear)) return true;
+    showMessage(`W Dropboxie nie znaleziono danych dla roku ${normalizedYear}. ${context} pozostaje bez zmian.`, 'error');
+    return false;
+  }
+
+  showMessage(`Rok ${normalizedYear} nie jest zapisany na tym urządzeniu. Połącz internet, aby otworzyć ${context}.`, 'error');
+  return false;
+}
+
+async function shiftCalendarMonth(offset) {
   const { year, monthIndex } = splitMonthKey(calendarMonth);
-  calendarMonth = buildMonthKey(year, monthIndex + offset);
+  const previousMonth = calendarMonth;
+  const nextMonth = buildMonthKey(year, monthIndex + offset);
+  calendarMonth = nextMonth;
+  const ready = await ensureDataYearAvailable(nextMonth.slice(0, 4), 'kalendarz');
+  if (!ready) {
+    calendarMonth = previousMonth;
+    return;
+  }
   selectedCalendarDate = '';
+  await reloadEntries();
   renderCalendar();
 }
 
@@ -4589,19 +5151,35 @@ function renderYearTopDays(activityByDate) {
   `;
 }
 
-function shiftCalendarYear(offset) {
-  calendarYear = (Number(calendarYear) || Number(todayISO().slice(0, 4))) + offset;
+async function shiftCalendarYear(offset) {
+  const previousYear = calendarYear;
+  const nextYear = (Number(calendarYear) || Number(todayISO().slice(0, 4))) + offset;
+  calendarYear = nextYear;
+  const ready = await ensureDataYearAvailable(nextYear, 'kalendarz roczny');
+  if (!ready) {
+    calendarYear = previousYear;
+    return;
+  }
   selectedCalendarDate = '';
+  await reloadEntries();
   renderYearCalendar();
 }
 
-function selectCalendarDate(dateISO) {
+async function selectCalendarDate(dateISO) {
+  const year = normalizeDataYear(String(dateISO || '').slice(0, 4));
+  if (!await ensureDataYearAvailable(year, 'wybrany dzień')) return;
+  const selectedYears = getSelectedHistoryYears();
+  if (!selectedYears.has(year)) {
+    selectedYears.add(year);
+    saveSelectedHistoryYears(selectedYears);
+    renderHistoryYearFilters();
+  }
   selectedCalendarDate = dateISO;
   calendarMonth = dateISO.slice(0, 7);
   calendarYear = Number(dateISO.slice(0, 4));
   el.filterFrom.value = dateISO;
   el.filterTo.value = dateISO;
-  applyFilters();
+  await reloadEntries();
   showMessage(`Pokazuję wpisy z dnia ${dateISO}.`);
 }
 
@@ -4613,11 +5191,13 @@ function getCurrentFilters() {
     type: el.filterType.value,
     scope: el.filterScope.value,
     category: el.filterCategory.value,
-    payment: el.filterPayment.value
+    payment: el.filterPayment.value,
+    years: getSelectedHistoryYears()
   };
 }
 
 function entryMatchesFilters(entry, filters) {
+  if (filters.years?.size && !filters.years.has(String(entry.entryDate || '').slice(0, 4))) return false;
   if (filters.from && entry.entryDate < filters.from) return false;
   if (filters.to && entry.entryDate > filters.to) return false;
   if (filters.type && entry.entryType !== filters.type) return false;
@@ -4642,6 +5222,64 @@ function entryMatchesFilters(entry, filters) {
   }
 
   return true;
+}
+
+function renderHistoryYearFilters() {
+  if (!el.historyYearFilters) return;
+  const selected = getSelectedHistoryYears();
+  const years = Array.from(new Set([
+    ...availableDataYears,
+    ...getKnownDataYears(),
+    ...selected,
+    todayISO().slice(0, 4)
+  ])).filter(normalizeDataYear).sort((a, b) => b.localeCompare(a));
+
+  el.historyYearFilters.innerHTML = years.map(year => `
+    <label class="history-year-option">
+      <input type="checkbox" value="${year}" ${selected.has(year) ? 'checked' : ''}>
+      <span>${year}</span>
+    </label>
+  `).join('');
+}
+
+async function refreshAvailableDataYears() {
+  let hasKnownYearsMetadata = false;
+  try { hasKnownYearsMetadata = Boolean(localStorage.getItem(KNOWN_DATA_YEARS_KEY)); } catch (_) {}
+  if (hasKnownYearsMetadata && localStorage.getItem(ENTRY_SYNC_BACKFILL_KEY) === '1') {
+    availableDataYears = getKnownDataYears();
+    renderHistoryYearFilters();
+    return;
+  }
+  const indexedYears = await getAvailableEntryYears();
+  registerKnownDataYears(indexedYears);
+  markDataYearsCached(indexedYears);
+  if (getStorageMode() !== 'dropbox') markDataYearsCached([todayISO().slice(0, 4)]);
+  renderHistoryYearFilters();
+}
+
+async function handleHistoryYearFiltersChange() {
+  const checked = Array.from(el.historyYearFilters?.querySelectorAll('input[type="checkbox"]:checked') || [])
+    .map(input => normalizeDataYear(input.value))
+    .filter(Boolean);
+
+  if (!checked.length) {
+    const currentYear = todayISO().slice(0, 4);
+    const currentInput = el.historyYearFilters?.querySelector(`input[value="${currentYear}"]`);
+    if (currentInput) currentInput.checked = true;
+    checked.push(currentYear);
+    showMessage('Historia musi obejmować przynajmniej jeden rok. Pozostawiono rok bieżący.');
+  }
+
+  saveSelectedHistoryYears(checked);
+
+  const missingYears = checked.filter(year => !getCachedDataYears().has(year));
+  if (getStorageMode() === 'dropbox' && hasDropboxConnection() && isNetworkAvailable()) {
+    for (const year of checked) await syncDropboxYearFile(year);
+  } else if (missingYears.length) {
+    showMessage(`Lata ${missingYears.join(', ')} nie są zapisane na tym urządzeniu. Połącz internet, aby je dołączyć.`, 'error');
+  }
+
+  await reloadEntries();
 }
 
 function applyFilters(options = {}) {
@@ -4672,14 +5310,40 @@ function applyFilters(options = {}) {
   }
 }
 
+function getSelectedReportMonth() {
+  const value = String(el.reportMonth?.value || reportMonth || todayISO().slice(0, 7));
+  return /^\d{4}-\d{2}$/.test(value) ? value : todayISO().slice(0, 7);
+}
+
+function getSelectedReportEntries() {
+  const selectedMonth = getSelectedReportMonth();
+  return allEntries.filter(entry => monthKey(entry.entryDate) === selectedMonth);
+}
+
+async function handleReportMonthChange() {
+  const previousMonth = reportMonth;
+  const nextMonth = getSelectedReportMonth();
+  reportMonth = nextMonth;
+  const year = normalizeDataYear(nextMonth.slice(0, 4));
+  if (year && !await ensureDataYearAvailable(year, 'raport')) {
+    reportMonth = previousMonth;
+    if (el.reportMonth) el.reportMonth.value = previousMonth;
+    return;
+  }
+  await reloadEntries();
+  renderCategoryReport();
+  renderItemReport();
+}
+
 function renderCategoryReport() {
-  if (!filteredEntries.length) {
+  const entries = getSelectedReportEntries();
+  if (!entries.length) {
     el.categoryReport.innerHTML = '<div class="empty-state">Brak danych do raportu.</div>';
     return;
   }
 
   const rows = new Map();
-  filteredEntries.forEach(entry => {
+  entries.forEach(entry => {
     if (!rows.has(entry.category)) {
       rows.set(entry.category, { category: entry.category, income: 0, expense: 0 });
     }
@@ -4707,14 +5371,15 @@ function renderCategoryReport() {
 
 function renderItemReport() {
   if (!el.itemReport) return;
+  const entries = getSelectedReportEntries();
 
-  if (!filteredEntries.length) {
+  if (!entries.length) {
     el.itemReport.innerHTML = '<div class="empty-state">Brak danych do grupowania.</div>';
     return;
   }
 
   const rows = new Map();
-  filteredEntries.forEach(entry => {
+  entries.forEach(entry => {
     const group = resolveReportGroup(entry);
     if (!rows.has(group)) {
       rows.set(group, { group, count: 0, income: 0, expense: 0, category: entry.category || 'Inne' });
@@ -4788,10 +5453,12 @@ async function handleTagRuleSubmit(event) {
     aliases: el.tagAliases.value,
     category: el.tagRuleCategory.value,
     entryType: el.tagRuleType.value,
-    system: existing?.system ?? false
+    system: existing?.system ?? false,
+    updatedAt: new Date().toISOString()
   };
 
   await saveTagRule(rule);
+  touchRuleSection('tag', rule.updatedAt);
   el.tagRuleForm.reset();
   delete el.tagRuleForm.dataset.editingId;
   el.tagRuleCategory.value = 'Inne';
@@ -4799,6 +5466,7 @@ async function handleTagRuleSubmit(event) {
   await reloadTagRules();
   renderMainReportSettings();
   applyFilters();
+  scheduleDropboxAutoSync();
   showMessage('Reguła tagów zapisana.');
 }
 
@@ -4807,9 +5475,11 @@ async function handleTagRuleDelete(id) {
   if (!rule) return;
   if (!window.confirm(`Usunąć regułę: ${rule.name}? Wpisy nie zostaną usunięte.`)) return;
   await deleteTagRule(id);
+  touchRuleSection('tag');
   await reloadTagRules();
   renderMainReportSettings();
   applyFilters();
+  scheduleDropboxAutoSync();
   showMessage('Reguła tagów usunięta.');
 }
 
@@ -4951,7 +5621,11 @@ async function handleFormSubmit(event) {
       learningSourceText: previousEntry.originalText || previousEntry.description || entry.originalText || entry.description || ''
     } : entry;
     const learned = previousEntry ? await learnFromParsedEntries([correctionCandidate]) : 0;
+    if (previousEntry && String(previousEntry.entryDate || '').slice(0, 4) !== String(entry.entryDate || '').slice(0, 4)) {
+      rememberDeletedEntry(previousEntry);
+    }
     await saveEntry(entry);
+    renderHistoryYearFilters();
     showMessage(`Zmiany zapisane${learned ? ' i zaktualizowano naukę' : ''}.`);
     resetForm();
     await reloadEntries();
@@ -4973,6 +5647,22 @@ function entrySignature(entry) {
     normalizeText(entry.description || ''),
     normalizeText(entry.originalText || '')
   ].join('|');
+}
+
+function entryVersionTieBreaker(entry) {
+  return [
+    String(entry?.sourceDeviceId || ''),
+    entrySignature(entry || {}),
+    normalizeTags(Array.isArray(entry?.tags) ? entry.tags.join(',') : entry?.tags || '').map(normalizeText).sort().join(','),
+    normalizeText(entry?.reportGroup || '')
+  ].join('|');
+}
+
+function isIncomingEntryNewer(incoming, current) {
+  const incomingTime = Date.parse(incoming?.updatedAt || incoming?.createdAt || '') || 0;
+  const currentTime = Date.parse(current?.updatedAt || current?.createdAt || '') || 0;
+  if (incomingTime !== currentTime) return incomingTime > currentTime;
+  return entryVersionTieBreaker(incoming).localeCompare(entryVersionTieBreaker(current), 'pl') > 0;
 }
 
 function pickImportedField(item, names, fallback = '') {
@@ -5085,7 +5775,7 @@ function collectImportedEntries(payload) {
     }
   }
 
-  const ignoredKeys = new Set(['tagRules', 'learningRules', 'deletedEntries', 'walletState', 'walletMonths', 'customCategories', 'mainReportSettings', 'inventoryItems', 'inventory', 'inventoryMovements', 'inventoryAnalysis', 'inventoryPending']);
+  const ignoredKeys = new Set(['tagRules', 'learningRules', 'deletedEntries', 'orphanEntryTombstones', 'walletState', 'walletMonths', 'walletYearSummaries', 'customCategories', 'mainReportSettings', 'inventoryItems', 'inventory', 'inventoryMovements', 'inventoryAnalysis', 'inventoryPending', 'knownYears', 'dataYears', 'migration', 'summary']);
   for (const [key, value] of Object.entries(payload)) {
     if (ignoredKeys.has(key)) continue;
     if (Array.isArray(value)) {
@@ -5153,9 +5843,30 @@ function normalizeImportedEntry(item, now = new Date().toISOString()) {
 }
 
 async function ensureEntrySyncIds() {
+  try {
+    if (localStorage.getItem(ENTRY_SYNC_BACKFILL_KEY) === '1') return;
+  } catch (_) {}
   const entries = await getAllEntries();
+  const entryYears = entries
+    .map(entry => normalizeDataYear(String(entry?.entryDate || '').slice(0, 4)))
+    .filter(Boolean);
+  registerKnownDataYears(entryYears);
+  markDataYearsCached(entryYears);
+  // Po odpięciu archiwalnych lat ich kategorie nie występują już w allEntries.
+  // Zachowujemy je raz jako kategorie własne, aby nadal można je było wybrać
+  // w ustawieniach raportu głównego bez ponownego podpinania całego archiwum.
+  const defaultCategoryKeys = new Set(CATEGORIES.map(categoryKey));
+  const customCategoryKeys = new Set(customCategories.map(categoryKey));
+  const historicalCategories = uniqueCategoryList(entries.map(entry => sanitizeCategoryName(entry?.category)))
+    .filter(category => category && !defaultCategoryKeys.has(categoryKey(category)));
+  if (historicalCategories.some(category => !customCategoryKeys.has(categoryKey(category)))) {
+    saveCustomCategories([...customCategories, ...historicalCategories], { skipSync: true });
+  }
   const missing = entries.filter(entry => !entry.syncId || !entry.sourceDeviceId);
-  if (!missing.length) return;
+  if (!missing.length) {
+    try { localStorage.setItem(ENTRY_SYNC_BACKFILL_KEY, '1'); } catch (_) {}
+    return;
+  }
   for (const entry of missing) {
     await saveEntry({
       ...entry,
@@ -5164,6 +5875,7 @@ async function ensureEntrySyncIds() {
       updatedAt: entry.updatedAt || new Date().toISOString()
     });
   }
+  try { localStorage.setItem(ENTRY_SYNC_BACKFILL_KEY, '1'); } catch (_) {}
 }
 
 
@@ -5390,72 +6102,12 @@ async function handleDropboxOAuthReturn() {
   return true;
 }
 
-function chooseDropboxInitialSyncAction() {
-  const answer = window.prompt([
-    'Dropbox jest połączony. Wykryto lokalne wpisy oraz istniejący plik danych w Dropbox.',
-    '',
-    'Wpisz numer operacji:',
-    '1 — Scal dane lokalne z Dropbox (zalecane)',
-    '2 — Zastąp Dropbox danymi lokalnymi',
-    '3 — Pobierz dane z Dropbox i zastąp lokalne',
-    '',
-    'Domyślnie zostanie wykonane scalenie.'
-  ].join('\n'), '1');
-
-  const choice = String(answer ?? '1').trim();
-  if (choice === '2') return 'upload-local';
-  if (choice === '3') return 'download-remote';
-  return 'merge';
-}
-
 async function handleDropboxInitialSync() {
-  const localEntries = await getAllEntries();
-  updateCloudUi('Dropbox połączony. Sprawdzam dane w chmurze...');
-  const remotePayload = await dropboxDownloadPayload();
-
-  if (localEntries.length && remotePayload) {
-    const action = chooseDropboxInitialSyncAction();
-
-    if (action === 'upload-local') {
-      updateCloudUi('Zastępuję plik w Dropbox aktualną lokalną bazą...');
-      await uploadLocalStateToDropbox('Dropbox połączony. Plik w chmurze został zastąpiony lokalną bazą.');
-      return;
-    }
-
-    if (action === 'download-remote') {
-      updateCloudUi('Zastępuję lokalną bazę danymi z Dropbox...');
-      await importPayload(remotePayload, { replace: true, silent: true, confirmReplace: false });
-      await dropboxUploadPayload(makeExportPayload());
-      const message = 'Dropbox połączony. Lokalna baza została zastąpiona danymi z chmury.';
-      updateCloudUi(message);
-      return;
-    }
-
-    updateCloudUi('Scalam lokalne dane z plikiem w Dropbox...');
-    await importPayload(remotePayload, { replace: false, silent: true });
-    await dropboxUploadPayload(makeExportPayload());
-    const message = 'Dropbox połączony. Dane lokalne i dane z chmury zostały scalone.';
-    updateCloudUi(message);
-    return;
-  }
-
-  if (localEntries.length) {
-    updateCloudUi('Dropbox połączony. Nie znaleziono pliku w chmurze, więc zapisuję lokalną bazę jako pierwszy plik Dropbox...');
-    await uploadLocalStateToDropbox('Dropbox połączony. Lokalna baza została zapisana jako pierwszy plik w Dropbox.');
-    return;
-  }
-
-  if (remotePayload) {
-    updateCloudUi('Dropbox połączony. Pobieram dane z chmury...');
-    await importPayload(remotePayload, { replace: true, silent: true, confirmReplace: false });
-    await dropboxUploadPayload(makeExportPayload());
-    const message = 'Dropbox połączony. Pobrano dane z chmury.';
-    updateCloudUi(message);
-    return;
-  }
-
-  await dropboxUploadPayload(makeExportPayload());
-  const message = 'Dropbox połączony. Utworzono pusty plik danych w chmurze.';
+  updateCloudUi('Dropbox połączony. Sprawdzam ustawienia, magazyn i roczne pliki danych...');
+  const result = await syncDropboxStructuredData({ allLocalYears: true });
+  await refreshAvailableDataYears();
+  await reloadEntries();
+  const message = `Dropbox połączony. Zsynchronizowano pliki roczne: ${result.years.join(', ') || todayISO().slice(0, 4)}.`;
   updateCloudUi(message);
 }
 
@@ -5482,64 +6134,376 @@ async function getDropboxAccessToken() {
   return saveDropboxTokenData({ ...tokenData, refresh_token: token.refresh_token }).access_token;
 }
 
-function makeExportPayload() {
+function normalizeEntriesForExport(entries) {
+  return (entries || []).map(entry => ({
+    ...entry,
+    syncId: entry.syncId || makeSyncId('entry'),
+    sourceDeviceId: entry.sourceDeviceId || getDeviceId()
+  }));
+}
+
+function makeExportPayload(entries = allEntries) {
   return {
     app: 'Portfel PRO',
     version: APP_VERSION,
     exportedAt: new Date().toISOString(),
     deviceId: getDeviceId(),
-    syncMode: 'dropbox-merge-safe-v2',
+    syncMode: 'dropbox-yearly-v1-portable-backup',
+    completeBackup: true,
+    dataYears: Array.from(getKnownDataYears()).sort(),
     tagRules,
+    tagRulesUpdatedAt: getRuleSectionUpdatedAt('tag'),
     learningRules,
+    learningRulesUpdatedAt: getRuleSectionUpdatedAt('learning'),
     deletedEntries: getDeletedEntries(),
     walletState: getWalletState(),
+    walletYearSummaries: getWalletYearSummaries(),
     customCategories,
+    customCategoriesUpdatedAt: getCustomCategoriesUpdatedAt(),
     mainReportSettings: getMainReportSettings(),
+    theme: getSavedTheme(),
+    themeUpdatedAt: getThemeUpdatedAt(),
     inventoryItems: getInventoryItems(),
     inventory: getInventoryItems(),
     inventoryMovements: getInventoryMovements(),
+    inventoryMovementTombstones: getInventoryMovementTombstones(),
     inventoryAnalysis: getInventoryAnalysis(),
     inventoryPending: getInventoryPending(),
     aiSettings: getAiSettingsForExport(),
-    entries: allEntries.map(entry => ({
-      ...entry,
-      syncId: entry.syncId || makeSyncId('entry'),
-      sourceDeviceId: entry.sourceDeviceId || getDeviceId()
-    }))
+    entries: normalizeEntriesForExport(entries)
   };
 }
 
-async function dropboxDownloadPayload() {
+function makeSettingsPayload(migration = null) {
+  const savedMigration = migration || safeJsonParseLocalStorage(DROPBOX_YEARLY_MIGRATION_KEY, null);
+  return {
+    app: 'Portfel PRO',
+    version: APP_VERSION,
+    schema: 'portfel-pro-settings-v1',
+    updatedAt: new Date().toISOString(),
+    knownYears: Array.from(getKnownDataYears()).sort(),
+    tagRules,
+    tagRulesUpdatedAt: getRuleSectionUpdatedAt('tag'),
+    learningRules,
+    learningRulesUpdatedAt: getRuleSectionUpdatedAt('learning'),
+    orphanEntryTombstones: getDeletedEntries().filter(item => !item.entryYear),
+    walletState: getWalletState(),
+    walletYearSummaries: getWalletYearSummaries(),
+    customCategories,
+    customCategoriesUpdatedAt: getCustomCategoriesUpdatedAt(),
+    mainReportSettings: getMainReportSettings(),
+    theme: getSavedTheme(),
+    themeUpdatedAt: getThemeUpdatedAt(),
+    aiSettings: getAiSettingsForExport(),
+    migration: savedMigration
+  };
+}
+
+function makeInventoryPayload() {
+  let updatedAt = getInventoryUpdatedAt();
+  if (!updatedAt) updatedAt = touchInventoryState();
+  return {
+    app: 'Portfel PRO',
+    version: APP_VERSION,
+    schema: 'portfel-pro-inventory-v1',
+    updatedAt,
+    sourceDeviceId: getInventorySourceDeviceId() || getDeviceId(),
+    inventoryItems: getInventoryItems(),
+    inventoryMovements: getInventoryMovements(),
+    inventoryMovementTombstones: getInventoryMovementTombstones(),
+    inventoryAnalysis: getInventoryAnalysis(),
+    inventoryPending: getInventoryPending()
+  };
+}
+
+async function makeYearPayload(year) {
+  const normalizedYear = normalizeDataYear(year);
+  if (!normalizedYear) throw new Error('Niepoprawny rok pliku danych.');
+  const entries = await getEntriesForYear(normalizedYear);
+  const totals = summarize(entries);
+  const wallet = getWalletYearSummaries()[normalizedYear] || { cashIncome: 0, cashExpense: 0, count: 0 };
+  return {
+    app: 'Portfel PRO',
+    version: APP_VERSION,
+    schema: DROPBOX_YEARLY_SCHEMA,
+    year: normalizedYear,
+    updatedAt: new Date().toISOString(),
+    entries: normalizeEntriesForExport(entries),
+    deletedEntries: getDeletedEntries().filter(item => item.entryYear === normalizedYear),
+    summary: {
+      count: entries.length,
+      income: totals.income,
+      expense: totals.expense,
+      cashIncome: Number(wallet.cashIncome) || 0,
+      cashExpense: Number(wallet.cashExpense) || 0
+    }
+  };
+}
+
+function normalizeDropboxPath(path) {
+  const value = String(path || '').trim().replace(/\\/g, '/');
+  if (!value || value === '/') return '';
+  return `/${value.replace(/^\/+|\/+$/g, '')}`;
+}
+
+function getDropboxDataDirectory() {
+  const configuredPath = normalizeDropboxPath(getDropboxConfig().path);
+  if (!configuredPath) return '';
+  if (!/\.json$/i.test(configuredPath)) return configuredPath;
+  const slash = configuredPath.lastIndexOf('/');
+  return slash > 0 ? configuredPath.slice(0, slash) : '';
+}
+
+function getLegacyDropboxPath() {
+  const configuredPath = normalizeDropboxPath(getDropboxConfig().path);
+  if (/\.json$/i.test(configuredPath)) return configuredPath;
+  return `${configuredPath}/bilans_dane.json` || '/bilans_dane.json';
+}
+
+function getStructuredDropboxPath(fileName) {
+  return `${getDropboxDataDirectory()}/${fileName}` || `/${fileName}`;
+}
+
+function getDropboxYearPath(year) {
+  return getStructuredDropboxPath(`${DROPBOX_YEAR_FILE_PREFIX}${normalizeDataYear(year)}.json`);
+}
+
+async function dropboxDownloadJson(path) {
   if (!isNetworkAvailable()) throw new Error('Brak internetu. Dane pozostają zapisane lokalnie.');
   const accessToken = await getDropboxAccessToken();
-  const { path } = getDropboxConfig();
+  const normalizedPath = normalizeDropboxPath(path);
   const response = await fetch('https://content.dropboxapi.com/2/files/download', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
-      'Dropbox-API-Arg': JSON.stringify({ path })
+      'Dropbox-API-Arg': JSON.stringify({ path: normalizedPath })
     }
   });
   if (response.status === 409) return null;
   if (!response.ok) throw new Error(`Nie udało się pobrać pliku z Dropbox. Kod HTTP: ${response.status}.`);
+  let metadata = {};
+  try { metadata = JSON.parse(response.headers.get('Dropbox-API-Result') || '{}'); } catch (_) {}
+  return { payload: await response.json(), rev: metadata.rev || '', metadata, path: normalizedPath };
+}
+
+async function dropboxGetMetadata(path) {
+  if (!isNetworkAvailable()) throw new Error('Brak internetu. Dane pozostają zapisane lokalnie.');
+  const accessToken = await getDropboxAccessToken();
+  const normalizedPath = normalizeDropboxPath(path);
+  const response = await fetch('https://api.dropboxapi.com/2/files/get_metadata', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ path: normalizedPath, include_deleted: false })
+  });
+  if (response.status === 409) return null;
+  if (!response.ok) throw new Error(`Nie udało się sprawdzić pliku w Dropbox. Kod HTTP: ${response.status}.`);
   return response.json();
 }
 
-async function dropboxUploadPayload(payload) {
+async function dropboxUploadJson(path, payload, options = {}) {
   if (!isNetworkAvailable()) throw new Error('Brak internetu. Dane pozostają zapisane lokalnie.');
   const accessToken = await getDropboxAccessToken();
-  const { path } = getDropboxConfig();
+  const normalizedPath = normalizeDropboxPath(path);
+  const mode = options.overwrite
+    ? { '.tag': 'overwrite' }
+    : options.rev
+      ? { '.tag': 'update', update: options.rev }
+      : { '.tag': 'add' };
   const response = await fetch('https://content.dropboxapi.com/2/files/upload', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/octet-stream',
-      'Dropbox-API-Arg': JSON.stringify({ path, mode: { '.tag': 'overwrite' }, autorename: false, mute: true, strict_conflict: false })
+      'Dropbox-API-Arg': JSON.stringify({ path: normalizedPath, mode, autorename: false, mute: true, strict_conflict: !options.overwrite })
     },
     body: JSON.stringify(payload, null, 2)
   });
+  if (response.status === 409) {
+    const error = new Error('Plik w Dropbox zmienił się na innym urządzeniu. Ponawiam bezpieczne scalenie.');
+    error.code = 'DROPBOX_CONFLICT';
+    throw error;
+  }
   if (!response.ok) throw new Error(`Nie udało się zapisać pliku w Dropbox. Kod HTTP: ${response.status}.`);
   return response.json();
+}
+
+async function importDropboxSettingsPayload(payload) {
+  if (!payload || typeof payload !== 'object') return;
+  const adapted = {
+    ...payload,
+    dataYears: payload.knownYears || payload.dataYears || [],
+    deletedEntries: [
+      ...collectDeletedEntries(payload),
+      ...(Array.isArray(payload.orphanEntryTombstones) ? payload.orphanEntryTombstones : [])
+    ]
+  };
+  await importPayload(adapted, { replace: false, silent: true, skipDirty: true });
+  importThemeFromPayload(payload, false);
+  if (payload.migration && typeof payload.migration === 'object') {
+    const currentMigration = safeJsonParseLocalStorage(DROPBOX_YEARLY_MIGRATION_KEY, null);
+    const incomingTime = parseDateTimeMs(payload.migration.lastBridgedAt || payload.migration.completedAt);
+    const currentTime = parseDateTimeMs(currentMigration?.lastBridgedAt || currentMigration?.completedAt);
+    if (!currentMigration || incomingTime >= currentTime) {
+      setJsonLocalStorage(DROPBOX_YEARLY_MIGRATION_KEY, payload.migration);
+    }
+  }
+  registerKnownDataYears(payload.knownYears || payload.dataYears || []);
+  renderHistoryYearFilters();
+}
+
+async function syncDropboxFileWithCas(path, mergeRemote, makeLocalPayload) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const remote = await dropboxDownloadJson(path);
+    if (remote?.payload) await mergeRemote(remote.payload);
+    const localPayload = await makeLocalPayload();
+    try {
+      return await dropboxUploadJson(path, localPayload, { rev: remote?.rev || '' });
+    } catch (error) {
+      if (error?.code !== 'DROPBOX_CONFLICT' || attempt === 2) throw error;
+    }
+  }
+  throw new Error('Nie udało się bezpiecznie scalić pliku Dropbox po trzech próbach.');
+}
+
+async function syncDropboxSettingsFile() {
+  const path = getStructuredDropboxPath(DROPBOX_SETTINGS_FILE);
+  return syncDropboxFileWithCas(path, importDropboxSettingsPayload, async () => makeSettingsPayload());
+}
+
+async function syncDropboxInventoryFile() {
+  const path = getStructuredDropboxPath(DROPBOX_INVENTORY_FILE);
+  return syncDropboxFileWithCas(path, async payload => {
+    importInventoryFromPayload(payload, false, { remote: true });
+  }, async () => makeInventoryPayload());
+}
+
+async function syncDropboxYearFile(year) {
+  const normalizedYear = normalizeDataYear(year);
+  if (!normalizedYear) return null;
+  const dirtyGenerationAtStart = dataYearDirtyGenerations.get(normalizedYear) || 0;
+  const path = getDropboxYearPath(normalizedYear);
+  const result = await syncDropboxFileWithCas(path, async payload => {
+    if (payload?.year && normalizeDataYear(payload.year) !== normalizedYear) {
+      throw new Error(`Plik ${path} zawiera dane innego roku.`);
+    }
+    await importPayload(payload, { replace: false, silent: true, skipDirty: true });
+  }, async () => {
+    await refreshWalletYearSummariesFromDatabase([normalizedYear]);
+    return makeYearPayload(normalizedYear);
+  });
+  registerKnownDataYears([normalizedYear]);
+  markDataYearsCached([normalizedYear]);
+  if ((dataYearDirtyGenerations.get(normalizedYear) || 0) === dirtyGenerationAtStart) {
+    clearDirtyDataYears([normalizedYear]);
+  }
+  return result;
+}
+
+async function downloadDropboxYear(year, options = {}) {
+  const normalizedYear = normalizeDataYear(year);
+  if (!normalizedYear) return null;
+  if (!isNetworkAvailable()) {
+    if (!getCachedDataYears().has(normalizedYear) && !options.silent) {
+      showMessage(`Rok ${normalizedYear} nie jest jeszcze zapisany na tym urządzeniu. Połącz internet, aby go dołączyć.`, 'error');
+    }
+    return null;
+  }
+  const remote = await dropboxDownloadJson(getDropboxYearPath(normalizedYear));
+  if (!remote?.payload) {
+    if (!options.silent) showMessage(`W Dropboxie nie znaleziono pliku danych dla roku ${normalizedYear}.`, 'error');
+    return null;
+  }
+  await importPayload(remote.payload, { replace: false, silent: true, skipDirty: true });
+  registerKnownDataYears([normalizedYear]);
+  markDataYearsCached([normalizedYear]);
+  await refreshWalletYearSummariesFromDatabase([normalizedYear]);
+  await reloadEntries();
+  return remote.payload;
+}
+
+async function ensureDropboxYearlyLayout() {
+  const settingsPath = getStructuredDropboxPath(DROPBOX_SETTINGS_FILE);
+  const existingSettings = await dropboxDownloadJson(settingsPath);
+  if (existingSettings?.payload) {
+    await importDropboxSettingsPayload(existingSettings.payload);
+    const savedMigration = existingSettings.payload.migration && typeof existingSettings.payload.migration === 'object'
+      ? existingSettings.payload.migration
+      : safeJsonParseLocalStorage(DROPBOX_YEARLY_MIGRATION_KEY, null);
+    const legacyPath = normalizeDropboxPath(savedMigration?.legacyPath || '');
+    if (legacyPath) {
+      const legacyMetadata = await dropboxGetMetadata(legacyPath);
+      if (legacyMetadata?.rev && legacyMetadata.rev !== savedMigration?.legacyRev) {
+        const legacy = await dropboxDownloadJson(legacyPath);
+        if (!legacy?.payload) return { migrated: false, settings: existingSettings.payload };
+        updateCloudUi('Wykryto zmianę zapisaną przez starszą wersję programu. Dołączam ją do plików rocznych...');
+        await importPayload(legacy.payload, { replace: false, silent: true, skipDirty: false });
+        const bridgedMigration = {
+          ...savedMigration,
+          legacyPath,
+          legacyRev: legacy.rev,
+          lastBridgedAt: new Date().toISOString(),
+          preserved: true
+        };
+        setJsonLocalStorage(DROPBOX_YEARLY_MIGRATION_KEY, bridgedMigration);
+        showMessage('Dołączono zmiany ze starego pliku Dropbox. Zaktualizuj Portfel PRO na pozostałych urządzeniach, aby wszystkie korzystały z plików rocznych.');
+        return { migrated: false, bridgedLegacy: true, settings: existingSettings.payload };
+      }
+    }
+    return { migrated: false, settings: existingSettings.payload };
+  }
+
+  const legacyPath = getLegacyDropboxPath();
+  const legacy = await dropboxDownloadJson(legacyPath);
+  if (legacy?.payload) {
+    updateCloudUi('Przenoszę starszy plik Dropbox do bezpiecznego układu rocznego...');
+    await importPayload(legacy.payload, { replace: false, silent: true, skipDirty: true });
+  }
+
+  const localYears = await getAvailableEntryYears();
+  registerKnownDataYears(localYears);
+  markDataYearsCached(localYears);
+  await refreshWalletYearSummariesFromDatabase(localYears);
+
+  const migration = legacy?.payload ? {
+    legacyPath,
+    legacyRev: legacy.rev || '',
+    completedAt: new Date().toISOString(),
+    preserved: true
+  } : {
+    completedAt: new Date().toISOString(),
+    preserved: true,
+    legacyPath: ''
+  };
+  setJsonLocalStorage(DROPBOX_YEARLY_MIGRATION_KEY, migration);
+
+  await syncDropboxInventoryFile();
+  const yearsToCreate = new Set([...localYears, todayISO().slice(0, 4)]);
+  for (const year of yearsToCreate) await syncDropboxYearFile(year);
+  await syncDropboxSettingsFile();
+  return { migrated: Boolean(legacy?.payload), settings: makeSettingsPayload(migration) };
+}
+
+async function syncDropboxStructuredData(options = {}) {
+  await ensureDropboxYearlyLayout();
+  await syncDropboxSettingsFile();
+  await syncDropboxInventoryFile();
+
+  const years = new Set([...getRequiredLoadedYears(), ...getDirtyDataYears()]);
+  if (options.allLocalYears) {
+    for (const year of await getAvailableEntryYears()) years.add(year);
+  }
+  if (options.allKnownYears) {
+    for (const year of getKnownDataYears()) years.add(year);
+  }
+  for (const year of years) await syncDropboxYearFile(year);
+
+  await refreshWalletYearSummariesFromDatabase(years);
+  await syncDropboxSettingsFile();
+  markDropboxSynced();
+  return { years: Array.from(years).sort(), migrated: true };
 }
 
 async function uploadLocalStateToDropbox(successMessage = '') {
@@ -5558,15 +6522,19 @@ async function uploadLocalStateToDropbox(successMessage = '') {
   let finalMessage = '';
   updateCloudUi('Zapisuję aktualną lokalną bazę do Dropbox...');
   try {
+    await syncDropboxStructuredData({ allLocalYears: true });
     await reloadEntries();
-    await dropboxUploadPayload(makeExportPayload());
     clearDropboxForceLocalUpload();
-    markDropboxSynced();
     finalMessage = successMessage || `Dropbox zapisany lokalnymi danymi: ${new Date().toLocaleString('pl-PL')}.`;
     updateCloudUi(finalMessage);
   } finally {
     dropboxSyncBusy = false;
     updateCloudUi(finalMessage);
+    if (dropboxSyncRequestedWhileBusy || dropboxForceUploadPending) {
+      dropboxSyncRequestedWhileBusy = false;
+      dropboxForceUploadPending = false;
+      scheduleDropboxAutoSync({ delay: 250, reason: 'change-during-force-upload' });
+    }
   }
 }
 
@@ -5576,8 +6544,9 @@ function hasImportableSettingsPayload(payload) {
     payload.walletState || payload.wallet_state || payload.walletMonths || payload.wallet_months ||
     payload.customCategories || payload.custom_categories ||
     payload.mainReportSettings || payload.main_report_settings ||
-    payload.tagRules || payload.learningRules ||
-    payload.inventoryItems || payload.inventory || payload.inventoryMovements || payload.inventoryAnalysis || payload.inventoryPending
+    payload.tagRules || payload.learningRules || payload.walletYearSummaries || payload.wallet_year_summaries ||
+    payload.knownYears || payload.dataYears || payload.theme || payload.orphanEntryTombstones ||
+    payload.inventoryItems || payload.inventory || payload.inventoryMovements || payload.inventoryMovementTombstones || payload.inventory_movement_tombstones || payload.inventoryAnalysis || payload.inventoryPending
   );
 }
 
@@ -5607,7 +6576,7 @@ function buildImportPreview(payload, options = {}) {
     inventoryItems: inventory.items.length,
     inventoryMovements: inventory.movements.length,
     inventoryPending: pendingResults,
-    hasInventory: inventory.hasItems || inventory.hasMovements || inventory.hasAnalysis || inventory.hasPending,
+    hasInventory: inventory.hasItems || inventory.hasMovements || inventory.hasMovementTombstones || inventory.hasAnalysis || inventory.hasPending,
     hasSettingsOnly: hasImportableSettingsPayload(payload)
   };
 }
@@ -5667,19 +6636,29 @@ async function confirmImportPreview(preview, fileName = '') {
 }
 
 async function importPayload(payload, options = {}) {
-  const { replace = false, silent = false, applyDeletions = true, confirmReplace = true } = options;
+  const { replace = false, silent = false, applyDeletions = true, confirmReplace = true, skipDirty = false } = options;
   const imported = collectImportedEntries(payload);
   const now = new Date().toISOString();
   const cleaned = Array.isArray(imported)
     ? imported.map(item => normalizeImportedEntry(item, now)).filter(item => item.amount > 0 && ['przychód', 'wydatek'].includes(item.entryType))
     : [];
+  const isYearPayload = payload?.schema === DROPBOX_YEARLY_SCHEMA;
+  const payloadYear = isYearPayload ? normalizeDataYear(payload?.year) : '';
+  const isCompleteBackup = payload?.completeBackup === true && Array.isArray(payload?.entries);
   const importedSettingsOnly = hasImportableSettingsPayload(payload);
+
+  if (isYearPayload && !payloadYear) {
+    throw new Error('Roczny plik danych nie zawiera poprawnego pola year.');
+  }
+  if (isYearPayload && cleaned.some(entry => String(entry.entryDate || '').slice(0, 4) !== payloadYear)) {
+    throw new Error(`Plik roku ${payloadYear} zawiera wpis z datą należącą do innego roku.`);
+  }
 
   if (Array.isArray(imported) && imported.length && !cleaned.length) {
     throw new Error('Nie znaleziono poprawnych wpisów do importu. Sprawdź, czy rekordy mają kwotę oraz datę/opis.');
   }
 
-  if ((!Array.isArray(imported) || !imported.length) && !importedSettingsOnly) {
+  if ((!Array.isArray(imported) || !imported.length) && !importedSettingsOnly && !isYearPayload && !isCompleteBackup) {
     throw new Error('Plik JSON nie zawiera listy wpisów ani danych programu. Obsługiwane pola: entries, items, data, records, rows, transactions, wpisy, lista oraz pola kopii Portfel PRO.');
   }
 
@@ -5689,42 +6668,61 @@ async function importPayload(payload, options = {}) {
     if (!shouldReplace) return { canceled: true, added: 0, updated: 0, skipped: 0, deleted: 0, inventory: getInventoryImportCounts() };
   }
 
-  const deletionResult = applyDeletions ? await applyImportedDeletions(payload) : { deleted: 0 };
+  const deletionResult = applyDeletions ? await applyImportedDeletions(payload, { skipDirty }) : { deleted: 0 };
   importCustomCategoriesFromPayload(payload, replace);
   await importLearningRulesFromPayload(payload, replace);
   importWalletStateFromPayload(payload, replace);
-  const inventoryResult = importInventoryFromPayload(payload, replace);
+  importWalletYearSummaries(payload, replace);
+  importAiSettingsFromPayload(payload, replace);
+  importThemeFromPayload(payload, replace);
+  const hasInventorySection = [
+    'inventoryItems', 'inventory', 'magazyn',
+    'inventoryMovements', 'inventory_movements', 'ruchyMagazynowe',
+    'inventoryMovementTombstones', 'inventory_movement_tombstones',
+    'inventoryAnalysis', 'inventory_analysis',
+    'inventoryPending', 'inventory_pending', 'doRecznegoSprawdzenia'
+  ].some(key => Object.prototype.hasOwnProperty.call(payload || {}, key));
+  const inventoryResult = hasInventorySection
+    ? importInventoryFromPayload(payload, replace, { remote: skipDirty })
+    : getInventoryImportCounts();
+  await importTagRulesFromPayload(payload, replace);
 
-  if (replace) {
-    const importedSyncIds = new Set((Array.isArray(imported) ? imported : [])
-      .map(item => item?.syncId || item?.sync_id)
-      .filter(Boolean));
+  if (replace && (cleaned.length || isYearPayload || isCompleteBackup)) {
+    const importedShardKeys = new Set(cleaned.map(item => `${String(item.entryDate || '').slice(0, 4)}:${item.syncId}`));
     const importedDeleted = collectDeletedEntries(payload)
-      .filter(item => !importedSyncIds.has(item.syncId));
-    saveDeletedEntries(importedDeleted);
-    await clearEntries();
+      .filter(item => !importedShardKeys.has(`${item.entryYear || '*'}:${item.syncId}`));
+    const retainedDeleted = payloadYear
+      ? getDeletedEntries().filter(item => item.entryYear !== payloadYear)
+      : [];
+    saveDeletedEntries([...retainedDeleted, ...importedDeleted]);
+    if (payloadYear) {
+      const previousYearEntries = await getEntriesForYear(payloadYear);
+      rememberDeletedEntries(previousYearEntries.filter(entry => !importedShardKeys.has(`${payloadYear}:${entry.syncId}`)));
+      await clearEntriesForYear(payloadYear);
+      markDataYearDirty(payloadYear);
+    } else {
+      const previousEntries = await getAllEntries();
+      rememberDeletedEntries(previousEntries.filter(entry => !importedShardKeys.has(`${String(entry.entryDate || '').slice(0, 4)}:${entry.syncId}`)));
+      await clearEntries();
+    }
   }
 
   if (!cleaned.length) {
     await reloadEntries();
+    renderHistoryYearFilters();
     const result = { added: 0, updated: 0, skipped: 0, deleted: deletionResult.deleted, inventory: inventoryResult };
     if (!silent) showMessage(formatImportResultMessage(result));
     return result;
   }
 
   if (!applyDeletions) {
-    forgetDeletedEntriesForSyncIds(getImportedSyncIds(cleaned));
+    forgetDeletedEntriesForImportedEntries(cleaned);
   }
 
   allEntries = await getAllEntries();
 
-  if (Array.isArray(payload?.tagRules)) {
-    for (const rule of payload.tagRules) await saveTagRule(normalizeRule(rule));
-    await reloadTagRules();
-  }
-
   const existingBySyncId = new Map(allEntries.filter(entry => entry.syncId).map(entry => [entry.syncId, entry]));
-  const existingBySignature = new Map(allEntries.map(entry => [entrySignature(entry), entry]));
+  const existingBySignature = new Map(allEntries.filter(entry => !entry.syncId).map(entry => [entrySignature(entry), entry]));
   const localDeletedBySyncId = deletedEntriesMap();
   let added = 0;
   let updated = 0;
@@ -5737,16 +6735,18 @@ async function importPayload(payload, options = {}) {
     }
 
     const currentBySyncId = incoming.syncId ? existingBySyncId.get(incoming.syncId) : null;
-    const currentBySignature = existingBySignature.get(entrySignature(incoming));
+    const currentBySignature = incoming.syncId ? null : existingBySignature.get(entrySignature(incoming));
     const current = currentBySyncId || currentBySignature || null;
 
     if (current && !replace) {
-      const incomingTime = Date.parse(incoming.updatedAt || incoming.createdAt || '') || 0;
-      const currentTime = Date.parse(current.updatedAt || current.createdAt || '') || 0;
-      if (currentBySyncId && incomingTime > currentTime) {
+      if (currentBySyncId && isIncomingEntryNewer(incoming, current)) {
         const saved = { ...incoming, id: current.id, syncId: current.syncId || incoming.syncId };
-        await saveEntry(saved);
-        existingBySignature.set(entrySignature(saved), saved);
+        if (String(current.entryDate || '').slice(0, 4) !== String(saved.entryDate || '').slice(0, 4)) {
+          rememberDeletedEntry(current);
+        }
+        await saveEntry(saved, { skipDirty });
+        if (!saved.syncId) existingBySignature.set(entrySignature(saved), saved);
+        existingBySyncId.set(saved.syncId, saved);
         updated += 1;
       } else {
         skipped += 1;
@@ -5754,11 +6754,17 @@ async function importPayload(payload, options = {}) {
       continue;
     }
 
-    await saveEntry(replace ? sanitizeEntryKey(incoming) : stripLocalId(incoming));
-    existingBySignature.set(entrySignature(incoming), incoming);
+    const stored = stripLocalId(incoming);
+    const storedId = await saveEntry(stored, { skipDirty });
+    const saved = { ...stored, id: storedId };
+    if (!saved.syncId) existingBySignature.set(entrySignature(saved), saved);
+    if (saved.syncId) existingBySyncId.set(saved.syncId, saved);
     added += 1;
   }
 
+  registerKnownDataYears(cleaned.map(entry => String(entry.entryDate || '').slice(0, 4)));
+  markDataYearsCached(cleaned.map(entry => String(entry.entryDate || '').slice(0, 4)));
+  renderHistoryYearFilters();
   await reloadEntries();
   const result = { added, updated, skipped, deleted: deletionResult.deleted, inventory: inventoryResult };
   if (!silent) showMessage(formatImportResultMessage(result));
@@ -5767,6 +6773,7 @@ async function importPayload(payload, options = {}) {
 
 let dropboxSyncBusy = false;
 let dropboxForceUploadPending = false;
+let dropboxSyncRequestedWhileBusy = false;
 let dropboxSyncTimer = null;
 
 function reportDropboxSyncError(error, options = {}) {
@@ -5817,20 +6824,26 @@ async function syncDropboxNow(options = {}) {
     await uploadLocalStateToDropbox('Po imporcie JSON wykonano jednorazowy zapis lokalnej bazy do Dropbox. Następne synchronizacje działają normalnie.');
     return;
   }
-  if (dropboxSyncBusy) return;
+  if (dropboxSyncBusy) {
+    dropboxSyncRequestedWhileBusy = true;
+    return { queued: true };
+  }
   dropboxSyncBusy = true;
   updateCloudUi('Synchronizuję z Dropbox...');
   let finalMessage = '';
   try {
-    const remotePayload = await dropboxDownloadPayload();
-    if (remotePayload) await importPayload(remotePayload, { replace: false, silent: true });
-    await dropboxUploadPayload(makeExportPayload());
-    markDropboxSynced();
+    await syncDropboxStructuredData();
+    await refreshAvailableDataYears();
+    await reloadEntries();
     finalMessage = '';
     updateCloudUi(finalMessage);
   } finally {
     dropboxSyncBusy = false;
     updateCloudUi(finalMessage);
+    if (dropboxSyncRequestedWhileBusy) {
+      dropboxSyncRequestedWhileBusy = false;
+      scheduleDropboxAutoSync({ delay: 250, reason: 'change-during-sync' });
+    }
   }
   if (dropboxForceUploadPending || hasDropboxForceLocalUpload()) {
     dropboxForceUploadPending = false;
@@ -5861,9 +6874,33 @@ function setupFirstRunMode() {
 }
 
 async function exportJson() {
-  await reloadEntries();
+  const canRefreshDropbox = getStorageMode() === 'dropbox' && hasDropboxConnection() && isNetworkAvailable();
+  if (canRefreshDropbox) {
+    if (dropboxSyncBusy) throw new Error('Trwa synchronizacja Dropbox. Poczekaj chwilę i ponów zapis kopii.');
+    dropboxSyncBusy = true;
+    try {
+      await syncDropboxStructuredData({ allKnownYears: true, allLocalYears: true });
+    } finally {
+      dropboxSyncBusy = false;
+      if (dropboxSyncRequestedWhileBusy || dropboxForceUploadPending) {
+        dropboxSyncRequestedWhileBusy = false;
+        dropboxForceUploadPending = false;
+        scheduleDropboxAutoSync({ delay: 250, reason: 'change-during-export' });
+      }
+    }
+  }
+  const missingYears = [...getKnownDataYears()].filter(year => !getCachedDataYears().has(year));
+  if (missingYears.length && getStorageMode() === 'dropbox' && hasDropboxConnection() && isNetworkAvailable()) {
+    for (const year of missingYears) await downloadDropboxYear(year, { silent: true });
+  }
+  const stillMissing = [...getKnownDataYears()].filter(year => !getCachedDataYears().has(year));
+  if (stillMissing.length) {
+    throw new Error(`Pełna kopia wymaga dołączenia lat: ${stillMissing.join(', ')}. Połącz internet i spróbuj ponownie.`);
+  }
+  const completeEntries = await getAllEntries();
   migrateInventoryLocalStorage({ rebuild: true, skipSync: true });
-  const payload = makeExportPayload();
+  await refreshWalletYearSummariesFromDatabase(getCachedDataYears());
+  const payload = makeExportPayload(completeEntries);
 
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -5876,7 +6913,9 @@ async function exportJson() {
   URL.revokeObjectURL(url);
   const preview = buildImportPreview(payload, { replace: false, applyDeletions: false });
   renderImportPreview(preview, link.download);
-  showMessage(`Wyeksportowano kompletną kopię JSON: ${link.download}. Wpisy: ${preview.entriesValid}, ruchy magazynowe: ${preview.inventoryMovements}, do sprawdzenia: ${preview.inventoryPending}.`);
+  const freshnessNote = canRefreshDropbox ? 'Sprawdzono wszystkie roczne pliki Dropbox.' : 'Kopia przedstawia pełny lokalny stan dostępny offline.';
+  showMessage(`Wyeksportowano kompletną kopię JSON: ${link.download}. Wpisy: ${preview.entriesValid}, ruchy magazynowe: ${preview.inventoryMovements}, do sprawdzenia: ${preview.inventoryPending}. ${freshnessNote}`);
+  await reloadEntries();
 }
 
 async function importJson(file, options = {}) {
@@ -5912,7 +6951,7 @@ async function importJson(file, options = {}) {
 }
 
 async function handleClearAll() {
-  const entriesToDelete = allEntries.length ? [...allEntries] : await getAllEntries();
+  const entriesToDelete = await getAllEntries();
 
   if (!entriesToDelete.length) {
     showMessage('Nie ma danych do usunięcia.');
@@ -6518,14 +7557,14 @@ async function factoryResetApp() {
     return;
   }
 
-  const shouldClearDropbox = getStorageMode() === 'dropbox' && hasDropboxConnection() && window.confirm('Wyczyścić także plik danych w Dropboxie? Jeśli wybierzesz NIE, reset dotyczy tylko tej przeglądarki.');
+  const shouldClearDropbox = getStorageMode() === 'dropbox' && hasDropboxConnection() && window.confirm('Wyczyścić także pliki danych w Dropboxie? Jeśli wybierzesz NIE, reset dotyczy tylko tej przeglądarki.');
 
   try {
     if (shouldClearDropbox) {
-      const entriesToDelete = allEntries.length ? [...allEntries] : await getAllEntries();
+      const entriesToDelete = await getAllEntries();
       if (entriesToDelete.length) rememberDeletedEntries(entriesToDelete);
       await clearEntries();
-      await dropboxUploadPayload(makeExportPayload());
+      await syncDropboxStructuredData({ allLocalYears: true });
     }
   } catch (error) {
     const continueReset = window.confirm(`Nie udało się wyczyścić Dropboxa: ${error.message}. Kontynuować reset lokalny?`);
@@ -6781,13 +7820,42 @@ function getAiSettings() {
     provider,
     apiKey: String(saved.apiKey || '').trim(),
     model: String(saved.model || models[0] || '').trim(),
-    customModel: String(saved.customModel || '').trim()
+    customModel: String(saved.customModel || '').trim(),
+    updatedAt: String(saved.updatedAt || '')
   };
 }
 
 function getAiSettingsForExport() {
   const settings = getAiSettings();
-  return { provider: settings.provider, model: settings.model, customModel: settings.customModel, apiKeySaved: Boolean(settings.apiKey) };
+  return {
+    provider: settings.provider,
+    model: settings.model,
+    customModel: settings.customModel,
+    apiKeySaved: Boolean(settings.apiKey),
+    updatedAt: settings.updatedAt
+  };
+}
+
+function importAiSettingsFromPayload(payload, replace = false) {
+  const incoming = payload?.aiSettings || payload?.ai_settings;
+  if (!incoming || typeof incoming !== 'object') return;
+  const current = getAiSettings();
+  const incomingUpdatedAt = String(incoming.updatedAt || incoming.updated_at || '');
+  const shouldApply = replace
+    || (parseDateTimeMs(incomingUpdatedAt) && parseDateTimeMs(incomingUpdatedAt) >= parseDateTimeMs(current.updatedAt))
+    || (!incomingUpdatedAt && !current.updatedAt);
+  if (!shouldApply) return;
+  const provider = ['gemini', 'openai'].includes(incoming.provider) ? incoming.provider : current.provider;
+  const models = AI_MODEL_OPTIONS[provider] || [];
+  setJsonLocalStorage(AI_SETTINGS_KEY, {
+    ...current,
+    provider,
+    model: String(incoming.model || models[0] || current.model || '').trim(),
+    customModel: String(incoming.customModel || incoming.custom_model || '').trim(),
+    apiKey: current.apiKey,
+    updatedAt: replace ? new Date().toISOString() : (incomingUpdatedAt || current.updatedAt || new Date().toISOString())
+  });
+  renderAiSettings();
 }
 
 function getSelectedAiModel(settings = getAiSettings()) {
@@ -6801,10 +7869,12 @@ function saveAiSettingsFromForm() {
     provider,
     apiKey: String(el.aiApiKeyInput?.value || current.apiKey || '').trim(),
     model: String(el.aiModelSelect?.value || current.model || '').trim(),
-    customModel: String(el.aiCustomModelInput?.value || '').trim()
+    customModel: String(el.aiCustomModelInput?.value || '').trim(),
+    updatedAt: new Date().toISOString()
   };
   setJsonLocalStorage(AI_SETTINGS_KEY, settings);
   renderAiSettings();
+  scheduleDropboxAutoSync();
   showMessage('Zapisano ustawienia AI.');
   return settings;
 }
@@ -6909,8 +7979,26 @@ function getInventoryItems() {
   return Array.isArray(items) ? items : [];
 }
 
+function getInventoryUpdatedAt() {
+  try { return String(localStorage.getItem(INVENTORY_UPDATED_AT_KEY) || ''); } catch (_) { return ''; }
+}
+
+function getInventorySourceDeviceId() {
+  try { return String(localStorage.getItem(INVENTORY_SOURCE_DEVICE_KEY) || ''); } catch (_) { return ''; }
+}
+
+function touchInventoryState(updatedAt = new Date().toISOString(), sourceDeviceId = getDeviceId()) {
+  const safeUpdatedAt = String(updatedAt || new Date().toISOString());
+  try {
+    localStorage.setItem(INVENTORY_UPDATED_AT_KEY, safeUpdatedAt);
+    localStorage.setItem(INVENTORY_SOURCE_DEVICE_KEY, String(sourceDeviceId || getDeviceId()));
+  } catch (_) {}
+  return safeUpdatedAt;
+}
+
 function saveInventoryItems(items, options = {}) {
   setJsonLocalStorage(INVENTORY_ITEMS_KEY, Array.isArray(items) ? items : []);
+  if (!options.skipTouch) touchInventoryState();
   if (!options.skipSync) scheduleDropboxAutoSync();
 }
 
@@ -6919,8 +8007,47 @@ function getInventoryMovements() {
   return Array.isArray(items) ? items : [];
 }
 
+function normalizeInventoryMovementTombstone(raw = {}) {
+  const id = String(raw.id || raw.movementId || raw.movement_id || '').trim();
+  const deletedAt = String(raw.deletedAt || raw.deleted_at || '').trim();
+  return id && parseDateTimeMs(deletedAt) ? { id, deletedAt, sourceDeviceId: String(raw.sourceDeviceId || raw.source_device_id || '') } : null;
+}
+
+function getInventoryMovementTombstones() {
+  const items = safeJsonParseLocalStorage(INVENTORY_MOVEMENT_TOMBSTONES_KEY, []);
+  return Array.isArray(items) ? items.map(normalizeInventoryMovementTombstone).filter(Boolean) : [];
+}
+
+function saveInventoryMovementTombstones(items) {
+  const byId = new Map();
+  for (const raw of items || []) {
+    const item = normalizeInventoryMovementTombstone(raw);
+    if (!item) continue;
+    const current = byId.get(item.id);
+    const itemTime = parseDateTimeMs(item.deletedAt);
+    const currentTime = parseDateTimeMs(current?.deletedAt);
+    if (!current || itemTime > currentTime || (itemTime === currentTime && item.sourceDeviceId.localeCompare(current.sourceDeviceId) > 0)) byId.set(item.id, item);
+  }
+  const normalized = Array.from(byId.values()).sort((a, b) => parseDateTimeMs(b.deletedAt) - parseDateTimeMs(a.deletedAt) || a.id.localeCompare(b.id));
+  setJsonLocalStorage(INVENTORY_MOVEMENT_TOMBSTONES_KEY, normalized);
+  return normalized;
+}
+
+function updateInventoryMovementTombstonesForLocalSave(previous, next) {
+  const nextIds = new Set((next || []).map(item => String(item?.id || '')).filter(Boolean));
+  const current = getInventoryMovementTombstones().filter(item => !nextIds.has(item.id));
+  const now = new Date().toISOString();
+  const removed = (previous || [])
+    .filter(item => item?.id && !nextIds.has(String(item.id)))
+    .map(item => ({ id: String(item.id), deletedAt: now, sourceDeviceId: getDeviceId() }));
+  saveInventoryMovementTombstones([...current, ...removed]);
+}
+
 function saveInventoryMovements(items, options = {}) {
-  setJsonLocalStorage(INVENTORY_MOVEMENTS_KEY, Array.isArray(items) ? items : []);
+  const next = Array.isArray(items) ? items : [];
+  if (!options.skipDeletionTracking) updateInventoryMovementTombstonesForLocalSave(getInventoryMovements(), next);
+  setJsonLocalStorage(INVENTORY_MOVEMENTS_KEY, next);
+  if (!options.skipTouch) touchInventoryState();
   if (!options.skipSync) scheduleDropboxAutoSync();
 }
 
@@ -6931,6 +8058,7 @@ function getInventoryAnalysis() {
 
 function saveInventoryAnalysis(data, options = {}) {
   setJsonLocalStorage(INVENTORY_ANALYSIS_KEY, data && typeof data === 'object' ? data : {});
+  if (!options.skipTouch) touchInventoryState();
   if (!options.skipSync) scheduleDropboxAutoSync();
 }
 
@@ -7222,6 +8350,7 @@ function getInventoryPending() {
 
 function saveInventoryPending(data, options = {}) {
   setJsonLocalStorage(INVENTORY_PENDING_KEY, data && typeof data === 'object' ? data : { results: [] });
+  if (!options.skipTouch) touchInventoryState();
   if (!options.skipSync) scheduleDropboxAutoSync();
 }
 
@@ -7346,7 +8475,7 @@ function readFirstLegacyInventoryItems() {
 }
 
 function migrateInventoryLocalStorage(options = {}) {
-  const { rebuild = true, skipSync = true } = options;
+  const { rebuild = true, skipSync = true, skipTouch = true } = options;
   const storedItemsRaw = safeJsonParseLocalStorage(INVENTORY_ITEMS_KEY, null);
   const storedMovementsRaw = safeJsonParseLocalStorage(INVENTORY_MOVEMENTS_KEY, null);
   const storedAnalysisRaw = safeJsonParseLocalStorage(INVENTORY_ANALYSIS_KEY, null);
@@ -7359,12 +8488,12 @@ function migrateInventoryLocalStorage(options = {}) {
   const analysis = normalizeInventoryAnalysisForStorage(storedAnalysisRaw);
   const pending = normalizeInventoryPendingForStorage(storedPendingRaw);
 
-  saveInventoryItems(items, { skipSync });
-  saveInventoryMovements(movements, { skipSync });
-  saveInventoryAnalysis(analysis, { skipSync });
-  saveInventoryPending(pending, { skipSync });
+  saveInventoryItems(items, { skipSync, skipTouch });
+  saveInventoryMovements(movements, { skipSync, skipTouch, skipDeletionTracking: true });
+  saveInventoryAnalysis(analysis, { skipSync, skipTouch });
+  saveInventoryPending(pending, { skipSync, skipTouch });
 
-  if (rebuild && movements.length && !items.length) rebuildInventoryItemsFromMovements(false, { skipSync });
+  if (rebuild && movements.length && !items.length) rebuildInventoryItemsFromMovements(false, { skipSync, skipTouch });
   return { inventoryItems: items.length, inventoryMovements: movements.length, inventoryPending: pending.results.length };
 }
 
@@ -7386,18 +8515,63 @@ function getPayloadObjectOrArray(payload, keys = []) {
 function normalizeInventoryPayload(payload = {}) {
   const itemsRaw = getPayloadArray(payload, ['inventoryItems', 'inventory', 'magazyn']);
   const movementsRaw = getPayloadArray(payload, ['inventoryMovements', 'inventory_movements', 'ruchyMagazynowe']);
+  const movementTombstonesRaw = getPayloadArray(payload, ['inventoryMovementTombstones', 'inventory_movement_tombstones']);
   const analysisRaw = getPayloadObjectOrArray(payload, ['inventoryAnalysis', 'inventory_analysis']);
   const pendingRaw = getPayloadObjectOrArray(payload, ['inventoryPending', 'inventory_pending', 'doRecznegoSprawdzenia']);
   return {
     hasItems: itemsRaw.found,
     hasMovements: movementsRaw.found,
+    hasMovementTombstones: movementTombstonesRaw.found,
     hasAnalysis: analysisRaw.found,
     hasPending: pendingRaw.found,
     items: normalizeInventoryItemsForStorage(itemsRaw.value),
     movements: normalizeInventoryMovementsForStorage(movementsRaw.value),
+    movementTombstones: movementTombstonesRaw.value.map(normalizeInventoryMovementTombstone).filter(Boolean),
     analysis: normalizeInventoryAnalysisForStorage(analysisRaw.value),
     pending: normalizeInventoryPendingForStorage(pendingRaw.value)
   };
+}
+
+function mergeInventoryMovementTombstones(...lists) {
+  const byId = new Map();
+  for (const raw of lists.flat()) {
+    const item = normalizeInventoryMovementTombstone(raw);
+    if (!item) continue;
+    const current = byId.get(item.id);
+    const itemTime = parseDateTimeMs(item.deletedAt);
+    const currentTime = parseDateTimeMs(current?.deletedAt);
+    if (!current || itemTime > currentTime || (itemTime === currentTime && item.sourceDeviceId.localeCompare(current.sourceDeviceId) > 0)) byId.set(item.id, item);
+  }
+  return Array.from(byId.values()).sort((a, b) => parseDateTimeMs(b.deletedAt) - parseDateTimeMs(a.deletedAt) || a.id.localeCompare(b.id));
+}
+
+function inventoryMovementConflictKey(movement = {}) {
+  return JSON.stringify(Object.keys(movement).sort().map(key => [key, movement[key]]));
+}
+
+function mergeInventoryMovementEventLog(localMovements, incomingMovements, tombstones) {
+  const deletedIds = new Set((tombstones || []).map(item => String(item?.id || '')).filter(Boolean));
+  const byId = new Map();
+  for (const movement of normalizeInventoryMovementsForStorage([...(localMovements || []), ...(incomingMovements || [])])) {
+    const id = String(movement?.id || '');
+    if (!id || deletedIds.has(id)) continue;
+    const current = byId.get(id);
+    if (!current || inventoryMovementConflictKey(movement) > inventoryMovementConflictKey(current)) byId.set(id, movement);
+  }
+  return Array.from(byId.values()).sort((a, b) => {
+    const timeOrder = String(a.createdAt || '').localeCompare(String(b.createdAt || ''));
+    return timeOrder || String(a.id || '').localeCompare(String(b.id || ''));
+  });
+}
+
+function buildInventoryReplacementTombstones(incomingMovements, incomingTombstones) {
+  const incomingIds = new Set((incomingMovements || []).map(item => String(item?.id || '')).filter(Boolean));
+  const retained = getInventoryMovementTombstones().filter(item => !incomingIds.has(item.id));
+  const deletedAt = new Date().toISOString();
+  const removed = getInventoryMovements()
+    .filter(item => item?.id && !incomingIds.has(String(item.id)))
+    .map(item => ({ id: String(item.id), deletedAt, sourceDeviceId: getDeviceId() }));
+  return mergeInventoryMovementTombstones(retained, removed, incomingTombstones || []);
 }
 
 function forceInventoryPendingManualReview(pending) {
@@ -7685,11 +8859,16 @@ function removePendingInventoryItem(index) {
 }
 
 function applyInventoryMovementsFromPending(pending) {
-  const now = new Date().toISOString();
+  const createdAtBase = Date.now();
+  const now = new Date(createdAtBase).toISOString();
+  let createdAtOffset = 0;
+  const nextMovementCreatedAt = () => new Date(createdAtBase + createdAtOffset++).toISOString();
   const movements = getInventoryMovements();
   const analysis = getInventoryAnalysis();
   const sourceResults = Array.isArray(pending?.results) ? pending.results : [];
   let newMovements = movements.slice();
+  const movementById = new Map(newMovements.filter(item => item?.id).map(item => [String(item.id), item]));
+  const compensatedIds = new Set(newMovements.map(item => String(item?.compensatesMovementId || '')).filter(Boolean));
   let applied = 0;
   const unresolved = [];
 
@@ -7702,7 +8881,35 @@ function applyInventoryMovementsFromPending(pending) {
     }
 
     const previousIds = new Set(analysis[key]?.movementIds || []);
-    if (previousIds.size) newMovements = newMovements.filter(movement => !previousIds.has(movement.id));
+    for (const previousIdRaw of previousIds) {
+      const previousId = String(previousIdRaw || '');
+      const previous = movementById.get(previousId);
+      const previousQuantity = Number(previous?.quantity || 0);
+      if (!previous || !Number.isFinite(previousQuantity) || previousQuantity === 0 || compensatedIds.has(previousId)) continue;
+      const compensation = {
+        id: `mov-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+        entryKey: key || previous.entryKey || '',
+        entrySyncId: item.entry?.syncId || previous.entrySyncId || '',
+        entryLocalId: item.entry?.id || previous.entryLocalId || '',
+        entryHash: item.entryHash || previous.entryHash || '',
+        entryDate: item.entry?.entryDate || previous.entryDate || todayISO(),
+        entryType: item.entry?.entryType || previous.entryType || '',
+        action: 'korekta_anuluj_poprzedni_ruch',
+        product: previous.product,
+        category: normalizeInventoryCategory(previous.category || inferInventoryCategory(previous.product)),
+        quantity: -previousQuantity,
+        unit: previous.unit || 'szt',
+        unitCost: Number(previous.unitCost || 0),
+        confidence: 1,
+        reason: `Korekta kompensująca wcześniejszy ruch ${previousId} przed ponownym zastosowaniem analizy.`,
+        sourceDescription: item.entry?.description || item.entry?.originalText || previous.sourceDescription || '',
+        compensatesMovementId: previousId,
+        createdAt: nextMovementCreatedAt()
+      };
+      newMovements.push(compensation);
+      movementById.set(compensation.id, compensation);
+      compensatedIds.add(previousId);
+    }
     const quantity = item.movementType === 'out' ? -Math.abs(Number(item.quantity || 0)) : Math.abs(Number(item.quantity || 0));
     const movement = {
       id: `mov-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
@@ -7721,13 +8928,14 @@ function applyInventoryMovementsFromPending(pending) {
       confidence: normalizeInventoryConfidence(item.confidence),
       reason: item.reason || '',
       sourceDescription: item.entry?.description || item.entry?.originalText || '',
-      createdAt: now
+      createdAt: nextMovementCreatedAt()
     };
     newMovements.push(movement);
+    movementById.set(movement.id, movement);
     applied += 1;
     analysis[key] = {
       entryHash: item.entryHash,
-      checkedAt: now,
+      checkedAt: movement.createdAt,
       decision: item.decision,
       movementIds: [movement.id],
       confidence: normalizeInventoryConfidence(item.confidence),
@@ -7824,7 +9032,7 @@ function inventoryItemMatchesSearch(item, query = '') {
 function renderInventory(editIndex = null) {
   const sortedItems = getInventoryItems().map(item => ({ ...item, category: normalizeInventoryCategory(item.category || inferInventoryCategory(item.name)) }))
     .sort((a, b) => String(a.category || 'Inne').localeCompare(String(b.category || 'Inne'), 'pl') || String(a.name || '').localeCompare(String(b.name || ''), 'pl'));
-  saveInventoryItems(sortedItems, { skipSync: true });
+  saveInventoryItems(sortedItems, { skipSync: true, skipTouch: true });
   const movements = getInventoryMovements().slice().sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
   const searchQuery = el.inventorySearchInput?.value || '';
   const items = sortedItems.map((item, originalIndex) => ({ ...item, _inventoryIndex: originalIndex }))
@@ -8078,58 +9286,86 @@ async function runInventoryRecognition() {
   }
 }
 
-function importInventoryFromPayload(payload, replace = false) {
+function importInventoryFromPayload(payload, replace = false, options = {}) {
   if (!payload || typeof payload !== 'object') return migrateInventoryLocalStorage({ rebuild: false, skipSync: true });
   const migrated = normalizeInventoryPayload(payload);
+  const incomingUpdatedAt = String(payload.updatedAt || payload.updated_at || '');
+  const incomingDeviceId = String(payload.sourceDeviceId || payload.source_device_id || '');
+  const isVersionedSnapshot = payload.schema === 'portfel-pro-inventory-v1' && parseDateTimeMs(incomingUpdatedAt);
+  const localUpdatedAt = getInventoryUpdatedAt();
+  const incomingTime = parseDateTimeMs(incomingUpdatedAt);
+  const localTime = parseDateTimeMs(localUpdatedAt);
+  const incomingTie = incomingDeviceId.localeCompare(getInventorySourceDeviceId());
+  const incomingWins = !isVersionedSnapshot || incomingTime > localTime || (incomingTime === localTime && incomingTie >= 0);
+  const saveOptions = { skipSync: true, skipTouch: true, skipDeletionTracking: true };
 
   if (replace) {
-    saveInventoryItems(migrated.hasItems ? migrated.items : [], { skipSync: true });
-    saveInventoryMovements(migrated.hasMovements ? migrated.movements : [], { skipSync: true });
-    saveInventoryAnalysis(migrated.hasAnalysis ? migrated.analysis : normalizeInventoryAnalysisForStorage(null), { skipSync: true });
-    saveInventoryPending(migrated.hasPending ? migrated.pending : normalizeInventoryPendingForStorage(null), { skipSync: true });
-    migrateInventoryLocalStorage({ rebuild: false, skipSync: true });
-    if (migrated.hasMovements) rebuildInventoryItemsFromMovements(false, { skipSync: true });
+    const incomingMovements = migrated.hasMovements ? migrated.movements : [];
+    const replacementTombstones = buildInventoryReplacementTombstones(incomingMovements, migrated.movementTombstones);
+    const replacementMovements = mergeInventoryMovementEventLog([], incomingMovements, replacementTombstones);
+    saveInventoryMovementTombstones(replacementTombstones);
+    saveInventoryItems(migrated.hasItems ? migrated.items : [], saveOptions);
+    saveInventoryMovements(replacementMovements, saveOptions);
+    saveInventoryAnalysis(migrated.hasAnalysis ? migrated.analysis : normalizeInventoryAnalysisForStorage(null), saveOptions);
+    saveInventoryPending(migrated.hasPending ? migrated.pending : normalizeInventoryPendingForStorage(null), saveOptions);
+    migrateInventoryLocalStorage({ rebuild: false, skipSync: true, skipTouch: true });
+    if (incomingMovements.length) rebuildInventoryItemsFromMovements(false, saveOptions);
+    touchInventoryState();
     return getInventoryImportCounts();
   }
 
-  if (migrated.hasItems && !getInventoryMovements().length) {
-    const currentItems = getInventoryItems();
-    const byKey = new Map(currentItems.map(item => [inventoryProductKey(item.name, item.unit), item]));
-    for (const item of migrated.items) {
-      const key = inventoryProductKey(item.name, item.unit);
-      if (!byKey.has(key)) byKey.set(key, item);
+  const localMovements = getInventoryMovements();
+  const mergedTombstones = mergeInventoryMovementTombstones(
+    getInventoryMovementTombstones(),
+    migrated.hasMovementTombstones ? migrated.movementTombstones : []
+  );
+  const mergedMovements = mergeInventoryMovementEventLog(
+    localMovements,
+    migrated.hasMovements ? migrated.movements : [],
+    mergedTombstones
+  );
+  const eventLogAuthoritative = localMovements.length > 0 || migrated.movements.length > 0;
+  saveInventoryMovementTombstones(mergedTombstones);
+  saveInventoryMovements(mergedMovements, saveOptions);
+
+  if (isVersionedSnapshot) {
+    if (incomingWins) {
+      if (!eventLogAuthoritative) saveInventoryItems(migrated.hasItems ? migrated.items : [], saveOptions);
+      saveInventoryAnalysis(migrated.hasAnalysis ? migrated.analysis : {}, saveOptions);
+      saveInventoryPending(migrated.hasPending ? migrated.pending : { results: [] }, saveOptions);
     }
-    saveInventoryItems(Array.from(byKey.values()), { skipSync: true });
-  }
-
-  if (migrated.hasMovements) {
-    const current = getInventoryMovements();
-    const byId = new Map(current.map(item => [item.id, item]));
-    for (const movement of migrated.movements) {
-      if (movement?.id && !byId.has(movement.id)) byId.set(movement.id, movement);
+  } else {
+    if (migrated.hasItems && !eventLogAuthoritative) {
+      const currentItems = getInventoryItems();
+      const byKey = new Map(currentItems.map(item => [inventoryProductKey(item.name, item.unit), item]));
+      for (const item of migrated.items) {
+        const key = inventoryProductKey(item.name, item.unit);
+        if (!byKey.has(key)) byKey.set(key, item);
+      }
+      saveInventoryItems(Array.from(byKey.values()), saveOptions);
     }
-    saveInventoryMovements(Array.from(byId.values()), { skipSync: true });
-  }
 
-  if (migrated.hasAnalysis) {
-    saveInventoryAnalysis({ ...getInventoryAnalysis(), ...migrated.analysis }, { skipSync: true });
-  }
-
-  if (migrated.hasPending) {
-    const localPending = getInventoryPending();
-    const remotePending = migrated.pending;
-    const localResults = Array.isArray(localPending.results) ? localPending.results : [];
-    const remoteResults = Array.isArray(remotePending.results) ? remotePending.results : [];
-    const byKey = new Map(localResults.map(item => [`${item.id_wpisu || ''}|${item.entryHash || ''}|${item.decision || ''}|${item.product || ''}`, item]));
-    for (const item of remoteResults) {
-      const key = `${item.id_wpisu || ''}|${item.entryHash || ''}|${item.decision || ''}|${item.product || ''}`;
-      if (!byKey.has(key)) byKey.set(key, item);
+    if (migrated.hasAnalysis) {
+      saveInventoryAnalysis({ ...getInventoryAnalysis(), ...migrated.analysis }, saveOptions);
     }
-    saveInventoryPending({ ...localPending, ...remotePending, results: Array.from(byKey.values()) }, { skipSync: true });
+
+    if (migrated.hasPending) {
+      const localPending = getInventoryPending();
+      const remotePending = migrated.pending;
+      const localResults = Array.isArray(localPending.results) ? localPending.results : [];
+      const remoteResults = Array.isArray(remotePending.results) ? remotePending.results : [];
+      const byKey = new Map(localResults.map(item => [`${item.id_wpisu || ''}|${item.entryHash || ''}|${item.decision || ''}|${item.product || ''}`, item]));
+      for (const item of remoteResults) {
+        const key = `${item.id_wpisu || ''}|${item.entryHash || ''}|${item.decision || ''}|${item.product || ''}`;
+        if (!byKey.has(key)) byKey.set(key, item);
+      }
+      saveInventoryPending({ ...localPending, ...remotePending, results: Array.from(byKey.values()) }, saveOptions);
+    }
   }
 
-  migrateInventoryLocalStorage({ rebuild: false, skipSync: true });
-  if (migrated.hasMovements) rebuildInventoryItemsFromMovements(false, { skipSync: true });
+  migrateInventoryLocalStorage({ rebuild: false, skipSync: true, skipTouch: true });
+  if (eventLogAuthoritative) rebuildInventoryItemsFromMovements(false, saveOptions);
+  touchInventoryState();
   return getInventoryImportCounts();
 }
 
@@ -8143,8 +9379,15 @@ function setupAiAndInventory() {
   if (el.inventorySearchInput) el.inventorySearchInput.addEventListener('input', () => renderInventory());
   if (el.aiProviderSelect) el.aiProviderSelect.addEventListener('change', () => {
     const settings = getAiSettings();
-    setJsonLocalStorage(AI_SETTINGS_KEY, { ...settings, provider: el.aiProviderSelect.value, model: (AI_MODEL_OPTIONS[el.aiProviderSelect.value] || [])[0] || '', customModel: '' });
+    setJsonLocalStorage(AI_SETTINGS_KEY, {
+      ...settings,
+      provider: el.aiProviderSelect.value,
+      model: (AI_MODEL_OPTIONS[el.aiProviderSelect.value] || [])[0] || '',
+      customModel: '',
+      updatedAt: new Date().toISOString()
+    });
     renderAiSettings();
+    scheduleDropboxAutoSync();
   });
   if (el.aiSaveSettingsButton) el.aiSaveSettingsButton.addEventListener('click', event => {
     event.preventDefault();
@@ -8285,6 +9528,18 @@ function bindEvents() {
   if (el.learningRulesList) el.learningRulesList.addEventListener('click', handleLearningRulesClick);
   if (el.learningClearButton) el.learningClearButton.addEventListener('click', () => clearAllLearningRules().catch(error => showMessage(error.message, 'error')));
   if (el.mainReportSettings) el.mainReportSettings.addEventListener('change', handleMainReportSettingsChange);
+  if (el.mainReport) {
+    el.mainReport.addEventListener('pointerdown', handleMainReportPointerDown);
+    el.mainReport.addEventListener('pointermove', handleMainReportPointerMove, { passive: false });
+    el.mainReport.addEventListener('pointerup', handleMainReportPointerEnd);
+    el.mainReport.addEventListener('pointercancel', handleMainReportPointerEnd);
+    el.mainReport.addEventListener('lostpointercapture', event => {
+      if (mainReportReorderState?.active) handleMainReportPointerEnd(event);
+      else clearMainReportReorderState();
+    });
+  }
+  if (el.reportMonth) el.reportMonth.addEventListener('change', () => handleReportMonthChange().catch(error => showMessage(error.message, 'error')));
+  if (el.historyYearFilters) el.historyYearFilters.addEventListener('change', () => handleHistoryYearFiltersChange().catch(error => showMessage(error.message, 'error')));
   if (el.categoryForm) el.categoryForm.addEventListener('submit', event => handleCategoryFormSubmit(event).catch(error => showMessage(error.message, 'error')));
   if (el.customCategoriesList) el.customCategoriesList.addEventListener('click', handleCustomCategoryClick);
   if (el.mainReportResetButton) el.mainReportResetButton.addEventListener('click', resetMainReportSettings);
@@ -8323,12 +9578,14 @@ function bindEvents() {
   }));
   if (el.voiceText) el.voiceText.addEventListener('input', () => setVoiceButtonsState(false));
 
-  el.calendarPrevButton.addEventListener('click', () => shiftCalendarMonth(-1));
-  el.calendarNextButton.addEventListener('click', () => shiftCalendarMonth(1));
-  el.calendarTodayButton.addEventListener('click', () => {
+  el.calendarPrevButton.addEventListener('click', () => shiftCalendarMonth(-1).catch(error => showMessage(error.message, 'error')));
+  el.calendarNextButton.addEventListener('click', () => shiftCalendarMonth(1).catch(error => showMessage(error.message, 'error')));
+  el.calendarTodayButton.addEventListener('click', async () => {
     const today = todayISO();
+    if (!await ensureDataYearAvailable(today.slice(0, 4), 'kalendarz')) return;
     calendarMonth = today.slice(0, 7);
     selectedCalendarDate = today;
+    await reloadEntries();
     renderCalendar();
   });
   el.calendarClearDayButton.addEventListener('click', () => {
@@ -8341,7 +9598,7 @@ function bindEvents() {
   el.calendarGrid.addEventListener('click', event => {
     const button = event.target.closest('button[data-date]');
     if (!button) return;
-    selectCalendarDate(button.dataset.date);
+    selectCalendarDate(button.dataset.date).catch(error => showMessage(error.message, 'error'));
   });
   el.calendarGrid.addEventListener('dragover', handleCalendarDragOver);
   el.calendarGrid.addEventListener('dragleave', event => {
@@ -8351,20 +9608,22 @@ function bindEvents() {
   el.calendarDayDetails.addEventListener('click', handleEntriesClick);
   el.calendarDayDetails.addEventListener('dragstart', handleEntryDragStart);
   el.calendarDayDetails.addEventListener('dragend', handleEntryDragEnd);
-  el.yearPrevButton.addEventListener('click', () => shiftCalendarYear(-1));
-  el.yearNextButton.addEventListener('click', () => shiftCalendarYear(1));
-  el.yearTodayButton.addEventListener('click', () => {
+  el.yearPrevButton.addEventListener('click', () => shiftCalendarYear(-1).catch(error => showMessage(error.message, 'error')));
+  el.yearNextButton.addEventListener('click', () => shiftCalendarYear(1).catch(error => showMessage(error.message, 'error')));
+  el.yearTodayButton.addEventListener('click', async () => {
     const today = todayISO();
+    if (!await ensureDataYearAvailable(today.slice(0, 4), 'kalendarz roczny')) return;
     calendarYear = Number(today.slice(0, 4));
     selectedCalendarDate = today;
     calendarMonth = today.slice(0, 7);
+    await reloadEntries();
     renderYearCalendar();
     renderCalendar();
   });
   el.yearCalendarGrid.addEventListener('click', event => {
     const button = event.target.closest('button[data-date]');
     if (!button) return;
-    selectCalendarDate(button.dataset.date);
+    selectCalendarDate(button.dataset.date).catch(error => showMessage(error.message, 'error'));
   });
   el.yearCalendarGrid.addEventListener('dragover', handleCalendarDragOver);
   el.yearCalendarGrid.addEventListener('dragleave', event => {
@@ -8374,7 +9633,7 @@ function bindEvents() {
   el.yearTopDays.addEventListener('click', event => {
     const button = event.target.closest('button[data-date]');
     if (!button) return;
-    selectCalendarDate(button.dataset.date);
+    selectCalendarDate(button.dataset.date).catch(error => showMessage(error.message, 'error'));
   });
   el.cancelEditButton.addEventListener('click', resetForm);
   el.entryEditDialog?.querySelectorAll('[data-close-edit]').forEach(button => button.addEventListener('click', resetForm));
@@ -8395,6 +9654,7 @@ function bindEvents() {
   el.clearFiltersButton.addEventListener('click', () => {
     selectedCalendarDate = '';
     el.filterForm.reset();
+    renderHistoryYearFilters();
     applyFilters();
   });
 
@@ -8490,7 +9750,10 @@ function bindEvents() {
 async function init() {
   const today = todayISO();
   document.title = 'Portfel PRO';
-  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.1 / 154';
+  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.1 / 155';
+  applyCalendarYearRollover();
+  reportMonth = today.slice(0, 7);
+  if (el.reportMonth) el.reportMonth.value = reportMonth;
   runUiBindingAudit();
   setTodayHeader('wczytywanie...');
   if (isFileProtocol()) {
@@ -8513,6 +9776,7 @@ async function init() {
   await seedDefaultTagRules();
   await reloadLearningRules();
   await ensureEntrySyncIds();
+  await refreshAvailableDataYears();
   renderTagRules();
   renderCustomCategoriesList();
   renderMainReportSettings();

@@ -1,16 +1,16 @@
-const CACHE_NAME = 'portfel-pro-v1-1-v154';
-const APP_VERSION = '1.1-154';
+const CACHE_NAME = 'portfel-pro-v1-1-v155';
+const APP_VERSION = '1.1-155';
 const APP_SHELL = [
   './',
   './index.html',
-  './index.html?v=154',
+  './index.html?v=155',
   './voice/index.html',
-  './voice/index.html?v=154',
-  './manifest.webmanifest?v=154',
-  './manifest-voice.webmanifest?v=154',
-  './src/styles.css?v=154',
-  './src/config.js?v=154',
-  './src/app.js?v=154',
+  './voice/index.html?v=155',
+  './manifest.webmanifest?v=155',
+  './manifest-voice.webmanifest?v=155',
+  './src/styles.css?v=155',
+  './src/config.js?v=155',
+  './src/app.js?v=155',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/logo-portfel-pro.png',
@@ -50,10 +50,10 @@ async function fetchAndCache(request) {
 async function navigationFallback(requestUrl) {
   const cache = await caches.open(CACHE_NAME);
   if (requestUrl.pathname.endsWith('/voice/') || requestUrl.pathname.endsWith('/voice/index.html')) {
-    return await cache.match('./voice/index.html?v=154', { ignoreSearch: true })
-      || await cache.match('./index.html?v=154', { ignoreSearch: true });
+    return await cache.match('./voice/index.html?v=155', { ignoreSearch: true })
+      || await cache.match('./index.html?v=155', { ignoreSearch: true });
   }
-  return cache.match('./index.html?v=154', { ignoreSearch: true });
+  return cache.match('./index.html?v=155', { ignoreSearch: true });
 }
 
 self.addEventListener('fetch', event => {

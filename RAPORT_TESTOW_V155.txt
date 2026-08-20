@@ -1,0 +1,40 @@
+Portfel PRO v. 1.1 / 155 — raport kontroli
+Data: 2026-08-20
+
+ZAKRES FUNKCJONALNY
+- Kafelek „Wypłata” pokazuje wynik firmy z bieżącego miesiąca i pomija wydatki domowe.
+- Raport główny liczy wyłącznie bieżący miesiąc.
+- Wszystkie 24 kategorie są dostępne w ustawieniach raportu głównego.
+- TV i Monitoring pozostały, a Telewizja, Internetowe i Kamery dodano jako osobne kategorie.
+- Wybrane kategorie z obrotem pojawiają się na Start; wybrane kategorie z wynikiem 0 pozostają ukryte.
+- Sekcja „Własne grupy/tagi w raporcie głównym” została usunięta.
+- Raport kategorii i raport grup liczą wyłącznie miesiąc wybrany w polu raportu.
+- Kafelki raportu mają zapis kolejności oraz osobny uchwyt dotykowy do długiego przytrzymania.
+
+PLIKI DANYCH
+- portfel-pro-ustawienia.json — ustawienia globalne.
+- portfel-pro-magazyn.json — ciągły magazyn i dziennik ruchów.
+- portfel-pro-wpisy-RRRR.json — osobny plik historii dla każdego roku.
+- bilans_dane.json — zachowywany jako nietknięta kopia migracyjna.
+- Roczne pliki i magazyn są scalane z kontrolą rewizji Dropbox; usunięcia mają trwałe znaczniki.
+
+TEST PRZEGLĄDARKOWY
+- Szerokości 320, 360, 390 i 430 px: brak poziomego przewijania.
+- Na każdej szerokości kwota mieści się w prawej kolumnie i nie nachodzi na opis.
+- Długi opis zawija się w lewej kolumnie.
+- Przykładowa wypłata 1043,31 zł była identyczna w górnym kafelku i raporcie głównym.
+- Wpis 99 999,00 zł z poprzedniego miesiąca nie zmienił raportu bieżącego miesiąca; po wyborze poprzedniego miesiąca pojawił się w raporcie kategorii i grup.
+
+KONTROLE TECHNICZNE
+- node --check src/app.js — OK.
+- node --check service-worker.js — OK.
+- manifest.webmanifest — poprawny JSON.
+- manifest-voice.webmanifest — poprawny JSON.
+- Brak powtórzonych identyfikatorów HTML i brak aktywnych odwołań PWA do wersji 154.
+- CSS: nawiasy bloków zbilansowane.
+
+UWAGA TESTOWA
+Gest długiego przytrzymania ma stały uchwyt z touch-action:none i nie blokuje przewijania reszty kafelka. Końcową próbę gestu warto wykonać również na fizycznym telefonie z Androidem, ponieważ emulacja szerokości nie odtwarza wszystkich zachowań sterownika dotyku.
+
+GITHUB / CI
+Archiwum źródłowe nie zawiera podpiętego zdalnego repozytorium ani workflow GitHub Actions. Wykonano wszystkie dostępne kontrole lokalne; niczego nie publikowano.

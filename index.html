@@ -11,11 +11,11 @@
     const __manifestFile = new URLSearchParams(location.search).get('action') === 'voice'
       ? 'manifest-voice.webmanifest'
       : 'manifest.webmanifest';
-    document.write(`<link id="appManifest" rel="manifest" href="./${__manifestFile}?v=154">`);
+    document.write(`<link id="appManifest" rel="manifest" href="./${__manifestFile}?v=155">`);
   </script>
-  <link rel="icon" href="./icons/icon-192.png?v=154">
-  <link rel="apple-touch-icon" href="./icons/icon-192.png?v=154">
-  <link rel="stylesheet" href="./src/styles.css?v=154">
+  <link rel="icon" href="./icons/icon-192.png?v=155">
+  <link rel="apple-touch-icon" href="./icons/icon-192.png?v=155">
+  <link rel="stylesheet" href="./src/styles.css?v=155">
 </head>
 <body data-theme="classic">
   <script>
@@ -26,9 +26,9 @@
   <main class="app-shell">
     <header class="app-header">
       <div class="brand-block">
-        <img class="app-logo" src="./icons/logo-portfel-pro.png?v=154" alt="Portfel PRO">
+        <img class="app-logo" src="./icons/logo-portfel-pro.png?v=155" alt="Portfel PRO">
         <div>
-          <h1>Portfel PRO <span id="appVersionBadge" class="version-badge">v. 1.1 / 154</span></h1>
+          <h1>Portfel PRO <span id="appVersionBadge" class="version-badge">v. 1.1 / 155</span></h1>
           <p id="todayLabel">Lokalna aplikacja webowa</p>
         </div>
       </div>
@@ -107,10 +107,10 @@
           <strong id="monthBalance">0,00 zł</strong>
           <small id="monthDetails">Przychody 0,00 zł · Wydatki 0,00 zł</small>
         </article>
-        <article class="summary-card">
-          <span>Całość</span>
+        <article class="summary-card payout-summary-card">
+          <span>Wypłata</span>
           <strong id="allBalance">0,00 zł</strong>
-          <small id="allDetails">Przychody 0,00 zł · Wydatki 0,00 zł</small>
+          <small id="allDetails">Bieżący miesiąc · przychody firmowe minus koszty firmowe</small>
         </article>
       </section>
 
@@ -138,7 +138,7 @@
       <section class="start-grid">
         <article class="panel report-panel start-report-card emphasis-panel">
           <h2>Raport główny</h2>
-          <p>Najważniejsze podsumowanie: komputerowe, montaże, wydatki domowe i wynik firmy bez odejmowania wydatków domowych.</p>
+          <p>Bieżący miesiąc. Widoczność ustawisz w Ustawieniach. Kolejność zmienisz przeciąganiem: na telefonie przytrzymaj uchwyt ⠿, a myszką cały kafelek.</p>
           <div id="mainReport" class="category-report main-report"></div>
         </article>
       </section>
@@ -269,6 +269,11 @@
               <option value="inne">Inne</option>
             </select>
           </label>
+          <fieldset class="history-years-fieldset wide">
+            <legend>Lata danych</legend>
+            <p class="muted-small">Zaznacz jeden lub kilka lat. Starszy rok zostanie dołączony dopiero wtedy, gdy go wybierzesz.</p>
+            <div id="historyYearFilters" class="history-year-filters" role="group" aria-label="Lata uwzględniane w historii"></div>
+          </fieldset>
           <div class="form-actions">
             <button type="submit" class="secondary">Zastosuj</button>
             <button id="clearFiltersButton" type="button" class="ghost">Wyczyść filtry</button>
@@ -300,6 +305,18 @@
 
     <section class="tab-page" data-tab-page="reports">
       <section class="report-layout">
+        <article class="panel report-panel report-period-panel">
+          <div class="panel-title-row">
+            <div>
+              <h2>Miesiąc raportów</h2>
+              <p>Raport kategorii i raport grup obejmują wyłącznie wskazany miesiąc.</p>
+            </div>
+            <label class="report-month-control">
+              Wybierz miesiąc
+              <input id="reportMonth" type="month">
+            </label>
+          </div>
+        </article>
         <article class="panel report-panel wallet-panel">
           <h2>Portfel gotówkowy</h2>
           <p>Stan jest ciągły między miesiącami. Od ustawionej wartości początkowej program dodaje późniejsze przychody gotówką, odejmuje wydatki gotówką oraz uwzględnia ręczne korekty.</p>
@@ -323,12 +340,12 @@
         </article>
         <article class="panel report-panel">
           <h2>Raport kategorii</h2>
-          <p>Raport szczegółowy według aktualnie widocznych wpisów i ustawionych filtrów.</p>
+          <p>Podsumowanie kategorii wyłącznie dla miesiąca wybranego powyżej.</p>
           <div id="categoryReport" class="category-report"></div>
         </article>
         <article class="panel report-panel">
           <h2>Raport grup</h2>
-          <p>Łączy podobne nazwy według bazy tagów, np. hotdog, hot-dog i hot doga.</p>
+          <p>Łączy podobne nazwy według bazy tagów wyłącznie w wybranym miesiącu.</p>
           <div id="itemReport" class="category-report"></div>
         </article>
         <article class="panel report-panel">
@@ -516,17 +533,17 @@
             <p>Dane zawsze zapisują się najpierw lokalnie. Dropbox jest opcjonalną synchronizacją po odzyskaniu internetu.</p>
             <label>
               Tryb pracy
-              <select id="storageModeSelect" data-help="Lokalnie zapisuje dane tylko w tej przeglądarce. Dropbox pozwala korzystać z jednego pliku na telefonie i komputerze.">
+              <select id="storageModeSelect" data-help="Lokalnie zapisuje dane tylko w tej przeglądarce. Dropbox pozwala korzystać ze wspólnych plików na telefonie i komputerze.">
                 <option value="local">Lokalnie</option>
                 <option value="dropbox">Dropbox</option>
               </select>
             </label>
             <div class="dropbox-simple-card">
               <strong>Dropbox — tryb prosty</strong>
-              <p>Kliknij jeden przycisk, zaloguj się do Dropboxa i zatwierdź dostęp. Program sam użyje pliku JSON aplikacji.</p>
+              <p>Kliknij jeden przycisk, zaloguj się do Dropboxa i zatwierdź dostęp. Program przechowuje osobno ustawienia, magazyn i pliki poszczególnych lat.</p>
               <div class="button-row">
                 <button id="dropboxConnectButton" class="primary" type="button" data-help="Otwiera bezpieczne logowanie Dropbox. Po zatwierdzeniu program sam zapisze połączenie w tej przeglądarce.">Połącz z Dropbox</button>
-                <button id="dropboxSyncNowButton" class="secondary" type="button" data-help="Ręcznie wysyła i pobiera zmiany z pliku JSON w Dropboxie.">Synchronizuj teraz</button>
+                <button id="dropboxSyncNowButton" class="secondary" type="button" data-help="Ręcznie wysyła i pobiera zmiany z plików JSON w Dropboxie.">Synchronizuj teraz</button>
                 <button id="dropboxDisconnectButton" class="ghost" type="button" data-help="Usuwa lokalne połączenie z Dropboxem. Nie kasuje pliku danych w Dropboxie.">Odłącz Dropbox</button>
               </div>
             </div>
@@ -537,8 +554,8 @@
                 <input id="dropboxAppKeyInput" type="text" data-help="App key aplikacji Dropbox. Dla klientów najlepiej wpisać go na stałe w kodzie programu." placeholder="Wklej App key tylko jeśli nie jest wpisany w programie">
               </label>
               <label>
-                Ścieżka pliku w Dropboxie
-                <input id="dropboxFilePathInput" type="text" data-help="Ścieżka pliku JSON w Dropboxie. Przy App folder używaj ścieżki /bilans_dane.json." value="/bilans_dane.json">
+                Dotychczasowa ścieżka danych w Dropboxie
+                <input id="dropboxFilePathInput" type="text" data-help="Nowe pliki ustawień, magazynu i lat powstaną w tym samym folderze. Dotychczasowy /bilans_dane.json pozostanie nietkniętą kopią migracyjną." value="/bilans_dane.json">
               </label>
             </div>
             <small id="cloudStatus" class="sync-info">Tryb lokalny. Dane są zapisane tylko w tej przeglądarce.</small>
@@ -578,7 +595,7 @@
         <div class="panel-title-row">
           <div>
             <h2>Pomoc i instrukcja obsługi</h2>
-            <p>Krótka instrukcja dla Portfel PRO v. 1.1 / 154.</p>
+            <p>Krótka instrukcja dla Portfel PRO v. 1.1 / 155.</p>
           </div>
         </div>
 
@@ -680,7 +697,7 @@
             <ol>
               <li>W zakładce <strong>Ustawienia</strong> kliknij <strong>Odśwież program</strong>.</li>
               <li>Odśwież stronę w przeglądarce.</li>
-              <li>Jeżeli dalej widzisz starą wersję, otwórz adres z dopiskiem <code>?v=154</code>.</li>
+              <li>Jeżeli dalej widzisz starą wersję, otwórz adres z dopiskiem <code>?v=155</code>.</li>
             </ol>
           </article>
         </div>
@@ -856,7 +873,7 @@
     </section>
   </main>
 
-  <script src="./src/config.js?v=154"></script>
-  <script src="./src/app.js?v=154" type="module"></script>
+  <script src="./src/config.js?v=155"></script>
+  <script src="./src/app.js?v=155" type="module"></script>
 </body>
 </html>
