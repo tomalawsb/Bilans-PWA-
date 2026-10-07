@@ -1,8 +1,23 @@
-# Portfel PRO v. 1.1 / 155
+# Portfel PRO v. 1.2 / 156
 
 Lokalna aplikacja PWA do prowadzenia bilansu, historii, raportów, kalendarza i magazynu. Dane są zapisywane w IndexedDB, opcjonalnie mogą być synchronizowane przez Dropbox.
 
-## Najważniejsze zmiany wersji 155
+## Najważniejsze zmiany wersji 156
+
+- nowa nawigacja: na telefonie dolne menu Bilans · Historia · Raporty · Kalendarz · Więcej; „Więcej” zawiera Magazyn, Kopie, Kategorie i raport, Pomoc, Ustawienia; na tablecie górne menu z rozwijanym „Więcej”, na komputerze pełne menu w jednym wierszu;
+- nowa sekcja „Kategorie i raport” (raport główny, kategorie, baza tagów, samouczenie) — przeniesiona z Ustawień bez zmiany danych; Ustawienia zawierają wyłącznie konfigurację programu (aplikacja, AI, wygląd);
+- ustawienie rozmiaru czcionki: mała / standardowa / duża / bardzo duża (zapis lokalny, stosowane przed pierwszym renderowaniem);
+- czytelniejsze pole „Paragon / szybkie AI” (białe tło, mocniejsza ramka, jaśniejszy placeholder, przykłady pod polem);
+- po „Rozpoznaj” program czeka na wynik końcowy (także AI) i jednorazowo przewija do wyniku z uwzględnieniem przyklejonego menu;
+- jawne słowa płatności (karta, gotówka, BLIK, przelew, z konta) i rodzaju (firmowe, do firmy, na firmę, służbowe / domowe, prywatne, prywatnie, do domu, dla domu) zawsze wygrywają z AI i z nauką;
+- potok rozpoznawania: tekst → jawne polecenia → parser lokalny → AI → ponowne nałożenie jawnych poleceń → walidacja → wynik;
+- kwoty bez „zł” (np. „Dino 13,50 karta”) i liczebniki słowne („dwóch routerów po 150”);
+- usunięto przeskakiwanie strony przy starcie (stała wysokość linii daty/imienin, data wpisywana od razu, rezerwacja miejsca w kafelkach i podglądzie);
+- nowa ikona programu we wszystkich rozmiarach (favicon, apple-touch-icon, PWA any/maskable, skróty), nowa wersja cache service workera;
+- testy rozpoznawania: `node tests/parser.test.mjs`;
+- `BUILD.cmd` i `URUCHOM.cmd` korzystają ze wspólnych narzędzi w `D:\Users\Admin\Środowiska\` (można nadpisać zmienną `SRODOWISKA_ROOT`).
+
+## Zmiany wersji 155
 
 - kafelek „Całość” zastąpiono „Wypłatą” z bieżącego miesiąca: przychody firmowe minus koszty firmowe, bez wydatków domowych;
 - raport główny można konfigurować z pełnej listy kategorii, a kolejność widocznych kafelków zmieniać długim przytrzymaniem i przeciągnięciem;
@@ -39,18 +54,20 @@ Lokalna aplikacja PWA do prowadzenia bilansu, historii, raportów, kalendarza i 
 
 ## Uruchomienie lokalne
 
-Uruchom `run_local_windows.bat`, a następnie otwórz:
+Uruchom `URUCHOM.cmd` (opcjonalnie z numerem portu, np. `URUCHOM.cmd 8080`). Skrypt użyje Pythona z `D:\Users\Admin\Środowiska\Python311`, systemowego Pythona albo — tylko gdy go brak — pobierze wspólną wersję do tego katalogu. Następnie otworzy:
 
 ```text
-http://localhost:8000/?v=155
+http://127.0.0.1:8000/?v=156
 ```
+
+`BUILD.cmd` sprawdza/pobiera wspólny Node.js (`Środowiska\NodeJS`), uruchamia testy rozpoznawania, składa czystą paczkę strony w `Środowiska\Bilans\dist` i kopiuje gotowy `Bilans-1.2.156-www.zip` do katalogu projektu. Logi trafiają do `Środowiska\Bilans\logs`.
 
 Nie otwieraj `index.html` bezpośrednio z dysku, jeśli chcesz testować PWA, cache, import lub instalację.
 
 ## Instalacja
 
-- Portfel PRO: Ustawienia → Aplikacja i skróty → Zainstaluj aplikację. Przycisk jest widoczny wyłącznie, kiedy instalacja jest dostępna.
-- Mikrofon: Ustawienia → Aplikacja i skróty → Zainstaluj mikrofon. Otwiera osobną aplikację z własną ikoną i manifestem.
+- Portfel PRO: Więcej → Ustawienia → Aplikacja i skróty → Zainstaluj aplikację. Przycisk jest widoczny wyłącznie, kiedy instalacja jest dostępna.
+- Mikrofon: Więcej → Ustawienia → Aplikacja i skróty → Zainstaluj mikrofon. Otwiera osobną aplikację z własną ikoną i manifestem.
 - Kopie danych i import znajdują się w zakładce Kopie.
 
 ## Inteligentne rozpoznawanie
@@ -66,6 +83,7 @@ Po pierwszym uruchomieniu online aplikacja zapisuje swoje pliki na urządzeniu. 
 ```text
 node --check src/app.js
 node --check service-worker.js
+node tests/parser.test.mjs
 ```
 
-Manifesty `manifest.webmanifest` i `manifest-voice.webmanifest` muszą pozostać poprawnym JSON-em, a wszystkie zasoby PWA powinny używać wersji `v=155`.
+Manifesty `manifest.webmanifest` i `manifest-voice.webmanifest` muszą pozostać poprawnym JSON-em, a wszystkie zasoby PWA powinny używać wersji `v=156`.

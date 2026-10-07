@@ -1,4 +1,4 @@
-# upload_to_github.ps1
+﻿# upload_to_github.ps1
 # Portfel PRO / Bilans-PWA-
 # Skrypt bezpieczny: pobiera aktualne repo do katalogu tymczasowego, kopiuje paczke programu i wysyla zmiany.
 
@@ -7,7 +7,7 @@ $ErrorActionPreference = "Stop"
 $RepoUrl = "https://github.com/tomalawsb/Bilans-PWA-.git"
 $GitUserName = "Tomasz Wolak"
 $GitUserEmail = "wolak82@gmail.com"
-$DefaultCommitMessage = "Portfel PRO v1.1 154 - tryb offline-first"
+$DefaultCommitMessage = "Portfel PRO v1.2 156 - nowa nawigacja, czcionka, ikona"
 
 function Stop-WithMessage($Message) {
     Write-Host ""
@@ -25,8 +25,9 @@ Write-Host "========================================"
 Write-Host " Wysylanie projektu na GitHub"
 Write-Host "========================================"
 
-$ProjectPath = (Get-Location).Path
-$TempRoot = Join-Path $env:TEMP "bilans_pwa_git_upload"
+$ProjectPath = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
+$EnvRoot = if ($env:SRODOWISKA_ROOT) { $env:SRODOWISKA_ROOT } else { "D:\Users\Admin\Środowiska" }
+$TempRoot = Join-Path $EnvRoot "Bilans\temp\git_upload"
 $RepoWorkPath = Join-Path $TempRoot "repo"
 
 Info "Folder projektu: $ProjectPath"
@@ -100,5 +101,5 @@ Set-Location $ProjectPath
 
 Write-Host "========================================"
 Ok "Gotowe. Projekt zostal wyslany na GitHub."
-Write-Host "Adres strony: https://tomalawsb.github.io/Bilans-PWA-/?v=155"
+Write-Host "Adres strony: https://tomalawsb.github.io/Bilans-PWA-/?v=156"
 Write-Host "========================================"

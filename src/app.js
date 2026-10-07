@@ -1,6 +1,6 @@
 const DB_NAME = 'bilans-pwa-etap1';
 const DB_VERSION = 4;
-const APP_VERSION = '1.1-155';
+const APP_VERSION = '1.2-156';
 const RAW_DROPBOX_DEFAULT_APP_KEY = String(window.PORTFEL_PRO_CONFIG?.dropboxAppKey || '').trim();
 const DROPBOX_DEFAULT_APP_KEY = /^WSTAW_TUTAJ/i.test(RAW_DROPBOX_DEFAULT_APP_KEY) ? '' : RAW_DROPBOX_DEFAULT_APP_KEY; // Ustaw w src/config.js, wtedy użytkownik klika tylko Połącz z Dropbox.
 const MAIN_INSTALL_KEY = 'portfel-pro-main-installed';
@@ -128,7 +128,7 @@ const DEFAULT_TAG_RULES = [
   {
     id: 'default-router',
     name: 'Router',
-    aliases: ['router', 'routery', 'routera', 'router wifi', 'wi-fi'],
+    aliases: ['router', 'routery', 'routera', 'routerów', 'routerow', 'routerami', 'router wifi', 'wi-fi'],
     category: 'Komputerowe',
     entryType: 'wydatek',
     system: true
@@ -811,6 +811,10 @@ const el = {
   entriesTableBody: document.querySelector('#entriesTableBody'),
   mobileEntries: document.querySelector('#mobileEntries'),
   themeSelect: document.querySelector('#themeSelect'),
+  fontSizeSelect: document.querySelector('#fontSizeSelect'),
+  moreMenuButton: document.querySelector('#moreMenuButton'),
+  moreMenu: document.querySelector('#moreMenu'),
+  moreMenuBackdrop: document.querySelector('#moreMenuBackdrop'),
   aiProviderSelect: document.querySelector('#aiProviderSelect'),
   aiApiKeyInput: document.querySelector('#aiApiKeyInput'),
   aiModelSelect: document.querySelector('#aiModelSelect'),
@@ -914,7 +918,32 @@ function importThemeFromPayload(payload, replace = false) {
   });
 }
 
+const FONT_SIZE_KEY = 'portfel-pro-font-size-v1';
+const FONT_SCALES = { small: 0.9, normal: 1, large: 1.15, xlarge: 1.3 };
+
+function getSavedFontSize() {
+  try {
+    const saved = localStorage.getItem(FONT_SIZE_KEY);
+    return FONT_SCALES[saved] ? saved : 'normal';
+  } catch (_) {
+    return 'normal';
+  }
+}
+
+function applyFontSize(size, save = true) {
+  const safe = FONT_SCALES[size] ? size : 'normal';
+  const root = document.documentElement;
+  root.dataset.fontSize = safe;
+  root.style.setProperty('--font-scale', String(FONT_SCALES[safe]));
+  if (el.fontSizeSelect) el.fontSizeSelect.value = safe;
+  if (save) {
+    try { localStorage.setItem(FONT_SIZE_KEY, safe); } catch (_) {}
+  }
+}
+
 function setupThemes() {
+  applyFontSize(getSavedFontSize(), false);
+  el.fontSizeSelect?.addEventListener('change', () => applyFontSize(el.fontSizeSelect.value));
   applyTheme(getSavedTheme(), false);
   if (el.themeSelect) {
     el.themeSelect.addEventListener('change', () => applyTheme(el.themeSelect.value));
@@ -2565,6 +2594,8 @@ function detectEntryType(text) {
 }
 
 function detectExplicitScope(text) {
+  const explicit = detectExplicitCommands(text).scope;
+  if (explicit) return explicit;
   const normalized = normalizeText(text);
   if (/\b(?:domow\w*|prywatn\w*|rodzinn\w*)\b|dla domu|do domu/.test(normalized)) return 'domowe';
   if (/\b(?:firmow\w*|sluzbow\w*|dzialalnosc|nip|vat)\b|na firme|dla firmy/.test(normalized)) return 'firmowe';
@@ -2595,6 +2626,8 @@ function detectScope(text, entryType = 'wydatek', category = '') {
 }
 
 function detectPaymentMethod(text) {
+  const explicitPayment = detectExplicitCommands(text).paymentMethod;
+  if (explicitPayment) return explicitPayment;
   const normalized = normalizeText(text);
 
   if (/\bblik\b|\bbli(?:kiem|ka)?\b/.test(normalized)) return 'blik';
@@ -2612,8 +2645,12 @@ function detectPaymentMethod(text) {
   return 'gotówka';
 }
 
+const QUANTITY_WORDS = { dwa: 2, dwie: 2, dwoch: 2, dwu: 2, trzy: 3, trzech: 3, cztery: 4, czterech: 4, piec: 5, pieciu: 5, szesc: 6, szesciu: 6 };
+
 function extractQuantity(text) {
   const normalized = normalizeText(text);
+  const wordMatch = normalized.match(new RegExp(`\\b(${Object.keys(QUANTITY_WORDS).join('|')})\\b`));
+  if (wordMatch) return QUANTITY_WORDS[wordMatch[1]];
   const patterns = [
     /(?:x|×)\s*(\d+(?:[,.]\d+)?)/,
     /\b(\d+(?:[,.]\d+)?)\s*(?:szt|szt\.|sztuk|sztuki)\b/,
@@ -2740,6 +2777,15 @@ function findAmountMatches(text) {
     addMatch(match, parseMoneyByUnit(match[1], 'zł'));
   }
 
+  // Kwota bez „zł”: tylko gdy nie znaleziono żadnej kwoty z jednostką.
+  // Pomijamy daty, ilości (szt., m, x2) i liczebniki przed rzeczownikiem ilości.
+  if (!matches.length) {
+    const bareRegex = /(?<![\p{L}\p{N}.,:\/-])(\d{1,3}(?:[ \u00a0]\d{3})+(?:[,.]\d{1,2})?|\d+(?:[,.]\d{1,2})?)(?![\p{L}\p{N}]|[.,:\/-]\d|\s*(?:szt|sztuk|m\b|metr|km|kg|l\b|x\b|×|%|r\.|rok|roku))/giu;
+    for (const match of source.matchAll(bareRegex)) {
+      addMatch(match, normalizeMoneyNumber(match[1]));
+    }
+  }
+
   return matches.sort((a, b) => a.index - b.index);
 }
 
@@ -2781,6 +2827,61 @@ function takeAfterContext(text, from, to) {
   return part.replace(/^[\s,.;:–—-]+|[\s,.;:–—-]+$/g, '').trim();
 }
 
+// ===== Jawne polecenia użytkownika (etap 1 i 4 potoku rozpoznawania) =====
+// Kolejność potoku: tekst → jawne polecenia → parser lokalny → AI → ponowne
+// nałożenie jawnych poleceń → walidacja → wynik. Jawnych słów AI nie może zmienić.
+const EXPLICIT_PAYMENT_RULES = [
+  { value: 'blik', pattern: /\bblik(?:iem|a|u)?\b/ },
+  { value: 'bank', pattern: /\bz\s+konta\b|\bprzelew(?:em|u)?\b|\bbank(?:iem|owo)?\b/ },
+  { value: 'karta', pattern: /\bkart(?:a|e|y|ami)\b/ },
+  { value: 'gotówka', pattern: /\bgotowk(?:a|e|i|owo)\b|\bw\s+gotowce\b/ }
+];
+const EXPLICIT_SCOPE_RULES = [
+  { value: 'firmowe', pattern: /\bfirmow\w*\b|\bdo\s+firmy\b|\bna\s+firme\b|\bdla\s+firmy\b|\bsluzbow\w*\b/ },
+  { value: 'domowe', pattern: /\bdomow\w*\b|\bprywatn\w*\b|\bdo\s+domu\b|\bdla\s+domu\b/ }
+];
+
+function detectExplicitCommands(text = '') {
+  const normalized = ` ${normalizeText(text).replace(/ł/g, 'l')} `;
+  const firstHit = rules => {
+    let best = null;
+    for (const rule of rules) {
+      const match = normalized.match(rule.pattern);
+      if (match && (best === null || match.index < best.index)) best = { value: rule.value, index: match.index };
+    }
+    return best ? best.value : '';
+  };
+  return {
+    paymentMethod: firstHit(EXPLICIT_PAYMENT_RULES),
+    scope: firstHit(EXPLICIT_SCOPE_RULES),
+    entryType: detectExplicitEntryType(text)
+  };
+}
+
+function applyExplicitUserRules(entry = {}, commands = {}) {
+  const next = { ...entry };
+  const locked = [];
+  if (commands.paymentMethod) { next.paymentMethod = commands.paymentMethod; locked.push('płatność'); }
+  if (commands.scope) { next.scope = commands.scope; locked.push('rodzaj'); }
+  if (commands.entryType) { next.entryType = commands.entryType; locked.push('typ'); }
+  next.explicitLocked = locked;
+  return next;
+}
+
+function validateParsedEntry(entry = {}) {
+  const next = { ...entry };
+  const amount = Number(next.amount);
+  next.amount = Number.isFinite(amount) && amount > 0 ? Math.round(amount * 100) / 100 : 0;
+  if (!['wydatek', 'przychód'].includes(next.entryType)) next.entryType = 'wydatek';
+  next.scope = normalizeScope(next.scope);
+  if (!['gotówka', 'karta', 'bank', 'blik', 'inne'].includes(next.paymentMethod)) next.paymentMethod = 'gotówka';
+  if (!isKnownCategory(next.category)) next.category = normalizeKnownCategory(next.category, 'Inne');
+  if (!isValidDateISO(next.entryDate)) next.entryDate = todayISO();
+  next.weekday = getWeekday(next.entryDate);
+  next.description = String(next.description || '').trim() || 'Wpis z tekstu';
+  return next;
+}
+
 function parseNaturalText(rawText) {
   const source = String(rawText ?? '')
     .replace(/\r\n/g, '\n')
@@ -2793,9 +2894,18 @@ function parseNaturalText(rawText) {
   const matches = findAmountMatches(source);
   if (!matches.length) throw new Error('Nie znalazłem kwoty. Podaj np. „120 zł” albo „12,50 zł”.');
 
+  // Etap 1: jawne polecenia z całego tekstu (wspólne) i z segmentu danej pozycji.
+  const globalCommands = detectExplicitCommands(source);
   const drafts = matches.map((match, index) => {
     const prevEnd = index === 0 ? 0 : matches[index - 1].end;
     const nextIndex = index + 1 < matches.length ? matches[index + 1].index : source.length;
+    const segmentText = source.slice(prevEnd, nextIndex).split(/[;\n]/).filter(Boolean).join(' ') || source.slice(prevEnd, nextIndex);
+    const segmentCommands = detectExplicitCommands(segmentText);
+    const commands = {
+      paymentMethod: segmentCommands.paymentMethod || globalCommands.paymentMethod,
+      scope: segmentCommands.scope || globalCommands.scope,
+      entryType: segmentCommands.entryType || globalCommands.entryType
+    };
     const before = takeBeforeDescription(source, prevEnd, match.index);
     const after = takeAfterDescription(source, match.end, nextIndex);
     const beforeContext = takeBeforeContext(source, prevEnd, match.index);
@@ -2841,7 +2951,7 @@ function parseNaturalText(rawText) {
     const sourceForRules = `${description} ${context}`;
     if (explicitType) learnedEntry.entryType = explicitType;
 
-    const finalEntry = applyBilansAiRules(learnedEntry, sourceForRules);
+    const finalEntry = validateParsedEntry(applyExplicitUserRules(applyBilansAiRules(learnedEntry, sourceForRules), commands));
 
     // Punkt odniesienia do nauki musi odpowiadać temu, co użytkownik faktycznie
     // zobaczył w podglądzie. Dzięki temu zapis bez poprawek nie udaje korekty.
@@ -2851,7 +2961,8 @@ function parseNaturalText(rawText) {
       learningOriginalType: finalEntry.entryType || '',
       learningOriginalScope: normalizeScope(finalEntry.scope),
       learningOriginalPaymentMethod: finalEntry.paymentMethod || '',
-      learningSourceText: sourceForRules
+      learningSourceText: sourceForRules,
+      explicitCommands: commands
     };
   });
 
@@ -3075,6 +3186,8 @@ Najważniejsze reguły:
 - Jawne słowa określające typ są bezwzględne. „dochód”, „przychód”, „zarobek”, „zysk”, „utarg”, „wynagrodzenie” i „pensja” oznaczają przychód. „wydatek”, „koszt”, „koszty”, „koszta”, „zakup” i „zapłaciłem” oznaczają wydatek.
 - Nie zmieniaj znaczenia jawnych słów nawet wtedy, gdy pozostała treść wygląda inaczej.
 - Rodzaj wybierz jako domowe, firmowe albo nieokreślone.
+- Jawne słowa płatności są bezwzględne: karta/kartą → karta, gotówka/gotówką → gotówka, BLIK → blik, przelew/bank/z konta → bank.
+- Jawne słowa rodzaju są bezwzględne: firmowe/do firmy/na firmę/służbowe → firmowe; domowe/prywatne/prywatnie/do domu/dla domu → domowe. Program i tak nadpisze Twoją odpowiedź tymi słowami.
 - Kategorię wybierz wyłącznie z tej listy: ${getAllCategories().join(', ')}.
 - Nie wymyślaj danych. Przy niepewności zachowaj propozycję lokalną i obniż pewność.
 - Kwoty i daty są już rozpoznane lokalnie; nie zwracaj ich i nie próbuj ich przeliczać.
@@ -3117,6 +3230,9 @@ function applyBilansAiAnalysis(drafts, payload) {
     if (explicitType) next.entryType = explicitType;
     if (explicitScope) next.scope = explicitScope;
     next = applyBilansAiRules(next, sourceText);
+    // Jawne słowa użytkownika (płatność, domowe/firmowe, typ) zawsze wygrywają z AI.
+    next = validateParsedEntry(applyExplicitUserRules(next, entry.explicitCommands || detectExplicitCommands(sourceText)));
+    if (!next.amount) next.amount = entry.amount;
     if (confidence > 0) next.aiConfidence = confidence;
     if (String(raw.uwagi || '').trim()) next.aiNotes = String(raw.uwagi).trim();
 
@@ -3126,7 +3242,8 @@ function applyBilansAiAnalysis(drafts, payload) {
       learningOriginalType: next.entryType || '',
       learningOriginalScope: normalizeScope(next.scope),
       learningOriginalPaymentMethod: next.paymentMethod || '',
-      learningSourceText: sourceText
+      learningSourceText: sourceText,
+      explicitCommands: entry.explicitCommands
     };
   });
 }
@@ -3136,6 +3253,27 @@ async function callBilansAi(sourceText, drafts) {
     prompt: buildBilansAiPrompt(sourceText, drafts),
     schema: getBilansAiResponseSchema(),
     schemaName: 'bilans_analysis'
+  });
+}
+
+function getStickyTopOffset() {
+  let offset = 0;
+  for (const node of document.querySelectorAll('.app-header, .app-tabs')) {
+    const style = window.getComputedStyle(node);
+    if (!['sticky', 'fixed'].includes(style.position)) continue;
+    const rect = node.getBoundingClientRect();
+    // Liczymy tylko elementy przyklejone u góry ekranu (dolne menu telefonu pomijamy).
+    if (rect.top < window.innerHeight / 2 && rect.bottom > 0) offset = Math.max(offset, rect.bottom);
+  }
+  return offset;
+}
+
+function scrollToParseResult() {
+  const target = el.parsePreview;
+  if (!target || !target.offsetParent) return;
+  window.requestAnimationFrame(() => {
+    const top = target.getBoundingClientRect().top + window.scrollY - getStickyTopOffset() - 10;
+    window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
   });
 }
 
@@ -3178,6 +3316,8 @@ async function handleParseText() {
       el.parseButton.textContent = originalButtonText;
     }
   }
+  // Jedno przewinięcie dopiero po wyniku końcowym (także po odpowiedzi AI).
+  if (requestId === parseRequestId && parsedDrafts.length) scrollToParseResult();
 }
 
 async function handleAddParsedEntries() {
@@ -4747,7 +4887,7 @@ function renderMainReport() {
 
   el.mainReport.innerHTML = orderedRows.length
     ? orderedRows.join('')
-    : '<div class="empty-state">Wszystkie kafelki raportu głównego są ukryte. Zmień to w Ustawieniach.</div>';
+    : '<div class="empty-state">Wszystkie kafelki raportu głównego są ukryte. Zmień to w sekcji Więcej → Kategorie i raport.</div>';
 }
 
 function saveVisibleMainReportOrder() {
@@ -9495,24 +9635,54 @@ function setupTabs() {
   const buttons = Array.from(document.querySelectorAll('[data-tab]'));
   const pages = Array.from(document.querySelectorAll('[data-tab-page]'));
   if (!buttons.length || !pages.length) return;
+  const moreTabs = new Set(Array.from(el.moreMenu?.querySelectorAll('[data-tab]') || []).map(node => node.dataset.tab));
 
-  const activate = tabName => {
+  const setMoreOpen = open => {
+    if (!el.moreMenu || !el.moreMenuButton) return;
+    el.moreMenu.classList.toggle('open', open);
+    el.moreMenuButton.setAttribute('aria-expanded', open ? 'true' : 'false');
+    el.moreMenuBackdrop?.classList.toggle('hidden', !open);
+  };
+
+  let currentTab = 'start';
+  const activate = (tabName, options = {}) => {
     const safeTab = pages.some(page => page.dataset.tabPage === tabName) ? tabName : 'start';
-    buttons.forEach(button => button.classList.toggle('active', button.dataset.tab === safeTab));
+    buttons.forEach(button => {
+      const active = button.dataset.tab === safeTab;
+      button.classList.toggle('active', active);
+      if (active) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current');
+    });
+    el.moreMenuButton?.classList.toggle('active', moreTabs.has(safeTab));
     pages.forEach(page => page.classList.toggle('active', page.dataset.tabPage === safeTab));
+    setMoreOpen(false);
+    if (options.scroll !== false && safeTab !== currentTab) window.scrollTo({ top: 0, behavior: 'auto' });
+    currentTab = safeTab;
   };
 
   buttons.forEach(button => {
     button.addEventListener('click', () => activate(button.dataset.tab));
   });
 
+  el.moreMenuButton?.addEventListener('click', event => {
+    event.stopPropagation();
+    setMoreOpen(!el.moreMenu.classList.contains('open'));
+  });
+  el.moreMenuBackdrop?.addEventListener('click', () => setMoreOpen(false));
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') setMoreOpen(false);
+  });
+  document.addEventListener('click', event => {
+    if (el.moreMenu?.classList.contains('open') && !el.moreMenu.contains(event.target)) setMoreOpen(false);
+  });
+
   document.querySelectorAll('[data-jump-tab]').forEach(button => {
     button.addEventListener('click', () => activate(button.dataset.jumpTab));
   });
 
-  // Po każdym ponownym wejściu do aplikacji startujemy zawsze od zakładki Start.
+  // Po każdym ponownym wejściu do aplikacji startujemy zawsze od zakładki Bilans.
   try { localStorage.removeItem('bilans-pwa-active-tab'); } catch (_) {}
-  activate('start');
+  const hashTab = String(window.location.hash || '').replace(/^#/, '');
+  activate(hashTab || 'start', { scroll: false });
 }
 
 function openFilePicker(input) {
@@ -9750,12 +9920,12 @@ function bindEvents() {
 async function init() {
   const today = todayISO();
   document.title = 'Portfel PRO';
-  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.1 / 155';
+  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.2 / 156';
   applyCalendarYearRollover();
   reportMonth = today.slice(0, 7);
   if (el.reportMonth) el.reportMonth.value = reportMonth;
   runUiBindingAudit();
-  setTodayHeader('wczytywanie...');
+  setTodayHeader('');
   if (isFileProtocol()) {
     showMessage('Program został otwarty bezpośrednio z index.html. Do importu JSON, PWA i cache użyj serwera lokalnego albo GitHub Pages.', 'error');
   }

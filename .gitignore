@@ -1,0 +1,9 @@
+# Wyniki BUILD.cmd i pliki robocze nie trafiają do repozytorium/paczki źródłowej
+*-www.zip
+node_modules/
+__pycache__/
+*.pyc
+*.log
+ffcache*
+build/
+dist/
