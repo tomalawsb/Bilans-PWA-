@@ -1,6 +1,6 @@
 const DB_NAME = 'bilans-pwa-etap1';
 const DB_VERSION = 4;
-const APP_VERSION = '1.2-156';
+const APP_VERSION = '1.2-157';
 const RAW_DROPBOX_DEFAULT_APP_KEY = String(window.PORTFEL_PRO_CONFIG?.dropboxAppKey || '').trim();
 const DROPBOX_DEFAULT_APP_KEY = /^WSTAW_TUTAJ/i.test(RAW_DROPBOX_DEFAULT_APP_KEY) ? '' : RAW_DROPBOX_DEFAULT_APP_KEY; // Ustaw w src/config.js, wtedy użytkownik klika tylko Połącz z Dropbox.
 const MAIN_INSTALL_KEY = 'portfel-pro-main-installed';
@@ -1814,7 +1814,9 @@ function normalizeLearningRule(rule) {
   const idBase = normalizedPhrase || normalizeAlias(phrase) || String(Date.now());
   const rawScope = rule?.scope ?? rule?.entryScope ?? rule?.kind ?? '';
   const scope = rawScope ? normalizeScope(rawScope) : '';
-  const paymentMethod = ['gotówka', 'karta', 'bank', 'blik', 'inne'].includes(rule?.paymentMethod) ? rule.paymentMethod : '';
+  // Sposób płatności nie jest cechą sprzedawcy/kategorii i nie może być uczony.
+  // Inaczej pojedyncza korekta np. sklepu utrwalałaby 'karta' dla kolejnych zakupów.
+  const paymentMethod = '';
   const disabled = Boolean(rule?.disabled) || Number(rule?.misses || 0) >= 4 && Number(rule?.misses || 0) > Number(rule?.confirmations || 0);
   return {
     id: rule?.id || `learn-${idBase.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`,
@@ -2016,10 +2018,7 @@ function applyLearningToEntry(entry, options = {}) {
       applied = true;
     }
 
-    if (rule.paymentMethod && match.score >= 70 && rule.paymentMethod !== updated.paymentMethod) {
-      updated.paymentMethod = rule.paymentMethod;
-      applied = true;
-    }
+    // Płatność nigdy nie jest nadpisywana przez naukę programu.
 
     if (applied) {
       updated.learningAppliedRuleId = rule.id;
@@ -2131,9 +2130,9 @@ async function penalizeAppliedLearningRule(entry) {
   const categoryChanged = snapshot.category && entry.category && snapshot.category !== entry.category;
   const typeChanged = snapshot.entryType && entry.entryType && snapshot.entryType !== entry.entryType;
   const scopeChanged = snapshot.scope && entry.scope && normalizeScope(snapshot.scope) !== normalizeScope(entry.scope);
-  const paymentChanged = snapshot.paymentMethod && entry.paymentMethod && snapshot.paymentMethod !== entry.paymentMethod;
+  // Płatność nie bierze udziału w nauce reguł.
 
-  if (!categoryChanged && !typeChanged && !scopeChanged && !paymentChanged) return false;
+  if (!categoryChanged && !typeChanged && !scopeChanged) return false;
 
   const now = new Date().toISOString();
   await saveLearningRule({
@@ -2166,10 +2165,11 @@ async function learnFromCorrection(entry, previousCategory) {
   const categoryChanged = nextCategory !== oldCategory;
   const typeChanged = entry.learningOriginalType && nextType && entry.learningOriginalType !== nextType;
   const scopeChanged = entry.learningOriginalScope && nextScope && entry.learningOriginalScope !== nextScope;
-  const paymentChanged = entry.learningOriginalPaymentMethod && nextPayment && entry.learningOriginalPaymentMethod !== nextPayment;
+  // Płatności celowo nie uczymy. Każda transakcja może być zapłacona inaczej,
+  // nawet w tym samym sklepie i dla identycznego opisu.
 
-  // Jeżeli użytkownik nic nie poprawił, nie tworzymy sztucznego potwierdzenia.
-  if (!categoryChanged && !typeChanged && !scopeChanged && !paymentChanged) return null;
+  // Jeżeli użytkownik nic poza płatnością nie poprawił, nie tworzymy reguły nauki.
+  if (!categoryChanged && !typeChanged && !scopeChanged) return null;
 
   const id = `learn-${normalizedPhrase.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}-${normalizeAlias(nextCategory)}-${normalizeAlias(nextType || 'typ')}-${normalizeAlias(nextScope || 'scope')}`;
   // Korekta użytkownika ma zastąpić wcześniejszą decyzję dla praktycznie tego
@@ -2192,7 +2192,7 @@ async function learnFromCorrection(entry, previousCategory) {
     category: nextCategory,
     entryType: nextType,
     scope: nextScope,
-    paymentMethod: nextPayment,
+    paymentMethod: '',
     reportGroup: resolveReportGroup(entry),
     confirmations: Number(existing?.confirmations || 0) + 1,
     misses: Math.max(0, Number(existing?.misses || 0) - 1),
@@ -2902,7 +2902,9 @@ function parseNaturalText(rawText) {
     const segmentText = source.slice(prevEnd, nextIndex).split(/[;\n]/).filter(Boolean).join(' ') || source.slice(prevEnd, nextIndex);
     const segmentCommands = detectExplicitCommands(segmentText);
     const commands = {
-      paymentMethod: segmentCommands.paymentMethod || globalCommands.paymentMethod,
+      // Przy wielu pozycjach sposób płatności musi pochodzić z segmentu danej pozycji.
+      // Globalne 'karta/blik/gotówka' nie może zatruć wszystkich wpisów.
+      paymentMethod: segmentCommands.paymentMethod || (matches.length === 1 ? globalCommands.paymentMethod : ''),
       scope: segmentCommands.scope || globalCommands.scope,
       entryType: segmentCommands.entryType || globalCommands.entryType
     };
@@ -3186,7 +3188,7 @@ Najważniejsze reguły:
 - Jawne słowa określające typ są bezwzględne. „dochód”, „przychód”, „zarobek”, „zysk”, „utarg”, „wynagrodzenie” i „pensja” oznaczają przychód. „wydatek”, „koszt”, „koszty”, „koszta”, „zakup” i „zapłaciłem” oznaczają wydatek.
 - Nie zmieniaj znaczenia jawnych słów nawet wtedy, gdy pozostała treść wygląda inaczej.
 - Rodzaj wybierz jako domowe, firmowe albo nieokreślone.
-- Jawne słowa płatności są bezwzględne: karta/kartą → karta, gotówka/gotówką → gotówka, BLIK → blik, przelew/bank/z konta → bank.
+- Pole platnosc przepisz dokładnie z propozycji lokalnej. Nie wolno Ci zgadywać ani zmieniać sposobu płatności na podstawie sklepu, kategorii lub historii. Jawne słowa płatności rozpoznaje parser lokalny: karta/kartą → karta, gotówka/gotówką → gotówka, BLIK → blik, przelew/bank/z konta → bank.
 - Jawne słowa rodzaju są bezwzględne: firmowe/do firmy/na firmę/służbowe → firmowe; domowe/prywatne/prywatnie/do domu/dla domu → domowe. Program i tak nadpisze Twoją odpowiedź tymi słowami.
 - Kategorię wybierz wyłącznie z tej listy: ${getAllCategories().join(', ')}.
 - Nie wymyślaj danych. Przy niepewności zachowaj propozycję lokalną i obniż pewność.
@@ -3210,6 +3212,7 @@ function applyBilansAiAnalysis(drafts, payload) {
     const sourceText = entry.learningSourceText || entry.originalText || entry.description || '';
     const explicitType = detectExplicitEntryType(sourceText);
     const explicitScope = detectExplicitScope(sourceText);
+    const explicitPayment = detectExplicitCommands(sourceText).paymentMethod;
     const aiCategory = isKnownCategory(raw.kategoria) ? normalizeKnownCategory(raw.kategoria, entry.category) : entry.category;
     const confidence = normalizeInventoryConfidence(raw.pewnosc);
     let next = {
@@ -3217,7 +3220,9 @@ function applyBilansAiAnalysis(drafts, payload) {
       entryType: explicitType || (raw.typ === 'przychód' ? 'przychód' : 'wydatek'),
       scope: explicitScope || normalizeScope(raw.rodzaj || entry.scope),
       category: aiCategory || entry.category || 'Inne',
-      paymentMethod: ['gotówka', 'karta', 'bank', 'blik', 'inne'].includes(raw.platnosc) ? raw.platnosc : entry.paymentMethod,
+      // AI nie zgaduje płatności. Jawne słowo z bieżącego tekstu wygrywa,
+      // a bez niego zachowujemy wynik lokalnego parsera (domyślnie gotówka).
+      paymentMethod: explicitPayment || entry.paymentMethod,
       description: String(raw.opis || entry.description || '').trim() || entry.description,
       aiConfidence: confidence,
       aiNotes: String(raw.uwagi || '').trim(),
@@ -9920,7 +9925,7 @@ function bindEvents() {
 async function init() {
   const today = todayISO();
   document.title = 'Portfel PRO';
-  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.2 / 156';
+  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.2 / 157';
   applyCalendarYearRollover();
   reportMonth = today.slice(0, 7);
   if (el.reportMonth) el.reportMonth.value = reportMonth;

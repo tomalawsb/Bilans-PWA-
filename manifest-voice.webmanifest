@@ -10,7 +10,7 @@
   "background_color": "#f5fbff",
   "theme_color": "#0e7490",
   "orientation": "portrait-primary",
-  "version": "1.2.156",
+  "version": "1.2.157",
   "icons": [
     {
       "src": "./icons/mic-192.png",

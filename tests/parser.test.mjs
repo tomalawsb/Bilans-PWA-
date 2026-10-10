@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 let code = fs.readFileSync(path.join(here, '..', 'src', 'app.js'), 'utf8');
 code = code.replace(/\ninit\(\)\.catch\([\s\S]*$/, '\n');
-code += `\n;globalThis.__api = { parseNaturalText, applyBilansAiAnalysis, detectExplicitCommands, tagRulesSet: v => { tagRules = v.map(normalizeRule); }, DEFAULT_TAG_RULES };`;
+code += `\n;globalThis.__api = { parseNaturalText, applyBilansAiAnalysis, detectExplicitCommands, tagRulesSet: v => { tagRules = v.map(normalizeRule); }, learningRulesSet: v => { learningRules = v.map(normalizeLearningRule); }, DEFAULT_TAG_RULES };`;
 
 const store = new Map();
 const nullEl = () => null;
@@ -62,5 +62,26 @@ for (const [text, expected, ai] of cases) {
   if (errors.length) failed++;
   console.log(`${errors.length ? 'FAIL' : 'OK  '} ${ai ? '[AI] ' : ''}${text}  →  ${entry?.entryType} | ${entry?.amount} | ${entry?.paymentMethod} | ${entry?.scope} | ${entry?.category}${errors.length ? '\n      ' + errors.join('\n      ') : ''}`);
 }
-console.log(`\nWynik: ${cases.length - failed}/${cases.length} OK`);
+
+
+// Regresja: nauka sprzedawcy/kategorii nie może nigdy narzucać sposobu płatności.
+api.learningRulesSet([{
+  id: 'learn-sklep-wegrzyn', phrase: 'sklep Węgrzyn', normalizedPhrase: 'sklep wegrzyn',
+  category: 'Jedzenie', entryType: 'wydatek', scope: 'domowe', paymentMethod: 'karta',
+  confirmations: 20, misses: 0, source: 'legacy'
+}]);
+for (const [text, expectedPayment] of [
+  ['2,25 sklep Węgrzyn', 'gotówka'],
+  ['2,25 sklep Węgrzyn karta', 'karta'],
+  ['2,25 sklep Węgrzyn blik', 'blik'],
+  ['2,25 sklep Węgrzyn gotówką', 'gotówka']
+]) {
+  let [entry] = api.parseNaturalText(text);
+  [entry] = api.applyBilansAiAnalysis([entry], { wpisy: [{ indeks: 0, typ: 'wydatek', rodzaj: 'domowe', kategoria: 'Jedzenie', platnosc: expectedPayment === 'karta' ? 'gotówka' : 'karta', opis: entry.description, pewnosc: 99, uwagi: '' }] });
+  const ok = entry?.paymentMethod === expectedPayment;
+  if (!ok) failed++;
+  console.log(`${ok ? 'OK  ' : 'FAIL'} [PAYMENT-LOCK] ${text}  →  ${entry?.paymentMethod}${ok ? '' : ` (oczekiwano ${expectedPayment})`}`);
+}
+
+console.log(`\nWynik bazowy: ${cases.length - Math.min(failed, cases.length)}/${cases.length} OK; błędów łącznie: ${failed}`);
 process.exit(failed ? 1 : 0);

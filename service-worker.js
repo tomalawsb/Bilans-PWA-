@@ -1,5 +1,5 @@
 const CACHE_NAME = 'portfel-pro-v1-2-v156';
-const APP_VERSION = '1.2-156';
+const APP_VERSION = '1.2-157';
 const APP_SHELL = [
   './',
   './index.html',

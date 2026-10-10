@@ -60,7 +60,7 @@ Uruchom `URUCHOM.cmd` (opcjonalnie z numerem portu, np. `URUCHOM.cmd 8080`). Skr
 http://127.0.0.1:8000/?v=156
 ```
 
-`BUILD.cmd` sprawdza/pobiera wspólny Node.js (`Środowiska\NodeJS`), uruchamia testy rozpoznawania, składa czystą paczkę strony w `Środowiska\Bilans\dist` i kopiuje gotowy `Bilans-1.2.156-www.zip` do katalogu projektu. Logi trafiają do `Środowiska\Bilans\logs`.
+`BUILD.cmd` sprawdza/pobiera wspólny Node.js (`Środowiska\NodeJS`), uruchamia testy rozpoznawania, składa czystą paczkę strony w `Środowiska\Bilans\dist` i kopiuje gotowy `Bilans-1.2.157-www.zip` do katalogu projektu. Logi trafiają do `Środowiska\Bilans\logs`.
 
 Nie otwieraj `index.html` bezpośrednio z dysku, jeśli chcesz testować PWA, cache, import lub instalację.
 

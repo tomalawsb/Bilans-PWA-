@@ -8,7 +8,7 @@ rem  2) uruchamia testy rozpoznawania (tests\parser.test.mjs)
 rem  3) sklada czysta paczke strony PWA w Środowiska\Bilans\dist
 rem  4) kopiuje gotowy wynik do katalogu projektu (obok BUILD.cmd)
 rem ============================================================
-set "VERSION=1.2.156"
+set "VERSION=1.2.157"
 set "PROJECT_DIR=%~dp0"
 if "%PROJECT_DIR:~-1%"=="\" set "PROJECT_DIR=%PROJECT_DIR:~0,-1%"
 if not defined SRODOWISKA_ROOT set "SRODOWISKA_ROOT=D:\Users\Admin\Środowiska"
