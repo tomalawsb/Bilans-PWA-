@@ -4,33 +4,33 @@
   "description": "Lokalny rejestr przychodów i wydatków z parserem, kalendarzem, magazynem, szybkim dodawaniem głosem i trybem Dropbox.",
   "lang": "pl",
   "id": "./?app=portfel-pro",
-  "start_url": "./index.html?v=156",
+  "start_url": "./index.html?v=158",
   "scope": "./",
   "display": "standalone",
   "background_color": "#f7f3e8",
   "theme_color": "#f7f3e8",
-  "version": "1.2.157",
+  "version": "1.2.158",
   "icons": [
     {
-      "src": "./icons/icon-192.png",
+      "src": "./icons/icon-192.png?v=158",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "./icons/icon-512.png",
+      "src": "./icons/icon-512.png?v=158",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "./icons/icon-maskable-192.png",
+      "src": "./icons/icon-maskable-192.png?v=158",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "maskable"
     },
     {
-      "src": "./icons/icon-maskable-512.png",
+      "src": "./icons/icon-maskable-512.png?v=158",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
@@ -40,7 +40,7 @@
     {
       "name": "Dodaj głosem",
       "short_name": "Głosem",
-      "url": "./index.html?action=voice&v=156",
+      "url": "./index.html?action=voice&v=158",
       "icons": [
         {
           "src": "./icons/mic-192.png",
@@ -52,10 +52,10 @@
     {
       "name": "Historia",
       "short_name": "Historia",
-      "url": "./index.html?v=156#history",
+      "url": "./index.html?v=158#history",
       "icons": [
         {
-          "src": "./icons/icon-192.png",
+          "src": "./icons/icon-192.png?v=158",
           "sizes": "192x192",
           "type": "image/png"
         }

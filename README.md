@@ -1,8 +1,19 @@
-# Portfel PRO v. 1.2 / 156
+# Portfel PRO v. 1.2 / 158
 
 Lokalna aplikacja PWA do prowadzenia bilansu, historii, raportów, kalendarza i magazynu. Dane są zapisywane w IndexedDB, opcjonalnie mogą być synchronizowane przez Dropbox.
 
-## Najważniejsze zmiany wersji 156
+## Najważniejsze zmiany wersji 158
+
+- raport główny: na telefonie i tablecie kafelek zmienia kolejność po długim przytrzymaniu i przeciągnięciu; na komputerze (mysz) tylko po złapaniu uchwytu ⠿; kolejność jest zapamiętywana po restarcie; poprawiono opis nad raportem;
+- ikona programu: wszystkie ikony PWA (192, 512, maskable 192/512 z marginesem bezpiecznej strefy, apple-touch-icon 180, favicon.ico oraz 16/32/48) wygenerowano z `icons/logo-portfel-pro.png`; ikony mikrofonu bez zmian; nowa nazwa cache service workera (`portfel-pro-v1-2-v158`) usuwa stare ikony;
+- usunięto z zakładki Raporty „Wydatki cykliczne” oraz „Raport grup” (zapisane wpisy, kopie i baza tagów/grup bez zmian);
+- kolejność w menu „Więcej”: Magazyn → Kopie → Kategorie i raport → Ustawienia → Pomoc (Pomoc zawsze ostatnia);
+- nowa kategoria „Telefony” (słowa: telefon, smartfon, iPhone, Samsung Galaxy, Redmi, karta SIM…); pojawia się też u istniejących użytkowników, bez zmiany danych;
+- wszystkie listy kategorii (rozwijane listy, podgląd rozpoznania, grupy/tagi) są sortowane alfabetycznie wg polskich reguł; kategorie własne trafiają na właściwe miejsce;
+- ujednolicono numer wersji (wcześniej README i cache miały 156, program 157);
+- testy: `node tests/parser.test.mjs` (22 przypadki, w tym Telefony i blokada płatności).
+
+## Zmiany wersji 156–157
 
 - nowa nawigacja: na telefonie dolne menu Bilans · Historia · Raporty · Kalendarz · Więcej; „Więcej” zawiera Magazyn, Kopie, Kategorie i raport, Pomoc, Ustawienia; na tablecie górne menu z rozwijanym „Więcej”, na komputerze pełne menu w jednym wierszu;
 - nowa sekcja „Kategorie i raport” (raport główny, kategorie, baza tagów, samouczenie) — przeniesiona z Ustawień bez zmiany danych; Ustawienia zawierają wyłącznie konfigurację programu (aplikacja, AI, wygląd);
@@ -57,10 +68,10 @@ Lokalna aplikacja PWA do prowadzenia bilansu, historii, raportów, kalendarza i 
 Uruchom `URUCHOM.cmd` (opcjonalnie z numerem portu, np. `URUCHOM.cmd 8080`). Skrypt użyje Pythona z `D:\Users\Admin\Środowiska\Python311`, systemowego Pythona albo — tylko gdy go brak — pobierze wspólną wersję do tego katalogu. Następnie otworzy:
 
 ```text
-http://127.0.0.1:8000/?v=156
+http://127.0.0.1:8000/?v=158
 ```
 
-`BUILD.cmd` sprawdza/pobiera wspólny Node.js (`Środowiska\NodeJS`), uruchamia testy rozpoznawania, składa czystą paczkę strony w `Środowiska\Bilans\dist` i kopiuje gotowy `Bilans-1.2.157-www.zip` do katalogu projektu. Logi trafiają do `Środowiska\Bilans\logs`.
+`BUILD.cmd` sprawdza/pobiera wspólny Node.js (`Środowiska\NodeJS`), uruchamia testy rozpoznawania, składa czystą paczkę strony w `Środowiska\Bilans\dist` i kopiuje gotowy `Bilans-1.2.158-www.zip` do katalogu projektu. Logi trafiają do `Środowiska\Bilans\logs`.
 
 Nie otwieraj `index.html` bezpośrednio z dysku, jeśli chcesz testować PWA, cache, import lub instalację.
 
@@ -86,4 +97,4 @@ node --check service-worker.js
 node tests/parser.test.mjs
 ```
 
-Manifesty `manifest.webmanifest` i `manifest-voice.webmanifest` muszą pozostać poprawnym JSON-em, a wszystkie zasoby PWA powinny używać wersji `v=156`.
+Manifesty `manifest.webmanifest` i `manifest-voice.webmanifest` muszą pozostać poprawnym JSON-em, a wszystkie zasoby PWA powinny używać wersji `v=158`.

@@ -11,13 +11,13 @@
     const __manifestFile = new URLSearchParams(location.search).get('action') === 'voice'
       ? 'manifest-voice.webmanifest'
       : 'manifest.webmanifest';
-    document.write(`<link id="appManifest" rel="manifest" href="./${__manifestFile}?v=156">`);
+    document.write(`<link id="appManifest" rel="manifest" href="./${__manifestFile}?v=158">`);
   </script>
-  <link rel="icon" href="./icons/favicon.ico?v=156" sizes="any">
-  <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png?v=156">
-  <link rel="icon" type="image/png" sizes="16x16" href="./icons/favicon-16.png?v=156">
-  <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png?v=156">
-  <link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon.png?v=156">
+  <link rel="icon" href="./icons/favicon.ico?v=158" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png?v=158">
+  <link rel="icon" type="image/png" sizes="16x16" href="./icons/favicon-16.png?v=158">
+  <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png?v=158">
+  <link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon.png?v=158">
   <script>
     // Wygląd (motyw + rozmiar czcionki) ustawiany PRZED pierwszym renderowaniem,
     // żeby strona nie przeskakiwała po wczytaniu skryptu aplikacji.
@@ -31,7 +31,7 @@
       root.style.setProperty('--font-scale', String(scales[size]));
     })();
   </script>
-  <link rel="stylesheet" href="./src/styles.css?v=156">
+  <link rel="stylesheet" href="./src/styles.css?v=158">
 </head>
 <body data-theme="classic">
   <script>
@@ -42,9 +42,9 @@
   <main class="app-shell">
     <header class="app-header">
       <div class="brand-block">
-        <img class="app-logo" src="./icons/logo-portfel-pro.png?v=156" alt="Portfel PRO" width="46" height="46">
+        <img class="app-logo" src="./icons/logo-portfel-pro.png?v=158" alt="Portfel PRO" width="46" height="46">
         <div>
-          <h1>Portfel PRO <span id="appVersionBadge" class="version-badge">v. 1.2 / 157</span></h1>
+          <h1>Portfel PRO <span id="appVersionBadge" class="version-badge">v. 1.2 / 158</span></h1>
           <p id="todayLabel">&nbsp;</p>
           <script>
             try {
@@ -59,15 +59,15 @@
     <nav class="app-tabs" id="appTabs" aria-label="Główne sekcje programu">
       <button class="tab-button active" type="button" data-tab="start" data-help="Bilans, szybkie rozpoznawanie wpisów i najważniejszy raport."><span class="tab-icon" aria-hidden="true">💰</span><span class="tab-label">Bilans</span></button>
       <button class="tab-button" type="button" data-tab="history" data-help="Lista wszystkich wpisów, filtrowanie, edycja, usuwanie i reset programu."><span class="tab-icon" aria-hidden="true">📜</span><span class="tab-label">Historia</span></button>
-      <button class="tab-button" type="button" data-tab="reports" data-help="Szczegółowe raporty kategorii i grup wydatków/przychodów."><span class="tab-icon" aria-hidden="true">📊</span><span class="tab-label">Raporty</span></button>
+      <button class="tab-button" type="button" data-tab="reports" data-help="Raport kategorii, portfel gotówkowy i inteligentne wnioski dla wybranego miesiąca."><span class="tab-icon" aria-hidden="true">📊</span><span class="tab-label">Raporty</span></button>
       <button class="tab-button" type="button" data-tab="calendar" data-help="Widok miesięczny i roczny. Wpisy można przenosić między dniami."><span class="tab-icon" aria-hidden="true">📅</span><span class="tab-label">Kalendarz</span></button>
-      <button id="moreMenuButton" class="tab-button more-button" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="moreMenu" data-help="Magazyn, kopie, kategorie i raport, pomoc oraz ustawienia."><span class="tab-icon" aria-hidden="true">☰</span><span class="tab-label">Więcej</span></button>
+      <button id="moreMenuButton" class="tab-button more-button" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="moreMenu" data-help="Magazyn, kopie, kategorie i raport, ustawienia oraz pomoc."><span class="tab-icon" aria-hidden="true">☰</span><span class="tab-label">Więcej</span></button>
       <div id="moreMenu" class="more-menu" role="menu" aria-label="Więcej sekcji">
         <button class="tab-button" type="button" role="menuitem" data-tab="inventory" data-help="Magazyn sprzętu: stany, ruchy oraz automatyczne rozpoznawanie zakupów i sprzedaży przez AI."><span class="tab-icon" aria-hidden="true">📦</span><span class="tab-label">Magazyn</span></button>
         <button class="tab-button" type="button" role="menuitem" data-tab="sync" data-help="Kopia danych, import, eksport i połączenie z Dropboxem."><span class="tab-icon" aria-hidden="true">☁️</span><span class="tab-label">Kopie</span></button>
         <button class="tab-button" type="button" role="menuitem" data-tab="categories" data-help="Raport główny, kategorie, baza tagów i samouczenie kategorii."><span class="tab-icon" aria-hidden="true">🏷️</span><span class="tab-label">Kategorie i raport</span></button>
-        <button class="tab-button" type="button" role="menuitem" data-tab="help" data-help="Instrukcja obsługi programu, instalacji PWA, synchronizacji Dropbox i resetowania danych."><span class="tab-icon" aria-hidden="true">❓</span><span class="tab-label">Pomoc</span></button>
         <button class="tab-button" type="button" role="menuitem" data-tab="settings" data-help="Aplikacja, AI, motyw i rozmiar czcionki."><span class="tab-icon" aria-hidden="true">⚙️</span><span class="tab-label">Ustawienia</span></button>
+        <button class="tab-button" type="button" role="menuitem" data-tab="help" data-help="Instrukcja obsługi programu, instalacji PWA, synchronizacji Dropbox i resetowania danych."><span class="tab-icon" aria-hidden="true">❓</span><span class="tab-label">Pomoc</span></button>
       </div>
     </nav>
     <div id="moreMenuBackdrop" class="more-menu-backdrop hidden"></div>
@@ -166,7 +166,7 @@
       <section class="start-grid">
         <article class="panel report-panel start-report-card emphasis-panel">
           <h2>Raport główny</h2>
-          <p>Bieżący miesiąc. Widoczność ustawisz w sekcji Więcej → Kategorie i raport. Kolejność zmienisz przeciąganiem: na telefonie przytrzymaj uchwyt ⠿, a myszką cały kafelek.</p>
+          <p>Bieżący miesiąc. Widoczność ustawisz w sekcji Więcej → Kategorie i raport. Kolejność zmienisz przeciąganiem: na telefonie i tablecie przytrzymaj dłużej kafelek, a na komputerze złap myszką uchwyt ⠿.</p>
           <div id="mainReport" class="category-report main-report"></div>
         </article>
       </section>
@@ -337,7 +337,7 @@
           <div class="panel-title-row">
             <div>
               <h2>Miesiąc raportów</h2>
-              <p>Raport kategorii i raport grup obejmują wyłącznie wskazany miesiąc.</p>
+              <p>Raport kategorii obejmuje wyłącznie wskazany miesiąc.</p>
             </div>
             <label class="report-month-control">
               Wybierz miesiąc
@@ -372,19 +372,9 @@
           <div id="categoryReport" class="category-report"></div>
         </article>
         <article class="panel report-panel">
-          <h2>Raport grup</h2>
-          <p>Łączy podobne nazwy według bazy tagów wyłącznie w wybranym miesiącu.</p>
-          <div id="itemReport" class="category-report"></div>
-        </article>
-        <article class="panel report-panel">
           <h2>Inteligentne wnioski</h2>
           <p>Automatyczne podsumowanie zawsze z bieżącego miesiąca, niezależnie od filtrów w historii.</p>
           <div id="smartReport" class="category-report"></div>
-        </article>
-        <article class="panel report-panel">
-          <h2>Wydatki cykliczne</h2>
-          <p>Program szuka podobnych wydatków, które wracają co tydzień, co 2 tygodnie albo co miesiąc.</p>
-          <div id="recurringReport" class="category-report"></div>
         </article>
       </section>
     </section>
@@ -623,7 +613,7 @@
         <div class="panel-title-row">
           <div>
             <h2>Pomoc i instrukcja obsługi</h2>
-            <p>Krótka instrukcja dla Portfel PRO v. 1.2 / 157.</p>
+            <p>Krótka instrukcja dla Portfel PRO v. 1.2 / 158.</p>
           </div>
         </div>
 
@@ -725,7 +715,7 @@
             <ol>
               <li>W sekcji <strong>Więcej → Ustawienia</strong> kliknij <strong>Odśwież program</strong>.</li>
               <li>Odśwież stronę w przeglądarce.</li>
-              <li>Jeżeli dalej widzisz starą wersję, otwórz adres z dopiskiem <code>?v=156</code>.</li>
+              <li>Jeżeli dalej widzisz starą wersję, otwórz adres z dopiskiem <code>?v=158</code>.</li>
             </ol>
           </article>
         </div>
@@ -917,7 +907,7 @@
     </section>
   </main>
 
-  <script src="./src/config.js?v=156"></script>
-  <script src="./src/app.js?v=156" type="module"></script>
+  <script src="./src/config.js?v=158"></script>
+  <script src="./src/app.js?v=158" type="module"></script>
 </body>
 </html>

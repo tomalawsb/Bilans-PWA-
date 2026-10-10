@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 let code = fs.readFileSync(path.join(here, '..', 'src', 'app.js'), 'utf8');
 code = code.replace(/\ninit\(\)\.catch\([\s\S]*$/, '\n');
-code += `\n;globalThis.__api = { parseNaturalText, applyBilansAiAnalysis, detectExplicitCommands, tagRulesSet: v => { tagRules = v.map(normalizeRule); }, learningRulesSet: v => { learningRules = v.map(normalizeLearningRule); }, DEFAULT_TAG_RULES };`;
+code += `\n;globalThis.__api = { parseNaturalText, applyBilansAiAnalysis, detectExplicitCommands, tagRulesSet: v => { tagRules = v.map(normalizeRule); }, learningRulesSet: v => { learningRules = v.map(normalizeLearningRule); }, DEFAULT_TAG_RULES, getAllCategories, customCategoriesSet: v => { customCategories = v; }, normalizeStandardBilansCategory, CATEGORIES };`;
 
 const store = new Map();
 const nullEl = () => null;
@@ -48,6 +48,13 @@ const cases = [
   ['służbowe obiad 45 blik', { paymentMethod: 'blik', scope: 'firmowe' }, { platnosc: 'gotówka', rodzaj: 'domowe' }],
   ['dla domu wiertarka 250 przelew', { paymentMethod: 'bank', scope: 'domowe' }, { platnosc: 'karta', rodzaj: 'firmowe' }],
   ['Dino 1 250,00 karta', { amount: 1250, paymentMethod: 'karta' }],
+  // Kategoria Telefony (v. 1.2.158):
+  ['telefon 500 karta', { entryType: 'wydatek', amount: 500, paymentMethod: 'karta', category: 'Telefony' }],
+  ['smartfon 1200 gotówka', { entryType: 'wydatek', amount: 1200, paymentMethod: 'gotówka', category: 'Telefony' }],
+  ['iPhone 3000 blik', { amount: 3000, paymentMethod: 'blik', category: 'Telefony' }],
+  ['samsung galaxy 1500 przelew', { amount: 1500, paymentMethod: 'bank', category: 'Telefony' }],
+  ['firmowe telefon 800 karta', { scope: 'firmowe', paymentMethod: 'karta', category: 'Telefony' }],
+  ['przychód naprawa telefonu 100 gotówką', { entryType: 'przychód', paymentMethod: 'gotówka', category: 'Usługi' }],
   ['na firmę kabel 40 gotówką', { paymentMethod: 'gotówka', scope: 'firmowe' }, { platnosc: 'karta', rodzaj: 'domowe' }]
 ];
 
@@ -81,6 +88,22 @@ for (const [text, expectedPayment] of [
   const ok = entry?.paymentMethod === expectedPayment;
   if (!ok) failed++;
   console.log(`${ok ? 'OK  ' : 'FAIL'} [PAYMENT-LOCK] ${text}  →  ${entry?.paymentMethod}${ok ? '' : ` (oczekiwano ${expectedPayment})`}`);
+}
+
+// Kategorie: alfabetycznie (collation PL), Telefony obecne, kategoria własna we właściwym miejscu.
+{
+  api.customCategoriesSet(['Ćwiczenia', 'Zabawki', 'Auto']);
+  const list = api.getAllCategories();
+  const sorted = [...list].sort((a, b) => a.localeCompare(b, 'pl'));
+  const okSorted = JSON.stringify(list) === JSON.stringify(sorted);
+  const okTel = list.includes('Telefony') && list.includes('Auto') && list.indexOf('Auto') < list.indexOf('Bank');
+  const okPl = list.indexOf('Ćwiczenia') > list.indexOf('Chemia') && list.indexOf('Ćwiczenia') < list.indexOf('Dom');
+  const okTelCat = api.normalizeStandardBilansCategory('', 'nowy smartfon') === 'Telefony';
+  for (const [name, ok] of [['kategorie alfabetycznie (pl)', okSorted], ['Telefony + kategoria własna w alfabecie', okTel], ['polskie znaki (Ć po C)', okPl], ['kategoria standardowa z opisu: Telefony', okTelCat]]) {
+    if (!ok) failed++;
+    console.log(`${ok ? 'OK  ' : 'FAIL'} [KATEGORIE] ${name}`);
+  }
+  api.customCategoriesSet([]);
 }
 
 console.log(`\nWynik bazowy: ${cases.length - Math.min(failed, cases.length)}/${cases.length} OK; błędów łącznie: ${failed}`);

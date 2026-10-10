@@ -554,7 +554,9 @@ input:focus, select:focus, textarea:focus {
   position: relative;
   padding-left: 30px;
   touch-action: pan-y;
-  cursor: grab;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
   transition: opacity .15s ease, box-shadow .15s ease, transform .15s ease;
 }
 .main-report-drag-handle {
@@ -573,9 +575,10 @@ input:focus, select:focus, textarea:focus {
   font-size: calc(18px * var(--font-scale, 1));
   line-height: 1;
   cursor: grab;
-  touch-action: none;
+  touch-action: pan-y;
   user-select: none;
 }
+@media (hover: hover) and (pointer: fine) { .main-report-drag-handle { touch-action: none; } }
 .main-report-drag-handle:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
 .main-report-row-dragging .main-report-drag-handle { cursor: grabbing; }
 .main-report-row-armed { outline: 2px solid color-mix(in srgb, var(--accent) 42%, transparent); }
@@ -1818,24 +1821,8 @@ body[data-theme="dark"] .learning-tag {
 }
 .wallet-mini-grid span,
 .wallet-entry small,
-.recurring-row small,
 .smart-report-row small {
   color: var(--muted);
-}
-
-.recurring-row {
-  align-items: flex-start;
-}
-.recurring-row > div:first-child {
-  min-width: 0;
-}
-.recurring-row strong {
-  overflow-wrap: anywhere;
-}
-.recurring-row > b {
-  min-width: 76px;
-  text-align: right;
-  white-space: normal;
 }
 
 .wallet-entry-list {

@@ -1,26 +1,26 @@
-const CACHE_NAME = 'portfel-pro-v1-2-v156';
-const APP_VERSION = '1.2-157';
+const CACHE_NAME = 'portfel-pro-v1-2-v158';
+const APP_VERSION = '1.2-158';
 const APP_SHELL = [
   './',
   './index.html',
-  './index.html?v=156',
+  './index.html?v=158',
   './voice/index.html',
-  './voice/index.html?v=156',
-  './manifest.webmanifest?v=156',
-  './manifest-voice.webmanifest?v=156',
-  './src/styles.css?v=156',
-  './src/config.js?v=156',
-  './src/app.js?v=156',
-  './icons/icon-192.png',
-  './icons/icon-512.png',
-  './icons/icon-maskable-192.png',
-  './icons/icon-maskable-512.png',
-  './icons/apple-touch-icon.png',
-  './icons/favicon.ico',
-  './icons/favicon-16.png',
-  './icons/favicon-32.png',
-  './icons/favicon-48.png',
-  './icons/logo-portfel-pro.png',
+  './voice/index.html?v=158',
+  './manifest.webmanifest?v=158',
+  './manifest-voice.webmanifest?v=158',
+  './src/styles.css?v=158',
+  './src/config.js?v=158',
+  './src/app.js?v=158',
+  './icons/icon-192.png?v=158',
+  './icons/icon-512.png?v=158',
+  './icons/icon-maskable-192.png?v=158',
+  './icons/icon-maskable-512.png?v=158',
+  './icons/apple-touch-icon.png?v=158',
+  './icons/favicon.ico?v=158',
+  './icons/favicon-16.png?v=158',
+  './icons/favicon-32.png?v=158',
+  './icons/favicon-48.png?v=158',
+  './icons/logo-portfel-pro.png?v=158',
   './icons/mic-192.png',
   './icons/mic-512.png'
 ];
@@ -57,10 +57,10 @@ async function fetchAndCache(request) {
 async function navigationFallback(requestUrl) {
   const cache = await caches.open(CACHE_NAME);
   if (requestUrl.pathname.endsWith('/voice/') || requestUrl.pathname.endsWith('/voice/index.html')) {
-    return await cache.match('./voice/index.html?v=156', { ignoreSearch: true })
-      || await cache.match('./index.html?v=156', { ignoreSearch: true });
+    return await cache.match('./voice/index.html?v=158', { ignoreSearch: true })
+      || await cache.match('./index.html?v=158', { ignoreSearch: true });
   }
-  return cache.match('./index.html?v=156', { ignoreSearch: true });
+  return cache.match('./index.html?v=158', { ignoreSearch: true });
 }
 
 self.addEventListener('fetch', event => {

@@ -48,9 +48,9 @@ if not defined PYTHON (
 echo     Python: !PYTHON!
 
 echo [2/3] Katalog programu: %PROJECT_DIR%
-echo [3/3] Start serwera: http://127.0.0.1:%PORT%/?v=156
+echo [3/3] Start serwera: http://127.0.0.1:%PORT%/?v=158
 echo       Zamknij to okno, aby zatrzymac program.
-start "" "http://127.0.0.1:%PORT%/?v=156"
+start "" "http://127.0.0.1:%PORT%/?v=158"
 "!PYTHON!" -B -m http.server %PORT% --bind 127.0.0.1 --directory "%PROJECT_DIR%"
 if errorlevel 1 (
   echo BLAD: serwer nie wystartowal. Port %PORT% moze byc zajety - uruchom: URUCHOM.cmd 8080

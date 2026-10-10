@@ -1,6 +1,6 @@
 const DB_NAME = 'bilans-pwa-etap1';
 const DB_VERSION = 4;
-const APP_VERSION = '1.2-157';
+const APP_VERSION = '1.2-158';
 const RAW_DROPBOX_DEFAULT_APP_KEY = String(window.PORTFEL_PRO_CONFIG?.dropboxAppKey || '').trim();
 const DROPBOX_DEFAULT_APP_KEY = /^WSTAW_TUTAJ/i.test(RAW_DROPBOX_DEFAULT_APP_KEY) ? '' : RAW_DROPBOX_DEFAULT_APP_KEY; // Ustaw w src/config.js, wtedy użytkownik klika tylko Połącz z Dropbox.
 const MAIN_INSTALL_KEY = 'portfel-pro-main-installed';
@@ -80,6 +80,7 @@ const CATEGORIES = [
   'Monitoring',
   'TV',
   'Telewizja',
+  'Telefony',
   'Internetowe',
   'Kamery',
   'Mechanik',
@@ -788,9 +789,7 @@ const el = {
   newCategoryName: document.querySelector('#newCategoryName'),
   customCategoriesList: document.querySelector('#customCategoriesList'),
   categoryReport: document.querySelector('#categoryReport'),
-  itemReport: document.querySelector('#itemReport'),
   smartReport: document.querySelector('#smartReport'),
-  recurringReport: document.querySelector('#recurringReport'),
   walletReport: document.querySelector('#walletReport'),
   walletInitialBalance: document.querySelector('#walletInitialBalance'),
   walletAdjustment: document.querySelector('#walletAdjustment'),
@@ -1402,19 +1401,21 @@ function getCustomCategoriesUpdatedAt() {
   try { return String(localStorage.getItem(CUSTOM_CATEGORIES_UPDATED_AT_KEY) || ''); } catch (_) { return ''; }
 }
 
+function sortCategoriesPl(list) {
+  return [...list].sort((a, b) => a.localeCompare(b, 'pl'));
+}
+
+// Wszystkie listy kategorii (listy rozwijane, podgląd rozpoznania, grupy/tagi ze zdjęcia)
+// pochodzą z tej jednej funkcji: kategorie domyślne + własne, zawsze alfabetycznie (PL).
 function getAllCategories() {
-  const defaults = [...CATEGORIES];
   const dynamic = [
+    ...CATEGORIES,
     ...customCategories,
     ...(allEntries || []).map(entry => entry.category),
     ...(tagRules || []).map(rule => rule.category),
     ...(learningRules || []).map(rule => rule.category)
   ];
-  const defaultKeys = new Set(defaults.map(categoryKey));
-  const custom = uniqueCategoryList(dynamic)
-    .filter(name => !defaultKeys.has(categoryKey(name)))
-    .sort((a, b) => a.localeCompare(b, 'pl'));
-  return [...defaults, ...custom];
+  return sortCategoriesPl(uniqueCategoryList(dynamic));
 }
 
 function isKnownCategory(value) {
@@ -1435,7 +1436,8 @@ const STANDARD_BILANS_CATEGORY_ALIASES = [
   { category: 'Paliwo', words: ['paliwo', 'benzyna', 'diesel', 'ropa', 'lpg', 'orlen', 'bp', 'shell', 'stacja paliw'] },
   { category: 'Części', words: ['części', 'czesci', 'część', 'czesc', 'filtr oleju', 'olej silnikowy', 'klocki', 'tarcze', 'akumulator', 'opona', 'opony', 'samochodowe'] },
   { category: 'Narzędzia', words: ['narzędzia', 'narzedzia', 'wiertarka', 'wkrętarka', 'wkretarka', 'miernik', 'zaciskarka', 'tester', 'śrubokręt', 'srubokret', 'klucz', 'lutownica'] },
-  { category: 'Elektronika', words: ['elektronika', 'kamera', 'kamery', 'monitoring', 'rejestrator', 'router', 'switch', 'komputer', 'laptop', 'dysk', 'ssd', 'ram', 'telefon', 'tablet', 'kabel hdmi', 'ładowarka', 'ladowarka'] },
+  { category: 'Elektronika', words: ['elektronika', 'kamera', 'kamery', 'monitoring', 'rejestrator', 'router', 'switch', 'komputer', 'laptop', 'dysk', 'ssd', 'ram', 'tablet', 'kabel hdmi', 'ładowarka', 'ladowarka'] },
+  { category: 'Telefony', words: ['telefony', 'telefon', 'smartfon', 'smartphone', 'iphone', 'samsung galaxy', 'galaxy s', 'redmi', 'etui na telefon', 'karta sim'] },
   { category: 'Usługi', words: ['usługa', 'usluga', 'serwis', 'naprawa', 'montaż', 'montaz', 'instalacja', 'robocizna', 'konfiguracja', 'dojazd'] },
   { category: 'Szkoła', words: ['szkoła', 'szkola', 'zeszyt', 'podręcznik', 'podrecznik', 'książka szkolna', 'ksiazka szkolna', 'składka szkolna', 'skladka szkolna', 'rada rodziców', 'rada rodzicow'] },
   { category: 'Zdrowie', words: ['zdrowie', 'apteka', 'lek', 'leki', 'lekarz', 'badanie', 'dentysta', 'witamina', 'syrop', 'ibuprofen', 'paracetamol'] },
@@ -2499,7 +2501,8 @@ const CATEGORY_RULES = [
   { category: 'Chemia', weight: 5, words: ['chemia', 'proszek', 'plyn do prania', 'plyn do naczyn', 'papier toaletowy', 'recznik papierowy', 'detergent', 'srodki czystosci'] },
   { category: 'Części', weight: 5, words: ['czesci', 'czesc', 'filtr oleju', 'olej silnikowy', 'klocki', 'tarcze', 'akumulator', 'opona', 'opony', 'czesci auto'] },
   { category: 'Narzędzia', weight: 5, words: ['narzedzia', 'wiertarka', 'wkretarka', 'miernik', 'zaciskarka', 'tester', 'srubokret', 'klucz', 'lutownica'] },
-  { category: 'Elektronika', weight: 5, words: ['elektronika', 'telefon', 'tablet', 'komputer', 'laptop', 'kamera', 'router', 'switch', 'dysk', 'ssd', 'ram', 'ladowarka'] },
+  { category: 'Elektronika', weight: 5, words: ['elektronika', 'tablet', 'komputer', 'laptop', 'kamera', 'router', 'switch', 'dysk', 'ssd', 'ram', 'ladowarka'] },
+  { category: 'Telefony', weight: 7, words: ['telefon', 'smartfon', 'smartphone', 'iphone', 'samsung galaxy', 'galaxy s', 'redmi', 'komorka', 'etui na tel', 'karta sim'] },
   { category: 'Szkoła', weight: 5, words: ['szkola', 'zeszyt', 'podrecznik', 'ksiazka szkolna', 'skladka szkolna', 'rada rodzicow'] },
   { category: 'Zdrowie', weight: 5, words: ['zdrowie', 'apteka', 'lek', 'leki', 'lekarz', 'badanie', 'dentysta', 'syrop', 'witamina'] },
   { category: 'Firma', weight: 4, words: ['firma', 'firmowe', 'na firme', 'vat', 'nip', 'ksiegowosc', 'zus', 'podatek'] },
@@ -4216,7 +4219,7 @@ function renderMainReportSettings() {
       <p class="muted-small">Tu wybierasz pełnoprawne kategorie, które mają mieć osobny kafelek w raporcie głównym.</p>
       <div class="report-option-grid">${categoryHtml}</div>
     </div>
-    <p class="muted-small main-report-order-hint">Kolejność zmienisz na stronie Start: na telefonie przytrzymaj uchwyt ⠿ kafelka, a myszką możesz przytrzymać cały kafelek, po czym przeciągnij go w wybrane miejsce.</p>
+    <p class="muted-small main-report-order-hint">Kolejność zmienisz na stronie Start: na telefonie i tablecie przytrzymaj dłużej kafelek i przeciągnij go, a na komputerze złap myszką uchwyt ⠿ po lewej stronie kafelka.</p>
   `;
 }
 
@@ -4650,152 +4653,20 @@ function renderSmartReports() {
   if (biggestExpense) rows.push(['Największy pojedynczy wydatek', `${biggestExpense.entryDate} · ${biggestExpense.description || biggestExpense.category}`, -Number(biggestExpense.amount || 0)]);
   if (biggestIncome) rows.push(['Największy pojedynczy przychód', `${biggestIncome.entryDate} · ${biggestIncome.description || biggestIncome.category}`, Number(biggestIncome.amount || 0)]);
 
-  el.smartReport.innerHTML = rows.map(([title, note, value]) => mainReportRow(title, note, value, 'smart-report-row')).join('');
+  el.smartReport.innerHTML = rows.map(([title, note, value]) => smartReportRow(title, note, value)).join('');
 }
 
-const RECURRING_STOP_WORDS = new Set([
-  ...LEARNING_STOP_WORDS,
-  'styczen', 'stycznia', 'luty', 'lutego', 'marzec', 'marca', 'kwiecien', 'kwietnia',
-  'maj', 'maja', 'czerwiec', 'czerwca', 'lipiec', 'lipca', 'sierpien', 'sierpnia',
-  'wrzesien', 'wrzesnia', 'pazdziernik', 'pazdziernika', 'listopad', 'listopada', 'grudzien', 'grudnia',
-  'miesiac', 'miesieczny', 'miesieczna', 'miesieczne', 'tydzien', 'tygodniowy', 'tygodniowa',
-  'dom', 'jedzenie', 'inne', 'uslugi', 'usluga',
-  ...CATEGORIES.map(name => normalizeText(name))
-].map(learningStem));
-
-function recurringCleanWords(entry) {
-  const source = [entry.description, entry.originalText, resolveReportGroup(entry)]
-    .filter(Boolean)
-    .join(' ');
-
-  const words = normalizeText(cleanDescription(source))
-    .replace(/\b\d+[,.]?\d*\b/g, ' ')
-    .replace(/[^a-z0-9]+/g, ' ')
-    .split(/\s+/)
-    .filter(Boolean);
-
-  const unique = [];
-  const seen = new Set();
-  for (const word of words) {
-    const stem = learningStem(word);
-    if (stem.length < 3) continue;
-    if (RECURRING_STOP_WORDS.has(stem)) continue;
-    if (seen.has(stem)) continue;
-    seen.add(stem);
-    unique.push({ word, stem });
-  }
-  return unique;
-}
-
-function capitalizeFirst(value) {
-  const text = String(value || '').trim();
-  return text ? text.charAt(0).toLocaleUpperCase('pl-PL') + text.slice(1) : '';
-}
-
-function recurringExpenseInfo(entry) {
-  const category = normalizeKnownCategory(entry.category, entry.category || 'Inne');
-  const scope = normalizeScope(entry.scope);
-  const words = recurringCleanWords(entry);
-  const tokenKey = words.map(item => item.stem).slice(0, 4).join(' ') || 'ogolne';
-  const phrase = words.map(item => item.word).slice(0, 3).join(' ');
-  const title = phrase
-    ? `${capitalizeFirst(phrase)} · ${formatScope(scope)} · ${category}`
-    : `${category} · ${formatScope(scope)}`;
-
-  return {
-    key: [categoryKey(category), scope, tokenKey].join('|'),
-    title
-  };
-}
-
-function daysBetweenISO(a, b) {
-  const first = Date.parse(`${a}T12:00:00`);
-  const second = Date.parse(`${b}T12:00:00`);
-  if (!Number.isFinite(first) || !Number.isFinite(second)) return 0;
-  return Math.round((second - first) / 86400000);
-}
-
-function detectRecurringExpenses(entries) {
-  const groups = new Map();
-  for (const entry of entries || []) {
-    if (entry.entryType !== 'wydatek' || !entry.entryDate) continue;
-    const info = recurringExpenseInfo(entry);
-    if (!groups.has(info.key)) groups.set(info.key, { title: info.title, items: [] });
-    groups.get(info.key).items.push(entry);
-  }
-
-  const result = [];
-  for (const [key, group] of groups.entries()) {
-    const items = group.items;
-    if (items.length < 2) continue;
-    const sorted = items.slice().sort((a, b) => String(a.entryDate).localeCompare(String(b.entryDate)));
-    const diffs = [];
-    for (let i = 1; i < sorted.length; i += 1) {
-      const diff = daysBetweenISO(sorted[i - 1].entryDate, sorted[i].entryDate);
-      if (diff > 0) diffs.push(diff);
-    }
-    if (!diffs.length) continue;
-
-    const avgDiff = diffs.reduce((sum, diff) => sum + diff, 0) / diffs.length;
-    const candidates = [
-      { label: 'co tydzień', days: 7 },
-      { label: 'co 2 tygodnie', days: 14 },
-      { label: 'co miesiąc', days: 30 }
-    ];
-    const best = candidates
-      .map(candidate => ({ ...candidate, error: Math.abs(avgDiff - candidate.days) }))
-      .sort((a, b) => a.error - b.error)[0];
-
-    let label = '';
-    let cycleDays = Math.round(avgDiff);
-    if (best && best.error <= 7) {
-      label = best.label;
-      cycleDays = best.days;
-    } else if (items.length >= 3) {
-      label = 'często wraca';
-    } else {
-      continue;
-    }
-
-    const avgAmount = sorted.reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0) / sorted.length;
-    const last = sorted[sorted.length - 1];
-    const nextDate = label === 'często wraca' ? '—' : addDaysISO(last.entryDate, cycleDays);
-    const variance = diffs.reduce((sum, diff) => sum + Math.abs(diff - avgDiff), 0) / diffs.length;
-    const confidence = Math.max(45, Math.min(98, Math.round(100 - best.error * 4 - variance + Math.min(sorted.length, 8) * 3)));
-
-    result.push({
-      key,
-      title: group.title,
-      label,
-      count: sorted.length,
-      avgAmount,
-      lastDate: last.entryDate,
-      nextDate,
-      confidence,
-      category: last.category || 'Inne'
-    });
-  }
-
-  return result.sort((a, b) => b.confidence - a.confidence || b.count - a.count).slice(0, 12);
-}
-
-function renderRecurringReport() {
-  if (!el.recurringReport) return;
-  const rows = detectRecurringExpenses(filteredEntries || []);
-  if (!rows.length) {
-    el.recurringReport.innerHTML = '<div class="empty-state">Brak wykrytych wydatków cyklicznych w aktualnym filtrze.</div>';
-    return;
-  }
-
-  el.recurringReport.innerHTML = rows.map(row => `
-    <div class="category-row recurring-row">
+// Wiersz „Inteligentnych wniosków” (zakładka Raporty): zwykły wiersz, bez uchwytu przeciągania.
+function smartReportRow(title, note, value) {
+  return `
+    <div class="category-row smart-report-row">
       <div>
-        <strong>${escapeHtml(row.title)}</strong><br>
-        <small>Cykl: ${escapeHtml(row.label)} · wpisy: ${row.count} · ostatnio: ${escapeHtml(row.lastDate)} · następny: ${escapeHtml(row.nextDate)}</small>
+        <b>${escapeHtml(title)}</b><br>
+        <small>${escapeHtml(note)}</small>
       </div>
-      <b>${formatMoney(row.avgAmount)}<br><small>${row.confidence}%</small></b>
+      <strong class="${value >= 0 ? 'amount-income' : 'amount-expense'}">${formatMoney(value)}</strong>
     </div>
-  `).join('');
+  `;
 }
 
 function mainReportRow(key, title, note, value, extraClass = '') {
@@ -4918,30 +4789,41 @@ function clearMainReportReorderState() {
 }
 
 function handleMainReportPointerDown(event) {
+  const isMouse = event.pointerType === 'mouse';
   const handle = event.target.closest('.main-report-drag-handle');
-  if (event.pointerType !== 'mouse' && !handle) return;
-  const source = (handle || event.target).closest('[data-main-report-key]');
-  if (!source || (event.pointerType === 'mouse' && event.button !== 0)) return;
+  // Myszka: tylko uchwyt ⠿. Dotyk/rysik: długie przytrzymanie dowolnego miejsca kafelka.
+  if (isMouse && (!handle || event.button !== 0)) return;
+  const source = event.target.closest('[data-main-report-key]');
+  if (!source) return;
   clearMainReportReorderState();
   const state = {
     pointerId: event.pointerId,
     source,
     startX: event.clientX,
     startY: event.clientY,
+    startOrder: Array.from(source.parentElement.children).indexOf(source),
+    touch: !isMouse,
     active: false,
     timer: 0
   };
-  source.classList.add('main-report-row-armed');
-  state.timer = window.setTimeout(() => {
+  const activate = () => {
     if (mainReportReorderState !== state) return;
     state.active = true;
     source.classList.remove('main-report-row-armed');
     source.classList.add('main-report-row-dragging');
     document.body.classList.add('main-report-reordering');
-    try { source.setPointerCapture(state.pointerId); } catch (_) {}
-    if (navigator.vibrate) navigator.vibrate(20);
-  }, 450);
+    // Przechwyt na kontenerze, bo przesuwany kafelek jest przenoszony w DOM (to zwalnia przechwyt na nim).
+    try { el.mainReport.setPointerCapture(state.pointerId); } catch (_) {}
+    if (state.touch && navigator.vibrate) navigator.vibrate(20);
+  };
   mainReportReorderState = state;
+  if (isMouse) {
+    event.preventDefault();
+    activate();
+    return;
+  }
+  source.classList.add('main-report-row-armed');
+  state.timer = window.setTimeout(activate, 450);
 }
 
 function handleMainReportPointerMove(event) {
@@ -4964,15 +4846,11 @@ function handleMainReportPointerEnd(event) {
   const state = mainReportReorderState;
   if (!state || event.pointerId !== state.pointerId) return;
   const wasActive = state.active;
-  if (wasActive) {
-    event.preventDefault();
-    saveVisibleMainReportOrder();
-  }
+  const moved = wasActive && Array.from(state.source.parentElement.children).indexOf(state.source) !== state.startOrder;
+  if (moved) saveVisibleMainReportOrder();
   clearMainReportReorderState();
-  if (wasActive) {
-    renderMainReport();
-    showMessage('Zapisano nową kolejność kafelków raportu głównego.');
-  }
+  if (wasActive) renderMainReport();
+  if (moved) showMessage('Zapisano nową kolejność kafelków raportu głównego.');
 }
 
 function renderSummary() {
@@ -5442,9 +5320,7 @@ function applyFilters(options = {}) {
     renderCalendar();
     renderYearCalendar();
     renderCategoryReport();
-    renderItemReport();
     renderSmartReports();
-    renderRecurringReport();
   };
 
   if (deferHeavy) {
@@ -5477,7 +5353,6 @@ async function handleReportMonthChange() {
   }
   await reloadEntries();
   renderCategoryReport();
-  renderItemReport();
 }
 
 function renderCategoryReport() {
@@ -5513,45 +5388,6 @@ function renderCategoryReport() {
   }).join('');
 }
 
-
-function renderItemReport() {
-  if (!el.itemReport) return;
-  const entries = getSelectedReportEntries();
-
-  if (!entries.length) {
-    el.itemReport.innerHTML = '<div class="empty-state">Brak danych do grupowania.</div>';
-    return;
-  }
-
-  const rows = new Map();
-  entries.forEach(entry => {
-    const group = resolveReportGroup(entry);
-    if (!rows.has(group)) {
-      rows.set(group, { group, count: 0, income: 0, expense: 0, category: entry.category || 'Inne' });
-    }
-    const row = rows.get(group);
-    row.count += 1;
-    if (entry.entryType === 'przychód') row.income += Number(entry.amount) || 0;
-    else row.expense += Number(entry.amount) || 0;
-  });
-
-  const sorted = Array.from(rows.values())
-    .sort((a, b) => (b.income + b.expense) - (a.income + a.expense))
-    .slice(0, 12);
-
-  el.itemReport.innerHTML = sorted.map(row => {
-    const balance = row.income - row.expense;
-    return `
-      <div class="category-row compact-row">
-        <div>
-          <b>${escapeHtml(row.group)}</b><br>
-          <span>${escapeHtml(row.category)} · wpisy: ${row.count} · przychody ${formatMoney(row.income)} · wydatki ${formatMoney(row.expense)}</span>
-        </div>
-        <strong class="${balance >= 0 ? 'amount-income' : 'amount-expense'}">${formatMoney(balance)}</strong>
-      </div>
-    `;
-  }).join('');
-}
 
 function renderTagRules() {
   if (!el.tagRulesList) return;
@@ -9708,6 +9544,13 @@ function bindEvents() {
     el.mainReport.addEventListener('pointermove', handleMainReportPointerMove, { passive: false });
     el.mainReport.addEventListener('pointerup', handleMainReportPointerEnd);
     el.mainReport.addEventListener('pointercancel', handleMainReportPointerEnd);
+    // Po aktywacji przeciągania dotykiem strona nie może się przewijać ani otwierać menu kontekstowego.
+    el.mainReport.addEventListener('touchmove', event => {
+      if (mainReportReorderState?.active && event.cancelable) event.preventDefault();
+    }, { passive: false });
+    el.mainReport.addEventListener('contextmenu', event => {
+      if (mainReportReorderState?.touch) event.preventDefault();
+    });
     el.mainReport.addEventListener('lostpointercapture', event => {
       if (mainReportReorderState?.active) handleMainReportPointerEnd(event);
       else clearMainReportReorderState();
@@ -9925,7 +9768,7 @@ function bindEvents() {
 async function init() {
   const today = todayISO();
   document.title = 'Portfel PRO';
-  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.2 / 157';
+  if (el.appVersionBadge) el.appVersionBadge.textContent = 'v. 1.2 / 158';
   applyCalendarYearRollover();
   reportMonth = today.slice(0, 7);
   if (el.reportMonth) el.reportMonth.value = reportMonth;
